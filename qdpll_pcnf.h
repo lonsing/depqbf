@@ -191,6 +191,10 @@ struct Var
 struct Constraint
 {
   ConstraintID id;
+  Constraint *parent1;
+  Constraint *parent2;
+  /* Stack of clauses which have same literals but different parents. */
+  ConstraintPtrStack duplicates;
   unsigned int size_lits;
   unsigned int num_lits:(sizeof (unsigned int) * 8 - 4);
   unsigned int is_cube:1;

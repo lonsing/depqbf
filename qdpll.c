@@ -4579,6 +4579,8 @@ static void
 delete_constraint (QDPLL * qdpll, Constraint * constraint)
 {
   QDPLLMemMan *mm = qdpll->mm;
+  if (constraint->duplicates.start)
+    QDPLL_DELETE_STACK(mm, constraint->duplicates);
   qdpll_free (mm, constraint,
               sizeof (Constraint) + constraint->size_lits * sizeof (LitID));
 }
@@ -7745,10 +7747,352 @@ setup_occ_lists (QDPLL * qdpll)
 }
 
 
+static void
+assert_lits_sorted (QDPLL * qdpll, LitID * lit_start, LitID * lit_end);
+
+
+static int 
+check_and_add_to_duplicates (QDPLL *qdpll, ConstraintPtrStack *duplicates, Constraint * dup)
+{
+  Constraint **p;
+  for (p = duplicates->start; p < duplicates->top; p++)
+    {
+      Constraint *c = *p;
+      if ((c->parent1->id == dup->parent1->id && c->parent2->id == dup->parent2->id) || 
+          (c->parent1->id == dup->parent2->id && c->parent2->id == dup->parent1->id))
+        break;
+    }
+
+  if (p == duplicates->top)
+    {
+      //fprintf (stderr, "duplicate found:\n");
+      //fprintf (stderr, "dup (%d, %d): ", dup->parent1->id, dup->parent2->id);
+      //print_constraint (qdpll, dup);
+      QDPLL_PUSH_STACK(qdpll->mm, *duplicates, dup);
+    }
+}
+
+
+static int 
+clauses_equal (QDPLL *qdpll, Constraint *c1, Constraint *c2)
+{
+  assert_lits_sorted (qdpll, c1->lits, c1->lits + c1->num_lits);
+  assert_lits_sorted (qdpll, c2->lits, c2->lits + c2->num_lits);
+
+  if (c1->num_lits != c2->num_lits)
+    return 0;
+
+  if (c1->parent1 && c1->parent2 && c2->parent1 && c2->parent2)
+    {
+      if ((c1->parent1->id == c2->parent1->id && c1->parent2->id == c2->parent2->id) || 
+          (c1->parent1->id == c2->parent2->id && c1->parent2->id == c2->parent1->id))
+        return 1;
+    }
+
+  LitID *p1, *p2, *e1;
+  for (p1 = c1->lits, p2 = c2->lits, e1 = p1 + c1->num_lits; p1 < e1; p1++, p2++)
+    if (*p1 != *p2)
+      return 0;
+
+  check_and_add_to_duplicates (qdpll, &(c2->duplicates), c1);
+
+  return 1;
+}
+
+
+static int
+clause_already_present (QDPLL *qdpll, Constraint *c)
+{
+  Constraint *p;
+  for (p = qdpll->pcnf.clauses.first; p; p = p->link.next)
+    if (clauses_equal (qdpll, c, p))
+      return 1;
+  return 0;
+}
+
+
+
+static VarID
+have_non_taut_resolvent (QDPLL *qdpll, Constraint *c1, Constraint *c2)
+{
+  unsigned int clashing = 0;
+  VarID pivot = 0;
+  LitID *p1, *e1;
+  for (p1 = c1->lits, e1 = p1 + c1->num_lits; p1 < e1; p1++)
+    {
+      LitID *p2, *e2;
+      for (p2 = c2->lits, e2 = p2 + c2->num_lits; p2 < e2; p2++)
+        {
+          if (*p1 == -(*p2))
+            {
+              clashing++;
+              if (pivot)
+                return 0;
+              else
+                {
+                    pivot = LIT2VARID (*p1);
+                }
+            }
+        }
+    }
+
+  if (clashing > 1)
+    pivot = 0;
+
+  return pivot;
+}
+
+
+static int
+occurs_in_clause (Constraint *res, LitID lit)
+{
+  LitID *p, *e;
+  for (p = res->lits, e = p + res->num_lits; p < e; p++)
+    if (*p == lit)
+      return 1;
+  return 0;
+}
+
+
+static Constraint *
+resolve_and_reduce_simple (QDPLL *qdpll, Constraint *c1, VarID pivot, Constraint *c2)
+{
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "Pivot: %d\n", pivot);
+      fprintf (stderr, "Parent1: ");
+      print_constraint (qdpll, c1);
+      fprintf (stderr, "Parent2: ");
+      print_constraint (qdpll, c2);
+    }
+
+  Constraint *res = create_constraint (qdpll, c1->num_lits + c2->num_lits, 0);
+
+  LitID *res_p = res->lits;
+  unsigned int added_lits = 0;
+
+  /* Import lits from  c1. */
+  LitID *p, *e;
+  for (p = c1->lits, e = p + c1->num_lits; p < e; p++)
+    if (LIT2VARID(*p) != pivot)
+      {
+        *res_p++ = *p;
+        added_lits++;
+      }
+
+  /* Import lits from  c2. */
+  for (p = c2->lits, e = p + c2->num_lits; p < e; p++)
+    {
+      if (LIT2VARID(*p) != pivot && !occurs_in_clause (res, *p))
+        {
+          *res_p++ = *p;
+          added_lits++;
+        }
+    }
+
+  res->num_lits = added_lits;
+
+  QDPLL_SORT (qdpll, int, compare_lits_by_variable_nesting, res->lits,
+              res->num_lits, 0);
+
+  /* Universal reduction. */
+  assert_lits_sorted (qdpll, res->lits, res->lits + res->num_lits);
+  while (res->num_lits > 0 && QDPLL_VAR_FORALL(LIT2VARPTR(qdpll->pcnf.vars, res->lits[res->num_lits - 1])))
+    res->num_lits--;
+
+     if (res->num_lits == 0)
+     fprintf (stderr, "EMPTY RESOLVENT!\n");
+
+  res->parent1 = c1;
+  res->parent2 = c2;
+  res->learnt = 1;
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "Resolvent: ");
+      print_constraint (qdpll, res);
+    }
+
+  return res;
+}
+
+
+static void
+print_clause_ancestors (QDPLL *qdpll, Constraint *c)
+{
+  if (!c)
+    {
+      return;
+    }
+  else
+    {
+      print_clause_ancestors (qdpll, c->parent1);
+      print_clause_ancestors (qdpll, c->parent2);
+
+      if (!c->parent1)
+        {
+          assert (!c->parent2);
+            fprintf (stderr, "%d input clause\n", c->id);
+        }
+      else
+        fprintf (stderr, "%d from %d, %d\n", c->id, c->parent1->id, c->parent2->id);
+    }
+}
+
+
+static int
+empty_clause_exactly_present (ConstraintPtrStack *empty_clauses, Constraint *e)
+{
+  assert (e->num_lits == 0);
+  Constraint **p;
+  for (p = empty_clauses->start; p < empty_clauses->top; p++)
+    {
+      assert (*p);
+      assert ((*p)->parent1);
+      assert ((*p)->parent2);
+      if (((*p)->parent1->id == e->parent1->id && (*p)->parent2->id == e->parent2->id) || 
+          ((*p)->parent1->id == e->parent2->id && (*p)->parent2->id == e->parent1->id))
+      return 1;
+    }
+  return 0;
+}
+
+
+static void
+print_all_duplicates (QDPLL *qdpll)
+{
+  Constraint *p1;
+  for (p1 = qdpll->pcnf.clauses.first; p1; p1 = p1->link.next)
+    {
+      fprintf (stderr, "clause %d (learnt=%c):", p1->id, p1->learnt ? '1' : '0');
+      print_constraint (qdpll, p1);
+      fprintf (stderr, "...has %d duplicates: ", QDPLL_COUNT_STACK(p1->duplicates));
+      if (QDPLL_COUNT_STACK(p1->duplicates) > 0)
+        {
+          Constraint **p;
+          for (p = p1->duplicates.start; p < p1->duplicates.top; p++)
+            {
+              Constraint *c = *p;
+              assert (c->parent1 && c->parent2);
+              fprintf (stderr, "(%d, %d), ", c->parent1->id, c->parent2->id);
+            }
+        }
+      
+        fprintf (stderr, "\n\n");
+    }
+}
+
+
+static void
+res (QDPLL *qdpll)
+{
+  ConstraintPtrStack r;
+  QDPLL_INIT_STACK(r);
+
+  ConstraintPtrStack ecl;
+  QDPLL_INIT_STACK(ecl);
+
+
+  unsigned int rounds = 0;
+  unsigned int unique_added_clauses = 0;
+
+  for (;;)
+    {
+      rounds++;
+      fprintf (stderr, "Round %d\n", rounds);
+
+      /* Push new resolvents on auxiliary stack. */
+      Constraint *p1;
+      for (p1 = qdpll->pcnf.clauses.first; p1; p1 = p1->link.next)
+        {
+          Constraint *p2;
+          for (p2 = qdpll->pcnf.clauses.first; p2; p2 = p2->link.next)
+            {
+              VarID pivot;
+              if ((pivot = have_non_taut_resolvent (qdpll, p1, p2)))
+                {
+                  Constraint *res = resolve_and_reduce_simple (qdpll, p1, pivot, p2);
+                  QDPLL_PUSH_STACK(qdpll->mm, r, res);
+                }
+            }
+        }
+
+      if (qdpll->options.verbosity >= 2)
+        fprintf (stderr, "End of round %d, importing new resolvents.\n", rounds);
+
+      /* Add new resolvents to clause list. */
+      unsigned int added = 0;
+      Constraint **p;
+      for (p = r.start; p < r.top; p++)
+        {
+
+          if ((*p)->num_lits == 0)
+            {
+              fprintf (stderr, "Produced empty clause %d from %d, %d\n", (*p)->id, (*p)->parent1->id, (*p)->parent2->id);
+              if (!empty_clause_exactly_present (&ecl, *p))
+                QDPLL_PUSH_STACK(qdpll->mm, ecl, *p);
+            }
+
+          if (qdpll->options.verbosity >= 2)
+            {
+              fprintf (stderr, "Checking resolvent id %d (%d, %d): ", (*p)->id, (*p)->parent1->id, (*p)->parent2->id);
+              print_constraint (qdpll, *p);
+            }
+          if (!clause_already_present (qdpll, *p))
+            {
+              unique_added_clauses++;
+              added = 1;
+              LINK_LAST (qdpll->pcnf.clauses, *p, link);
+#if 0
+              fprintf (stderr, " Added new resolvent id %d: ", (*p)->id);
+              print_constraint (qdpll, *p);
+              fprintf (stderr, "  parent1 id: %d\n", (*p)->parent1->id);
+              fprintf (stderr, "  parent2 id: %d\n", (*p)->parent2->id);
+#endif
+            }
+          else
+            {
+              if (qdpll->options.verbosity >= 2)
+                {
+                  fprintf (stderr, "Resolvent %d generated from %d, %d already present\n", (*p)->id, (*p)->parent1->id, (*p)->parent2->id);
+                  fprintf (stderr, "\n");
+                }
+            }
+        }
+      QDPLL_RESET_STACK(r);
+
+      if (!added)
+        break;
+    }
+
+  fprintf (stderr, "End: %d rounds and %d unique added clauses, %d unique empty clauses\n", rounds, unique_added_clauses, QDPLL_COUNT_STACK(ecl));
+
+  Constraint **p;
+  for (p = ecl.start; p < ecl.top; p++)
+    {
+      assert ((*p)->num_lits == 0);
+      fprintf (stderr, "Empty clause %d from %d, %d\n", (*p)->id, (*p)->parent1->id, (*p)->parent2->id);
+      fprintf (stderr, "Printing ancestors in topological ordering: \n");
+      print_clause_ancestors (qdpll, *p);
+      fprintf (stderr, "\n");
+    }
+
+  print_all_duplicates (qdpll);
+
+  QDPLL_DELETE_STACK(qdpll->mm, ecl);
+  QDPLL_DELETE_STACK(qdpll->mm, r);
+}
+
+
 /* Solver's core loop. */
 static QDPLLResult
 solve (QDPLL * qdpll)
 {
+
+  res (qdpll);
+
+  abort ();
+
   if (qdpll->options.depman_simple)
     fprintf (stderr,
              "NOTE: using the original quantifier prefix of the formula for dependency analysis. Try '--dep-man=qdag' instead.\n");
