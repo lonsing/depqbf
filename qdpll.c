@@ -7830,6 +7830,7 @@ have_non_taut_resolvent (QDPLL *qdpll, Constraint *c1, Constraint *c2)
                 return 0;
               else
                 {
+                  if (QDPLL_VAR_EXISTS(LIT2VARPTR(qdpll->pcnf.vars, *p1)))
                     pivot = LIT2VARID (*p1);
                 }
             }
@@ -7932,10 +7933,18 @@ print_clause_ancestors (QDPLL *qdpll, Constraint *c)
       if (!c->parent1)
         {
           assert (!c->parent2);
-            fprintf (stderr, "%d input clause\n", c->id);
+            fprintf (stderr, "%d input clause: ", c->id);
+            print_constraint (qdpll, c);
         }
       else
-        fprintf (stderr, "%d from %d, %d\n", c->id, c->parent1->id, c->parent2->id);
+        {
+          fprintf (stderr, "%d: ", c->id);
+          LitID *p;
+          for (p = c->lits; p < c->lits + c->num_lits; p++)
+            fprintf (stderr, "%d ", *p);
+          fprintf (stderr, "from ");
+          fprintf (stderr, "%d, %d\n", c->parent1->id, c->parent2->id);
+        }
     }
 }
 
