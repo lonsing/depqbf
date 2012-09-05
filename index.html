@@ -45,6 +45,7 @@
 
 <h2>News</h2>
 <ul>
+<li>2012-09-05: Added information on certificates.</li>
 <li>2012-07-18: Source code of DepQBF 1.0 released.</li>
 <li>2010-03-02: Source code of DepQBF 0.1 released.</li>
 </ul>
@@ -82,6 +83,20 @@ by removing tautological clauses and duplicate literals from clauses.</p>
 
 <p>For QBF preprocessing tools, you might want to consider <a href="http://fmv.jku.at/bloqqer/">Bloqqer</a>
 or <a href="http://fmv.jku.at/qxbf/">QxBF</a>, for example.</p>
+
+
+<h2>Proofs and Certificates</h2>
+
+<p>DepQBF Version 1.0 is able to produce clause/term resolution proofs of
+  (un)satisfiability for a given formula. Given a resolution proof, it is
+  possible to obtain a set of Skolem/Herbrand functions by an approach
+  introduced in the paper <em>V. Balabanov, J. R. Jiang: Resolution Proofs and
+    Skolem Functions in QBF Evaluation and Applications. CAV 2011.</em> This
+  set of functions is a certificate of (un)satisfiability of the formula.</p> 
+
+<p>The framework <a href="http://fmv.jku.at/qbfcert/">QBFcert</a> provides a
+  set of tools for resolution proof extraction and checking, certificate extraction and
+  certificate validation.</p>
 
 
 <h2>Contact</h2>
