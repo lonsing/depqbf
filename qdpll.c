@@ -7981,7 +7981,7 @@ print_all_duplicates (QDPLL *qdpll)
     {
       fprintf (stderr, "clause %d (learnt=%c): ", p1->id, p1->learnt ? '1' : '0');
       print_constraint (qdpll, p1);
-      fprintf (stderr, "...has %d duplicates: ", QDPLL_COUNT_STACK(p1->duplicates));
+      fprintf (stderr, "...has %u duplicates: ", (unsigned int)QDPLL_COUNT_STACK(p1->duplicates));
       if (QDPLL_COUNT_STACK(p1->duplicates) > 0)
         {
           Constraint **p;
@@ -8058,6 +8058,75 @@ comp (QDPLL *qdpll)
 }
 
 
+
+static void
+collect (QDPLL *qdpll, ConstraintPtrStack *s)
+{
+  QDPLL_RESET_STACK(*s);
+  /* Push new resolvents on auxiliary stack. */
+  Constraint *p1;
+  for (p1 = qdpll->pcnf.clauses.first; p1; p1 = p1->link.next)
+    {
+      Constraint *p2;
+      for (p2 = qdpll->pcnf.clauses.first; p2; p2 = p2->link.next)
+        {
+          VarID pivot;
+          if ((pivot = have_non_taut_resolvent (qdpll, p1, p2)))
+            {
+              Constraint *res = resolve_and_reduce_simple (qdpll, p1, pivot, p2);
+              QDPLL_PUSH_STACK(qdpll->mm, *s, res);
+            }
+        }
+    }
+}
+
+
+static void
+collect_a (QDPLL *qdpll, ConstraintPtrStack *s)
+{
+  QDPLL_RESET_STACK(*s);
+  /* Push new resolvents on auxiliary stack. */
+  Scope *scope;
+  for (scope = qdpll->pcnf.scopes.first; scope; scope = scope->link.next)
+    {
+      if (QDPLL_SCOPE_FORALL(scope))
+        {
+          VarID *p, *e;
+          for (p = scope->vars.start, e = scope->vars.top; p < e; p++)
+            {
+              Var *var = VARID2VARPTR(qdpll->pcnf.vars, *p);
+              if (qdpll->options.verbosity >= 1)
+                fprintf (stderr, "Univ-var %d, checking %llu (pos %llu * neg %llu) res\n", var->id, 
+                         (long long unsigned int)QDPLL_COUNT_STACK(var->neg_occ_clauses) * 
+                         QDPLL_COUNT_STACK(var->pos_occ_clauses), 
+                         (long long unsigned int)QDPLL_COUNT_STACK(var->pos_occ_clauses), 
+                         (long long unsigned int)QDPLL_COUNT_STACK(var->neg_occ_clauses));
+              unsigned int cnt = 0;
+              BLitsOcc *cp1, *ce1;
+              for (cp1 = var->pos_occ_clauses.start, ce1 = var->pos_occ_clauses.top; cp1 < ce1; cp1++)
+                {
+                  BLitsOcc *cp2, *ce2;
+                  for (cp2 = var->neg_occ_clauses.start, ce2 = var->neg_occ_clauses.top; cp2 < ce2; cp2++)
+                    {
+                      cnt++;
+                      if (qdpll->options.verbosity >= 1)
+                        fprintf (stderr, " check = %d\r", cnt);
+                      VarID pivot;
+                      if ((pivot = have_non_taut_resolvent (qdpll, cp1->constraint, cp2->constraint)))
+                        {
+                          Constraint *res = resolve_and_reduce_simple (qdpll, cp1->constraint, pivot, cp2->constraint);
+                          QDPLL_PUSH_STACK(qdpll->mm, *s, res);
+                        }
+                    }
+                }
+              if (qdpll->options.verbosity >= 1)
+                fprintf (stderr, "\n");
+            }
+        }
+    }
+}
+
+
 static void
 res (QDPLL *qdpll)
 {
@@ -8076,31 +8145,21 @@ res (QDPLL *qdpll)
       rounds++;
       fprintf (stderr, "Round %d\n", rounds);
 
-      /* Push new resolvents on auxiliary stack. */
-      Constraint *p1;
-      for (p1 = qdpll->pcnf.clauses.first; p1; p1 = p1->link.next)
-        {
-          Constraint *p2;
-          for (p2 = qdpll->pcnf.clauses.first; p2; p2 = p2->link.next)
-            {
-              VarID pivot;
-              if ((pivot = have_non_taut_resolvent (qdpll, p1, p2)))
-                {
-                  Constraint *res = resolve_and_reduce_simple (qdpll, p1, pivot, p2);
-                  QDPLL_PUSH_STACK(qdpll->mm, r, res);
-                }
-            }
-        }
+      collect_a(qdpll, &r);
 
-      if (qdpll->options.verbosity >= 2)
-        fprintf (stderr, "End of round %d, importing new resolvents.\n", rounds);
+      if (qdpll->options.verbosity >= 1)
+        fprintf (stderr, "\nEnd of round %d, check and import %u res.\n", rounds, (unsigned int)QDPLL_COUNT_STACK(r));
 
       /* Add new resolvents to clause list. */
+      unsigned int cur_unique_added_clauses = 0;
+      unsigned cnt = 0;
       unsigned int added = 0;
       Constraint **p;
       for (p = r.start; p < r.top; p++)
         {
-
+          cnt++;
+          if (qdpll->options.verbosity >= 1)
+            fprintf (stderr, " check = %d\r", cnt);
           if ((*p)->num_lits == 0)
             {
               fprintf (stderr, "Produced empty clause %d from %d, %d\n", (*p)->id, (*p)->parent1->id, (*p)->parent2->id);
@@ -8116,8 +8175,12 @@ res (QDPLL *qdpll)
           if (!clause_already_present (qdpll, *p))
             {
               unique_added_clauses++;
+              cur_unique_added_clauses++;
               added = 1;
               LINK_LAST (qdpll->pcnf.clauses, *p, link);
+
+              //TODO ADD TO OCCS!
+
 #if 0
               fprintf (stderr, " Added new resolvent id %d: ", (*p)->id);
               print_constraint (qdpll, *p);
@@ -8136,11 +8199,14 @@ res (QDPLL *qdpll)
         }
       QDPLL_RESET_STACK(r);
 
+      if (qdpll->options.verbosity >= 1)
+        fprintf (stderr, "\nUnique res added = %d\n", cur_unique_added_clauses);
+
       if (!added)
         break;
     }
 
-  fprintf (stderr, "End: %d rounds and %d unique added clauses, %d unique empty clauses\n", rounds, unique_added_clauses, QDPLL_COUNT_STACK(ecl));
+  fprintf (stderr, "End: %d rounds and %d unique added clauses, %u unique empty clauses\n", rounds, unique_added_clauses, (unsigned int)QDPLL_COUNT_STACK(ecl));
 
   Constraint **p;
   for (p = ecl.start; p < ecl.top; p++)
@@ -8152,7 +8218,7 @@ res (QDPLL *qdpll)
       fprintf (stderr, "\n");
     }
 
-  print_all_duplicates (qdpll);
+  //print_all_duplicates (qdpll);
 
   QDPLL_DELETE_STACK(qdpll->mm, ecl);
   QDPLL_DELETE_STACK(qdpll->mm, r);
@@ -8164,8 +8230,8 @@ static QDPLLResult
 solve (QDPLL * qdpll)
 {
 
-  comp(qdpll);
-  //  res (qdpll);
+  //comp(qdpll);
+    res (qdpll);
 
   abort ();
 
