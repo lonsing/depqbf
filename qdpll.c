@@ -7747,11 +7747,13 @@ setup_occ_lists (QDPLL * qdpll)
 }
 
 
+#ifndef NDEBUG
 static void
 assert_lits_sorted (QDPLL * qdpll, LitID * lit_start, LitID * lit_end);
+#endif
 
 
-static int 
+static void
 check_and_add_to_duplicates (QDPLL *qdpll, ConstraintPtrStack *duplicates, Constraint * dup)
 {
   Constraint **p;
@@ -7776,8 +7778,10 @@ check_and_add_to_duplicates (QDPLL *qdpll, ConstraintPtrStack *duplicates, Const
 static int 
 clauses_equal (QDPLL *qdpll, Constraint *c1, Constraint *c2)
 {
+#ifndef NDEBUG
   assert_lits_sorted (qdpll, c1->lits, c1->lits + c1->num_lits);
   assert_lits_sorted (qdpll, c2->lits, c2->lits + c2->num_lits);
+#endif
 
   if (c1->num_lits != c2->num_lits)
     return 0;
@@ -7830,7 +7834,7 @@ have_non_taut_resolvent (QDPLL *qdpll, Constraint *c1, Constraint *c2)
                 return 0;
               else
                 {
-                  if (QDPLL_VAR_EXISTS(LIT2VARPTR(qdpll->pcnf.vars, *p1)))
+                  if (QDPLL_VAR_FORALL(LIT2VARPTR(qdpll->pcnf.vars, *p1)))
                     pivot = LIT2VARID (*p1);
                 }
             }
@@ -7897,7 +7901,9 @@ resolve_and_reduce_simple (QDPLL *qdpll, Constraint *c1, VarID pivot, Constraint
               res->num_lits, 0);
 
   /* Universal reduction. */
+#ifndef NDEBUG
   assert_lits_sorted (qdpll, res->lits, res->lits + res->num_lits);
+#endif
   while (res->num_lits > 0 && QDPLL_VAR_FORALL(LIT2VARPTR(qdpll->pcnf.vars, res->lits[res->num_lits - 1])))
     res->num_lits--;
 
@@ -7973,7 +7979,7 @@ print_all_duplicates (QDPLL *qdpll)
   Constraint *p1;
   for (p1 = qdpll->pcnf.clauses.first; p1; p1 = p1->link.next)
     {
-      fprintf (stderr, "clause %d (learnt=%c):", p1->id, p1->learnt ? '1' : '0');
+      fprintf (stderr, "clause %d (learnt=%c): ", p1->id, p1->learnt ? '1' : '0');
       print_constraint (qdpll, p1);
       fprintf (stderr, "...has %d duplicates: ", QDPLL_COUNT_STACK(p1->duplicates));
       if (QDPLL_COUNT_STACK(p1->duplicates) > 0)
@@ -7989,6 +7995,66 @@ print_all_duplicates (QDPLL *qdpll)
       
         fprintf (stderr, "\n\n");
     }
+}
+
+
+static void
+comp (QDPLL *qdpll)
+{
+  unsigned long long int total_univ_vars = 0;
+  unsigned long long int total_possible_res = 0;
+  unsigned long long int total_occ_lengths = 0;
+  unsigned long long int total_pos_occ_lengths = 0;
+  unsigned long long int total_neg_occ_lengths = 0;
+  unsigned long long int total_occs = 0;
+  unsigned long long int total_pos_occs = 0;
+  unsigned long long int total_neg_occs = 0;
+  double total_avg_occ_lengths = 0;
+
+  Scope *s;
+  for (s = qdpll->pcnf.scopes.first; s; s = s->link.next)
+    {
+      if (QDPLL_SCOPE_FORALL(s))
+        {
+          VarID *p, *e;
+          total_univ_vars += QDPLL_COUNT_STACK(s->vars);
+          //fprintf (stderr, "Universal scope %d has %d variables\n", 
+          //       s->nesting, QDPLL_COUNT_STACK(s->vars));
+          for (p = s->vars.start, e = s->vars.top; p < e; p++)
+            {
+              Var *var = VARID2VARPTR(qdpll->pcnf.vars, *p);
+              unsigned int pos = QDPLL_COUNT_STACK(var->pos_occ_clauses);
+              unsigned int neg = QDPLL_COUNT_STACK(var->neg_occ_clauses);
+              total_occs += (pos + neg);
+              total_pos_occs += pos;
+              total_neg_occs += neg;
+              unsigned long long int res = pos * neg;
+              total_possible_res += res;
+              //              fprintf (stderr, " univ-var %d has %d occs (%d pos + %d neg) and %d (%d * %d) possible res\n", 
+              //       var->id, pos + neg, pos, neg, pos * neg, pos, neg);
+              BLitsOcc *cp, *ce;
+              for (cp = var->pos_occ_clauses.start, ce = var->pos_occ_clauses.top; cp < ce; cp++)
+                {
+                  total_occ_lengths += cp->constraint->num_lits;
+                  total_pos_occ_lengths += cp->constraint->num_lits;
+                }
+              for (cp = var->neg_occ_clauses.start, ce = var->neg_occ_clauses.top; cp < ce; cp++)
+                {
+                  total_occ_lengths += cp->constraint->num_lits;    
+                  total_neg_occ_lengths += cp->constraint->num_lits;            
+                }
+            }
+        }
+    }
+
+  fprintf (stderr, "total univ-vars %llu\n", total_univ_vars);
+  fprintf (stderr, "total occs %llu ( %f per var)\n", total_occs, total_occs / (double) total_univ_vars);
+  fprintf (stderr, "total pos-occs %llu ( %f per var)\n", total_pos_occs, total_pos_occs / (double) total_univ_vars);
+  fprintf (stderr, "total neg-occs %llu ( %f per var)\n", total_neg_occs, total_neg_occs / (double) total_univ_vars);
+  fprintf (stderr, "total res %llu ( %f per var)\n", total_possible_res, total_possible_res / (double) total_univ_vars);
+  fprintf (stderr, "total occ-lengths %llu ( %f per occ)\n", total_occ_lengths, total_occ_lengths / ((double) total_occs));
+  fprintf (stderr, "total pos-occ-lengths %llu ( %f per pos-occ)\n", total_pos_occ_lengths, total_pos_occ_lengths / ((double) total_pos_occs));
+  fprintf (stderr, "total neg-occ-lengths %llu ( %f per neg-occ)\n", total_neg_occ_lengths, total_neg_occ_lengths / ((double) total_neg_occs));
 }
 
 
@@ -8098,7 +8164,8 @@ static QDPLLResult
 solve (QDPLL * qdpll)
 {
 
-  res (qdpll);
+  comp(qdpll);
+  //  res (qdpll);
 
   abort ();
 
