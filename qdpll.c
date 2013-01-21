@@ -8081,6 +8081,9 @@ collect (QDPLL *qdpll, ConstraintPtrStack *s)
 }
 
 
+#define MAX_CHECK_RES_PER_VAR (500000)
+#define MAX_KEEP_RES_LENGTH (3)
+
 static void
 collect_a (QDPLL *qdpll, ConstraintPtrStack *s)
 {
@@ -8095,11 +8098,17 @@ collect_a (QDPLL *qdpll, ConstraintPtrStack *s)
           for (p = scope->vars.start, e = scope->vars.top; p < e; p++)
             {
               Var *var = VARID2VARPTR(qdpll->pcnf.vars, *p);
+              long long unsigned int check = (long long unsigned int)QDPLL_COUNT_STACK(var->neg_occ_clauses) * 
+                QDPLL_COUNT_STACK(var->pos_occ_clauses); 
+              if (check > MAX_CHECK_RES_PER_VAR)
+                {
+                  if (qdpll->options.verbosity >= 1)
+                    fprintf (stderr, "Univ-var %d has >= %d possible res, skip\n", var->id, MAX_CHECK_RES_PER_VAR);
+                  continue;
+                }
               if (qdpll->options.verbosity >= 1)
                 fprintf (stderr, "Univ-var %d, checking %llu (pos %llu * neg %llu) res\n", var->id, 
-                         (long long unsigned int)QDPLL_COUNT_STACK(var->neg_occ_clauses) * 
-                         QDPLL_COUNT_STACK(var->pos_occ_clauses), 
-                         (long long unsigned int)QDPLL_COUNT_STACK(var->pos_occ_clauses), 
+                         check, (long long unsigned int)QDPLL_COUNT_STACK(var->pos_occ_clauses), 
                          (long long unsigned int)QDPLL_COUNT_STACK(var->neg_occ_clauses));
               unsigned int cnt = 0;
               BLitsOcc *cp1, *ce1;
@@ -8128,6 +8137,25 @@ collect_a (QDPLL *qdpll, ConstraintPtrStack *s)
 
 
 static void
+add_to_occs (QDPLL *qdpll, Constraint *c)
+{
+  Var *vars = qdpll->pcnf.vars;
+  QDPLLMemMan *mm = qdpll->mm;
+  LitID *p, *e;
+  for (p = c->lits, e = p + c->num_lits; p < e; p++)
+    {
+      LitID lit = *p;
+      Var *var = LIT2VARPTR(vars, lit);
+      BLitsOcc blit = {lit, c};
+      if (QDPLL_LIT_NEG (lit))
+        QDPLL_PUSH_STACK (mm, var->neg_occ_clauses, blit);
+      else
+        QDPLL_PUSH_STACK (mm, var->pos_occ_clauses, blit);
+    }
+}
+
+
+static void
 res (QDPLL *qdpll)
 {
   ConstraintPtrStack r;
@@ -8143,7 +8171,7 @@ res (QDPLL *qdpll)
   for (;;)
     {
       rounds++;
-      fprintf (stderr, "Round %d\n", rounds);
+      fprintf (stderr, "\nRound %d\n", rounds);
 
       collect_a(qdpll, &r);
 
@@ -8153,6 +8181,7 @@ res (QDPLL *qdpll)
       /* Add new resolvents to clause list. */
       unsigned int cur_unique_added_clauses = 0;
       unsigned cnt = 0;
+      unsigned skip_length = 0;
       unsigned int added = 0;
       Constraint **p;
       for (p = r.start; p < r.top; p++)
@@ -8165,6 +8194,11 @@ res (QDPLL *qdpll)
               fprintf (stderr, "Produced empty clause %d from %d, %d\n", (*p)->id, (*p)->parent1->id, (*p)->parent2->id);
               if (!empty_clause_exactly_present (&ecl, *p))
                 QDPLL_PUSH_STACK(qdpll->mm, ecl, *p);
+            }
+          else if ((*p)->num_lits > MAX_KEEP_RES_LENGTH)
+            {
+              skip_length++;
+              continue;
             }
 
           if (qdpll->options.verbosity >= 2)
@@ -8179,7 +8213,7 @@ res (QDPLL *qdpll)
               added = 1;
               LINK_LAST (qdpll->pcnf.clauses, *p, link);
 
-              //TODO ADD TO OCCS!
+              add_to_occs (qdpll, *p);
 
 #if 0
               fprintf (stderr, " Added new resolvent id %d: ", (*p)->id);
@@ -8200,7 +8234,7 @@ res (QDPLL *qdpll)
       QDPLL_RESET_STACK(r);
 
       if (qdpll->options.verbosity >= 1)
-        fprintf (stderr, "\nUnique res added = %d\n", cur_unique_added_clauses);
+        fprintf (stderr, "\nUnique res added = %d, skip length = %d\n", cur_unique_added_clauses, skip_length);
 
       if (!added)
         break;
@@ -8233,6 +8267,9 @@ solve (QDPLL * qdpll)
   //comp(qdpll);
     res (qdpll);
 
+  qdpll_print (qdpll, stdout);
+
+  //return QDPLL_RESULT_UNKNOWN;
   abort ();
 
   if (qdpll->options.depman_simple)
