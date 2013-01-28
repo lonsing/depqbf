@@ -8081,8 +8081,9 @@ collect (QDPLL *qdpll, ConstraintPtrStack *s)
 }
 
 
-#define MAX_CHECK_RES_PER_VAR (500000)
-#define MAX_KEEP_RES_LENGTH (3)
+#define MAX_CHECK_RES_PER_VAR (1000000000)
+#define MAX_CHECK_RES_LENGTH (35)
+#define MAX_KEEP_RES_LENGTH (4)
 
 static void
 collect_a (QDPLL *qdpll, ConstraintPtrStack *s)
@@ -8118,6 +8119,10 @@ collect_a (QDPLL *qdpll, ConstraintPtrStack *s)
                   for (cp2 = var->neg_occ_clauses.start, ce2 = var->neg_occ_clauses.top; cp2 < ce2; cp2++)
                     {
                       cnt++;
+
+                      if ((cp1->constraint->num_lits + cp2->constraint->num_lits - 2) > MAX_CHECK_RES_LENGTH)
+                        continue;
+
                       if (qdpll->options.verbosity >= 1)
                         fprintf (stderr, " check = %d\r", cnt);
                       VarID pivot;
