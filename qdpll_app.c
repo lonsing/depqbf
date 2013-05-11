@@ -455,6 +455,8 @@ sig_handler (int sig)
 #if (COMPUTE_STATS || COMPUTE_TIMES)
   qdpll_print_stats (qdpll);
 #endif
+  /* Restore default signal handler; re-raise signal */
+  signal (sig, SIG_DFL);
   raise (sig);
 }
 
