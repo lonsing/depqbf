@@ -1,5 +1,12 @@
-#CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -O3 
+UNAME := $(shell uname)
+
+ifeq ($(UNAME), Darwin)
+# Want to dynamically link on OS X
+CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -O3
+else
 CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -O3 -static
+endif
+
 #CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -g3 -static
 #CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -g3 -pg -fprofile-arcs -ftest-coverage -static
 OBJECTS=qdpll_main.o qdpll_app.o qdpll.o qdpll_mem.o qdpll_dep_man_qdag.o
