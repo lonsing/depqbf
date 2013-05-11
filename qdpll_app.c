@@ -59,6 +59,10 @@
 "  --trace[=<format>]              dump trace in <format> to <stdout>\n"\
 "                                    format: qrp  ... ascii QRP format (default)\n"\
 "                                            bqrp ... binary QRP format\n"\
+"  --qdo                           print variable assignment in QDIMACS output format to <stdout>:\n"\
+"                                    if formula is satisfiable, prints a (possibly-partial) satisfying\n"\
+"                                    assignment for the outermost existential variables, otherwise prints\n"\
+"                                    an assignment for the outermost universal variables\n"\
 "  --dep-man=<val>                 set dependency manager: if <val>=qdag (default) then the solver\n"\
 "                                    uses the standard dependency scheme; if <val>=simple then the\n"\
 "                                    solver uses the given quantifier prefix of the input formula\n"	\
