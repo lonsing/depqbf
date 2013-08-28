@@ -2,7 +2,7 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012 Florian Lonsing and Aina Niemetz, Johannes Kepler
+ Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
  University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
@@ -43,9 +43,9 @@
 	size_t old_count = QDPLL_COUNT_STACK (stack);			\
 	(stack).start = qdpll_realloc((mm), (stack).start,		\
 				      old_size * elem_bytes,		\
-				      size * elem_bytes);		\
+				      (size) * elem_bytes);		\
 	(stack).top = (stack).start + old_count;			\
-	(stack).end = (stack).start + size;				\
+	(stack).end = (stack).start + (size);				\
       }									\
   }while(0)								\
 

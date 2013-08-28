@@ -2,7 +2,7 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012 Florian Lonsing and Aina Niemetz, Johannes Kepler
+ Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
  University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
@@ -48,7 +48,6 @@
 #define QDPLL_ASSERT_FIND_IN_ASSIGNED_VARS 1
 #define QDPLL_ASSERT_LEARN_VARS_UNMARKED 1
 #define QDPLL_ASSERT_CDCL_FORCED_ANTECEDENT 1
-#define QDPLL_ASSERT_RE_INIT_DEPS_DISABLED_CLAUSES 1
 #define QDPLL_ASSERT_PUSHED_PURE_LITS 1
 
 #else
@@ -65,7 +64,6 @@
 #define QDPLL_ASSERT_FIND_IN_ASSIGNED_VARS 0
 #define QDPLL_ASSERT_LEARN_VARS_UNMARKED 0
 #define QDPLL_ASSERT_CDCL_FORCED_ANTECEDENT 0
-#define QDPLL_ASSERT_RE_INIT_DEPS_DISABLED_CLAUSES 0
 #define QDPLL_ASSERT_PUSHED_PURE_LITS 0
 
 #endif

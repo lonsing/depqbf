@@ -2,7 +2,7 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012 Florian Lonsing and Aina Niemetz, Johannes Kepler
+ Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
  University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
@@ -5096,6 +5096,10 @@ type_reduce (QDPLLDepManGeneric * dmg,
   if (QDPLL_COUNT_STACK (**lit_stack) == 0)
     return;
 
+#if COMPUTE_STATS
+  unsigned int num_lits_before_reduction = QDPLL_COUNT_STACK(**lit_stack);
+#endif
+
   if (qdpll->options.depman_simple)
     {
       if (!lits_sorted)
@@ -5117,9 +5121,6 @@ type_reduce (QDPLLDepManGeneric * dmg,
           lit_var = LIT2VARPTR (vars, lit);
           if (other_type != lit_var->scope->type)
             {
-#if COMPUTE_STATS
-              qdpll->stats.total_type_reduce_by_deps++;
-#endif
               LEARN_VAR_UNMARK (lit_var);
               QDPLL_POP_STACK (**lit_stack);
               if (qdpll->options.verbosity > 1)
@@ -5149,6 +5150,12 @@ type_reduce (QDPLLDepManGeneric * dmg,
                       (*lit_stack)->start, cnt, 1);
         }
     }
+
+#if COMPUTE_STATS
+  qdpll->stats.total_type_reduce_lits += 
+    (num_lits_before_reduction - QDPLL_COUNT_STACK(**lit_stack));
+#endif
+
 #ifndef NDEBUG
   assert_lits_sorted (qdpll, (*lit_stack)->start, (*lit_stack)->top);
   assert_lits_no_holes ((*lit_stack)->start, (*lit_stack)->top);

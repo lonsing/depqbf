@@ -1,8 +1,8 @@
 /*
  This file is part of DepQBF.
 
- DepQBF, a solver for quantified boolean formulae (QBF).  
- Copyright 2010, 2011, 2012 Florian Lonsing and Aina Niemetz, Johannes Kepler 
+ DepQBF, a solver for quantified boolean formulae (QBF).        
+ Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
  University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
@@ -1301,8 +1301,6 @@ assert_peek_taut_lit_irreducible (QDPLL * qdpll, LitIDStack * lit_stack,
 
 /* -------------------- START: TRACING-ONLY CODE -------------------- */
 
-// TODO preamble!!
-
 static void
 encode_num (int num, int is_literal)
 {
@@ -1323,7 +1321,6 @@ encode_num (int num, int is_literal)
 }
 
 static void
-//print_qrp_constraint (QDPLL *qdpll, 
 print_qrp_constraint (ConstraintID id, LitID * lits, unsigned int num_lits,
                       ConstraintID ant1, ConstraintID ant2)
 {
@@ -1342,7 +1339,6 @@ print_qrp_constraint (ConstraintID id, LitID * lits, unsigned int num_lits,
 }
 
 static void
-//print_bqrp_constraint (QDPLL *qdpll, 
 print_bqrp_constraint (ConstraintID id, LitID * lits, unsigned int num_lits,
                        ConstraintID ant1, ConstraintID ant2)
 {
@@ -1403,7 +1399,6 @@ print_bqrp_full_cover_set (QDPLL * qdpll,
 
 
 static void
-//print_qrp_scope (QDPLL *qdpll, Scope *scope)
 print_qrp_scope (Scope * scope)
 {
   VarID *p;
@@ -1420,7 +1415,6 @@ print_qrp_scope (Scope * scope)
 
 
 static void
-//print_bqrp_scope (QDPLL *qdpll, Scope *scope)
 print_bqrp_scope (Scope * scope)
 {
   VarID *p;
@@ -1558,7 +1552,13 @@ var_pqueue_compare (QDPLL * qdpll, unsigned int pos_a, unsigned int pos_b)
   if (var_a_priority < var_b_priority)
     return -1;
   else if (var_a_priority == var_b_priority)
-    return 0;
+    {
+      assert (var_a->id != var_b->id);
+      if (var_a->id < var_b->id)
+        return -1;
+      else
+        return 1;
+    }
   else
     return 1;
 }
@@ -2276,7 +2276,6 @@ is_cube_satisfied (QDPLL * qdpll, Constraint * cube)
 }
 
 
-/* TODO: use watchers as in 'is_clause_satisfied'. */
 /* Dual to 'is_clause_satisfied' */
 static LitID
 is_cube_empty (QDPLL * qdpll, Constraint * cube)
@@ -2884,9 +2883,6 @@ static Constraint *check_disabling_blocking_lit (QDPLL * qdpll,
    and search a new, unsatisfied clause to watch. 
    The new watcher is then copied to the first position (invariant).
    Returns new watcher if found, else null.
-
-   TODO: optimize check for satisfied/empty clauses.
-
    NOTE: we use 'init' flag to use this function both for watcher
    update and watcher initialization.  
    NOTE: 'occ_list' is the list where we search for a new watcher,
@@ -3416,10 +3412,8 @@ has_constraint_spurious_pure_lit (QDPLL * qdpll, Constraint * c)
   return 0;
 }
 
-
 static void learnt_constraint_mtf (QDPLL * qdpll, Constraint * c);
 
-/* NOTE/TODO: this function turned out to be quite superfluous... */
 static Constraint *
 handle_detected_unit_constraint (QDPLL * qdpll, LitID lit, Var * var,
                                  Constraint * constraint)
@@ -3471,20 +3465,6 @@ handle_detected_unit_constraint (QDPLL * qdpll, LitID lit, Var * var,
   return constraint;
 }
 
-
-/* Called after watcher became false. Try to set up watcher invariant by 
-   finding new pair of watched literals. Returns null if conflict occurred, 
-   otherwise sentinel for entry deletion. Detected unit literals will be pushed immediately.
-*/
-
-#if 0
-static Clause *
-NEW_update_literal_watchers (QDPLL * qdpll, Var * propagated_var,
-                             Clause * clause)
-{
-
-}
-#endif
 
 /* Called after watcher became false. Try to set up watcher invariant by 
    finding new pair of watched literals. Returns null if conflict occurred, 
@@ -4520,8 +4500,36 @@ cleanup_clause (QDPLL * qdpll, Constraint * clause)
   unmark_clause_variables (qdpll, clause);
   QDPLL_SORT (qdpll, int, compare_lits_by_variable_nesting, clause->lits,
               clause->num_lits, 0);
+
+  unsigned int num_lits_before_red = clause->num_lits;
+
   /* Apply universal reduction. */
   top_level_reduce_constraint (qdpll, clause, QDPLL_QTYPE_EXISTS);
+  
+  if (qdpll->options.trace)
+    {
+      if (clause->num_lits < num_lits_before_red)
+        {
+          /* Clause was reduced; add and trace explicit reduction step. */
+          assert (clause->id == (qdpll->cur_constraint_id));
+          /* Trace clause before reduction. */
+          qdpll->trace_constraint (clause->id,
+                                   clause->lits, num_lits_before_red, 0, 0);
+          unsigned int old_clause_id = clause->id;
+          clause->id = ++qdpll->cur_constraint_id;
+          assert (clause->id == old_clause_id + 1);
+          assert (qdpll->cur_constraint_id == clause->id);
+          /* Trace reduction step, using new ID of reduced clause. */
+          qdpll->trace_constraint (clause->id,
+                                   clause->lits, clause->num_lits, old_clause_id, 0);
+        }
+      else
+        {
+          /* Clause unchanged, trace original clause as is. */
+          assert (clause->num_lits == num_lits_before_red);
+          qdpll->trace_constraint (clause->id, clause->lits, clause->num_lits, 0, 0);
+        }
+    }
 
   return 0;
 }
@@ -4620,17 +4628,10 @@ import_added_ids (QDPLL * qdpll)
   else
     {
       /* Import clause's literals */
-      /* TODO OPTIMIZATION: now we traverse aux. stack and copy 
-         literals to newly allocated clause. Then we cleanup
-         clause. Altogether we visit all literals three times, i.e. when
-         reading input, when copying to clause and when cleaning
-         clause. It should be easy to get rid of one visit, at least! */
       unsigned int num_lits = QDPLL_COUNT_STACK (*add_stack);
       Constraint *clause = create_constraint (qdpll, num_lits, 0);
 
-      /* First, add lits to clause, do NOT yet update occ-stacks. 
-         NOTE: if clause is redundant, then might get vars which have no occs
-       */
+      /* First, add lits to clause, do NOT yet update occ-stacks. */
       LitID *p = clause->lits;
       while (sp < se)
         {
@@ -4652,14 +4653,7 @@ import_added_ids (QDPLL * qdpll)
 
       /* Next, sort and clean up clause, then update occ-stacks */
       if (!cleanup_clause (qdpll, clause))
-        {
-          import_clause (qdpll, clause);
-          if (qdpll->options.trace)
-            /* Print all literals - even if clause has been reduced previously
-               (else an additional reduction step must be introduced). */
-            qdpll->trace_constraint (clause->id,
-                                     clause->lits, clause->size_lits, 0, 0);
-        }
+        import_clause (qdpll, clause);
       else                      /* Clause is tautological -> delete */
         delete_constraint (qdpll, clause);
     }
@@ -4997,6 +4991,9 @@ increase_var_activity (QDPLL * qdpll, Var * var)
   var->priority +=
     (qdpll->options.var_act_inc *
      (1 + (qdpll->options.var_act_bias * (double) var->scope->nesting) / 10));
+  /* Print bump message suggested by AVG. */
+  if (qdpll->options.verbosity >= 2)
+    fprintf (stderr, "BUMP: %d to %f\n", var->id, var->priority);
   if (var->priority > 1e100)
     {
 #if COMPUTE_STATS
@@ -5328,7 +5325,7 @@ cover_by_clauses (QDPLL * qdpll, LitIDStack * lit_stack,
       assert ((*p)->mark_stats_type_reduce_lits);
       (*p)->mark_stats_type_reduce_lits = 0;
     }
-  qdpll->stats.total_type_reduce_by_deps +=
+  qdpll->stats.total_type_reduce_lits +=
     QDPLL_COUNT_STACK (qdpll->wreason_a);
   QDPLL_RESET_STACK (qdpll->wreason_a);
 #endif
@@ -5359,18 +5356,13 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
   Var *var;
   LitID *p, *e, lit;
   Constraint *res_cons = qdpll->result_constraint;
+  assert (!qdpll->options.trace || !qdpll->res_cons_id);
   if ((res_cons))
     {
+      qdpll->res_cons_id = res_cons->id;
       assert (type != QDPLL_QTYPE_EXISTS || (res_cons && !res_cons->is_cube));
       assert (type == QDPLL_QTYPE_EXISTS || (res_cons && res_cons->is_cube));
       assert (res_cons->dep_init_level <= qdpll->num_deps_init);
-
-      /* An original clause was found as initial reason. */
-      if (res_cons->num_lits < res_cons->size_lits)
-        {
-          assert (!qdpll->orig_wreason);
-          qdpll->orig_wreason = res_cons;
-        }
 
       learnt_constraint_mtf (qdpll, res_cons);
       /* Push and mark literals of reason clause onto 'lit-stack',
@@ -5408,22 +5400,37 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
       if (qdpll->options.verbosity > 1)
         fprintf (stderr, "SDCL: generating new cover set.\n");
 
+      /* Variable 'qdpll->res_cons_id' is needed for tracing in QPUP learning only. */
+
       /* Find cover set. */
       nlits = QDPLL_COUNT_STACK (**lit_stack);
+
+      /* Hard assertion: 'lit_stack' is empty before call of 'cover_by_clauses'. */
+      if (nlits)
+        abort();
+
       if (cover_by_clauses (qdpll, stack, &tmp) && qdpll->options.trace)
-        qdpll->trace_full_cover_set (qdpll,
-                                     (cid = ++(qdpll->cur_constraint_id)),
-                                     tmp.start, QDPLL_COUNT_STACK (tmp),
-                                     (*lit_stack)->start,
-                                     QDPLL_COUNT_STACK (**lit_stack));
+        {
+          qdpll->trace_full_cover_set (qdpll,
+                                       (cid = ++(qdpll->cur_constraint_id)),
+                                       tmp.start, QDPLL_COUNT_STACK (tmp),
+                                       (*lit_stack)->start,
+                                       QDPLL_COUNT_STACK (**lit_stack));
+          qdpll->res_cons_id = cid;
+        }
 
       if (qdpll->options.trace && nlits - (QDPLL_COUNT_STACK (**lit_stack)))
-        qdpll->trace_constraint (++(qdpll->cur_constraint_id),
-                                 (*lit_stack)->start,
-                                 QDPLL_COUNT_STACK (**lit_stack), cid, 0);
+        {
+          qdpll->trace_constraint (++(qdpll->cur_constraint_id),
+                                   (*lit_stack)->start,
+                                   QDPLL_COUNT_STACK (**lit_stack), cid, 0);
+          qdpll->res_cons_id = qdpll->cur_constraint_id;
+        }
 
       nlits = QDPLL_COUNT_STACK (**lit_stack);
+
       qdpll->dm->reduce_lits (qdpll->dm, lit_stack, lit_stack_tmp, type, 1);
+
       /* Working reason is now sorted. */
       if (qdpll->options.trace && QDPLL_COUNT_STACK (**lit_stack)
           && (nlits - QDPLL_COUNT_STACK (**lit_stack)))
@@ -5433,6 +5440,7 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
                                    QDPLL_COUNT_STACK (**lit_stack),
                                    qdpll->cur_constraint_id, 0);
           qdpll->cur_constraint_id += 1;
+          qdpll->res_cons_id = qdpll->cur_constraint_id;
         }
 
       QDPLL_DELETE_STACK (mm, tmp);
@@ -5545,7 +5553,8 @@ check_marks_and_push (QDPLL * qdpll, Var * var, LitID lit, LitIDStack * stack,
           LEARN_VAR_NEG_MARK (var);
           QDPLL_PUSH_STACK (qdpll->mm, *stack, lit);
           update_stop_crit_data (qdpll, qdpll->pcnf.vars, lit, type);
-          increase_var_activity (qdpll, var);
+          if (!qdpll->options.bump_vars_once)
+            increase_var_activity (qdpll, var);
         }
       else if (LEARN_VAR_POS_MARKED (var))
         {
@@ -5562,7 +5571,8 @@ check_marks_and_push (QDPLL * qdpll, Var * var, LitID lit, LitIDStack * stack,
           LEARN_VAR_POS_MARK (var);
           QDPLL_PUSH_STACK (qdpll->mm, *stack, lit);
           update_stop_crit_data (qdpll, qdpll->pcnf.vars, lit, type);
-          increase_var_activity (qdpll, var);
+          if (!qdpll->options.bump_vars_once)
+            increase_var_activity (qdpll, var);
         }
       else if (LEARN_VAR_NEG_MARKED (var))
         {
@@ -5611,22 +5621,12 @@ resolve_and_reduce (QDPLL * qdpll, ConstraintID ant1_id,
       const char *type_str = type == QDPLL_QTYPE_EXISTS ? "clause" : "cube";
       fprintf (stderr, "\n%cDCL: pivot variable: %d\n", prefix, var->id);
       fprintf (stderr, "%cDCL: working %s: ", prefix, type_str);
-      if (!qdpll->orig_wreason)
-        print_lits (qdpll, (*lit_stack)->start,
-                    QDPLL_COUNT_STACK (**lit_stack), 0);
-      else
-        print_lits (qdpll, qdpll->orig_wreason->lits,
-                    qdpll->orig_wreason->num_lits,
-                    qdpll->orig_wreason->size_lits);
+      print_lits (qdpll, (*lit_stack)->start,
+                  QDPLL_COUNT_STACK (**lit_stack), 0);
 
       fprintf (stderr, "%cDCL: antecedent: ", prefix);
-      if (!qdpll->orig_antecedent)
-        print_lits (qdpll, other_lits_start,
-                    other_lits_end - other_lits_start, 0);
-      else
-        print_lits (qdpll, qdpll->orig_antecedent->lits,
-                    qdpll->orig_antecedent->num_lits,
-                    qdpll->orig_antecedent->size_lits);
+      print_lits (qdpll, other_lits_start,
+                  other_lits_end - other_lits_start, 0);
     }
 
   QDPLLMemMan *mm = qdpll->mm;
@@ -5757,8 +5757,6 @@ resolve_and_reduce (QDPLL * qdpll, ConstraintID ant1_id,
                              QDPLL_COUNT_STACK (**lit_stack), ant1_id,
                              var->antecedent->id);
 
-  qdpll->orig_wreason = qdpll->orig_antecedent = 0;
-
   return res_id;
 }
 
@@ -5829,11 +5827,7 @@ peek_tautology (QDPLL * qdpll, LitIDStack * lit_stack, Var * var)
 
               fprintf (stderr, "peek tautology: true by lit %d\n", lit);
             }
-#ifndef NDEBUG
-#if 0
-          assert_peek_taut_lit_irreducible (qdpll, lit_stack, var, lit_var);
-#endif
-#endif
+
           return lit_var;
         }
     }
@@ -5991,14 +5985,8 @@ AGAIN:
       assert (var->antecedent);
       assert (var->antecedent->is_reason);
 
-      /* An original clause was found as antecedent */
-      if (var->antecedent->num_lits < var->antecedent->size_lits)
-        {
-          assert (!qdpll->orig_antecedent);
-          qdpll->orig_antecedent = var->antecedent;
-        }
-
-      learnt_constraint_mtf (qdpll, var->antecedent);
+      if (!qdpll->options.bump_vars_once)
+        learnt_constraint_mtf (qdpll, var->antecedent);
 
       cid =
         resolve_and_reduce (qdpll, cid, lit_stack, lit_stack_tmp, var, type);
@@ -6130,10 +6118,1688 @@ chron_backtracking (QDPLL * qdpll, const QDPLLQuantifierType type)
   return QDPLL_INVALID_DECISION_LEVEL;
 }
 
-
 static unsigned int analyze_solution_no_sdcl (QDPLL * qdpll);
 static unsigned int analyze_conflict_no_cdcl (QDPLL * qdpll);
 
+
+/* START: QPUP code. */
+
+/* Marks used for implication graph traversal. */ 
+static int
+qpup_is_var_pos_marked (Var *var)
+{
+  return var->qpup_mark_pos; 
+}
+
+static int
+qpup_is_var_neg_marked (Var *var)
+{
+  return var->qpup_mark_neg; 
+}
+
+static int
+qpup_is_var_marked (Var *var)
+{
+  return qpup_is_var_neg_marked (var) || qpup_is_var_pos_marked (var); 
+}
+
+static void
+qpup_mark_var (Var *var, int set_pos_mark)
+{
+  if (set_pos_mark)
+    var->qpup_mark_pos = 1;
+  else
+    var->qpup_mark_neg = 1;
+}
+
+static void
+qpup_mark_var_by_lit (Var *var, LitID lit)
+{
+  assert ((VarID)LIT2VARID(lit) == var->id);
+  if (QDPLL_LIT_NEG (lit))
+    qpup_mark_var (var, 0);
+  else
+    qpup_mark_var (var, 1);
+}
+
+static void
+qpup_unmark_var (Var *var)
+{
+  var->qpup_mark_pos = var->qpup_mark_neg = 0;
+}
+
+/* Marks used for resolution. */ 
+
+static int
+qpup_res_is_var_pos_marked (Var *var)
+{
+  return var->qpup_res_mark_pos; 
+}
+
+static int
+qpup_res_is_var_neg_marked (Var *var)
+{
+  return var->qpup_res_mark_neg; 
+}
+
+static int
+qpup_res_is_var_marked (Var *var)
+{
+  return qpup_res_is_var_neg_marked (var) || qpup_res_is_var_pos_marked (var); 
+}
+
+static void
+qpup_res_mark_var (Var *var, int set_pos_mark)
+{
+  if (set_pos_mark)
+    var->qpup_res_mark_pos = 1;
+  else
+    var->qpup_res_mark_neg = 1;
+}
+
+static void
+qpup_res_mark_var_by_lit (Var *var, LitID lit)
+{
+  assert ((VarID)LIT2VARID(lit) == var->id);
+  if (QDPLL_LIT_NEG (lit))
+    qpup_res_mark_var (var, 0);
+  else
+    qpup_res_mark_var (var, 1);
+}
+
+static void
+qpup_res_unmark_var (Var *var)
+{
+  var->qpup_res_mark_pos = var->qpup_res_mark_neg = 0;
+}
+
+/* Variable 'implied_var' is the implied variable and literal 'lit' occurs in
+   the antecedent constraint of 'implied_var'. */
+static void
+qpup_check_marks_and_collect (QDPLL * qdpll, LitID lit, Var *implied_var, 
+                              const QDPLLQuantifierType type)
+{
+  assert (type == QDPLL_QTYPE_FORALL || type == QDPLL_QTYPE_EXISTS);
+
+  QDPLLMemMan *mm = qdpll->mm;
+  Var *var = LIT2VARPTR(qdpll->pcnf.vars, lit);
+
+  if (var->scope->type == type)
+    {
+      /* Can never see existential (universal) pure literals during CDCL
+         (SDCL). E.g. an existential pure literal can only satisfy clauses and
+         hence such literal cannot occur in the antecedent clause of an
+         existential unit. */
+      assert (var->mode != QDPLL_VARMODE_PURE);
+      if (!qpup_is_var_marked(var))
+        {
+          qpup_mark_var_by_lit (var, lit);
+          QDPLL_PUSH_STACK(mm, qdpll->qpup_nodes, var);
+        }
+    }
+  else
+    {
+      /* Variable 'var' is universal in CDCL and existential in SDCL. */
+      if (!qpup_is_var_marked(var))
+        {
+          /* Collect universal (existential) literals in CDCL (SDCL) for dependency checking. */
+          qpup_mark_var_by_lit (var, lit);
+          QDPLL_PUSH_STACK(mm, qdpll->qpup_vars, var);
+          /* Collect universal (existential) decision variables. IMPORTANT: we
+             might see a universal literal of a decision variable in an
+             antecedent although that literal was implicitly reduced during QBCP. In this
+             case we do not collect the universal variable if it was assigned at
+             a larger decision level. This amount to checking if the literal was
+             reduced implicitly. */
+          if ((!implied_var || var->decision_level <= implied_var->decision_level) && 
+              (var->mode == QDPLL_VARMODE_LBRANCH || var->mode == QDPLL_VARMODE_RBRANCH))
+            QDPLL_PUSH_STACK(mm, qdpll->qpup_nodes, var);
+        }
+      else
+        qpup_mark_var_by_lit (var, lit);
+    }
+}
+
+/* Push unmarked variables from literal set 'lits_start,lits_end' onto stack 'qdpll->qpup_nodes'. */
+static void
+qpup_traverse_implication_graph_push_nodes (QDPLL * qdpll, LitID *lits_start, LitID *lits_end, 
+                                            Var *implied_var, const QDPLLQuantifierType type)
+{
+  assert (type == QDPLL_QTYPE_FORALL || type == QDPLL_QTYPE_EXISTS);
+  assert (lits_start || !lits_end);
+  assert (lits_start <= lits_end);
+  assert (!implied_var || QDPLL_VAR_ASSIGNED(implied_var));
+  assert (!implied_var || implied_var->scope->type == type);
+  assert (!implied_var || implied_var->mode == QDPLL_VARMODE_UNIT);
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "QPUP graph traversal: pushing unmarked nodes from set:\n ");
+      print_lits(qdpll, lits_start, lits_end - lits_start, 0);
+    }
+
+  LitID *p;
+  for (p = lits_start; p < lits_end; p++)
+    {
+      Var *var = LIT2VARPTR(qdpll->pcnf.vars, *p);
+      if (var != implied_var)
+        qpup_check_marks_and_collect (qdpll, *p, implied_var, type);
+    }
+}
+
+/* Select the variable from stack 'qdpll->qpup_nodes' which is largest on
+   trail, i.e. which has been propagated most recently. This variable is goint
+   to be visited next during the search for a suitable UIP node. After a UIP
+   has been found, this function is called to check the remaining nodes on
+   stack 'qdpll->qpup_nodes' whether any of them prevents constraint reduction
+   of relevant variables. */
+static Var *
+qpup_select_next_node (QDPLL *qdpll)
+{
+  unsigned int result_offset = UINT_MAX;
+  Var *result = 0;
+  Var **p, **e;
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "\nQPUP selecting next node from set (format (id,trailpos)): ");
+      for (p = qdpll->qpup_nodes.start, e = qdpll->qpup_nodes.top; p < e; p++)
+        {
+          Var *var = *p;
+          fprintf (stderr, "(%d,%d) ", var->id, var->trail_pos);
+        }
+      fprintf (stderr, "\n");
+    }
+
+  for (p = qdpll->qpup_nodes.start, e = qdpll->qpup_nodes.top; p < e; p++)
+    {
+      Var *var = *p;
+      if (!result || result->trail_pos < var->trail_pos)
+        {
+          result = var;
+          result_offset = p - qdpll->qpup_nodes.start;
+        }
+    }
+
+  if (result)
+    {
+      assert (result_offset < QDPLL_COUNT_STACK(qdpll->qpup_nodes));
+      assert (qdpll->qpup_nodes.start[result_offset] == result);
+      /* Remove 'result' from stack by replacing it with last element on
+         stack. */
+      Var *tmp = QDPLL_POP_STACK(qdpll->qpup_nodes);
+      qdpll->qpup_nodes.start[result_offset] = tmp;
+    }
+
+  return result;
+}
+
+/* Returns the *unique* variable, if any, on stack 'qdpll->qpup_nodes'
+   assigned at the maximum decision level of all nodes on that stack. If there is
+   no such unique variable, then null is returned. */
+static Var *
+qpup_find_unique_var_at_max_dec_level (QDPLL *qdpll)
+{
+  Var *var_at_max_dec_level = 0;
+  unsigned int cnt_at_max_dec_level = 0;
+
+  Var **p, **e;
+  for (p = qdpll->qpup_nodes.start, e = qdpll->qpup_nodes.top; p < e; p++)
+    {
+      Var *var = *p;
+      assert (var->decision_level != QDPLL_INVALID_DECISION_LEVEL);
+      if (!var_at_max_dec_level || var_at_max_dec_level->decision_level < var->decision_level)
+        {
+          /* Found new maximum decision level. */
+          var_at_max_dec_level = var;
+          cnt_at_max_dec_level = 1;
+        }
+      else if (var_at_max_dec_level->decision_level == var->decision_level)
+        cnt_at_max_dec_level++;
+    }
+
+  /* Explicitly handle decision level 0: if the maximum decision level is 0
+     then we want to continue anyway to derive the empty
+     constraint. This is relevant only if a trace is printed out. */
+  if (!var_at_max_dec_level || var_at_max_dec_level->decision_level == 0)
+    return 0;
+  else
+    {
+      assert (var_at_max_dec_level);
+      assert (var_at_max_dec_level->decision_level != QDPLL_INVALID_DECISION_LEVEL);
+      assert (cnt_at_max_dec_level > 0);
+      return cnt_at_max_dec_level == 1 ? var_at_max_dec_level : 0;
+    }
+}
+
+/* Check if there is a variable 'u' on stack 'qdpll->qpup_vars' where variable
+   'var' depends on. For example, this check is carried out on UIP
+   candidates. Since the variable related to the UIP is part of the learnt
+   constraint, we have to make sure that this variable does not block
+   reduction of literals which would produce a tautology. Additionally, the
+   variable of the UIP must be asserted after backtracking. In order to
+   produce asserting constraints, we have to make sure that the UIP variable
+   does not depend on variables of the other type which are assigned at equal
+   or larger decision level than the decision level of the UIP. Such variables
+   would be unassigned after backtracking and prevent the constraint from
+   being asserting. */
+static Var *
+qpup_check_dependency (QDPLL *qdpll, Var *var, const QDPLLQuantifierType type)
+{
+  assert (type == QDPLL_QTYPE_FORALL || type == QDPLL_QTYPE_EXISTS);
+  assert (var->scope->type == type);
+  QDPLLDepManGeneric *dm = qdpll->dm;
+
+  Var **p, **e;
+  for (p = qdpll->qpup_vars.start, e = qdpll->qpup_vars.top; p < e; p++)
+    {
+      Var *u = *p;
+      assert (qpup_is_var_neg_marked (u) || qpup_is_var_pos_marked (u));
+      assert (u->scope->type != type);
+
+      if (qpup_is_var_neg_marked (u) && qpup_is_var_pos_marked (u))
+        {
+          /* Positive and negative literals of variable 'u' were collected:
+             check whether 'u' would make learnt clause a tautology. A
+             tautology would be produced if 'var' prevents reduction of
+             'u'. If so, then 'var' has to be resolved out. */
+          if (dm->depends(dm, u->id, var->id))
+            return u;
+        }
+      else if (!qdpll->qpup_uip)
+        {
+          /* If 'qdpll->qpup_uip' is NULL then we haven't found the UIP and we
+             must check if the UIP candidate depends on a collected universal
+             variable which appeared in only one phase. If so then the candidate
+             is no UIP since the resulting clause would not be
+             asserting. Otherwise if 'qdpll->qpup_uip' is not NULL then this
+             function is called from function '...check_remaining_nodes...' on
+             open, unvisited nodes on stack 'qdpll->qpup_nodes'. No dependency
+             checking is required in this case since these nodes are all assigned
+             at smaller decision levels than the decision level of the UIP node,
+             since we traverse the graph in reverse trail ordering. Note that
+             tautology checking is handled in the if-branch above. This branch
+             affects only the criteria for producing asserting constraints. */
+
+          /* Either only positive or only negative literals of variable 'u'
+             were collected, i.e. literals of 'u' would not produce a
+             tautology; check whether 'u' would prevent learnt clause from
+             being asserting. */
+
+          if ((!(QDPLL_VAR_ASSIGNED(u) && u->decision_level < var->decision_level)) 
+              && dm->depends(dm, u->id, var->id))
+            return u;
+        }
+    }
+
+  return 0;
+}
+
+/* Returns zero if no proper UIP was found and a pointer to the UIP
+   otherwise. The stack 'qdpll->qpup_nodes' is inspected for that purpose. A
+   node is a suitable UIP if (1) it is the only node assigned at the highest
+   decision level among all nodes on the stack, (2) if it is assigned at an
+   existential/universal decision level during CDCL/SDCL and (3) if it does
+   not prevent the reduction of tautology-producing literals or literals which
+   prevent asserting learnt constraints. These three conditions are checked in
+   this function. If a suitable UIP was found, then the traversal in function
+   'find_relevant_uip' will stop. */
+static Var *
+qpup_find_and_check_uip_candidate(QDPLL *qdpll, const QDPLLQuantifierType type)
+{
+  /* Check whether the relevant 1-UIP node was found, which is similar
+     to the stop-criteria in classical CDCL. */
+  Var *uip_candidate = qpup_find_unique_var_at_max_dec_level (qdpll);
+  if (uip_candidate)
+    {
+      if (qdpll->options.verbosity >= 2)
+        fprintf (stderr, "QPUP UIP search: node %d is a UIP candidate.\n", 
+                 uip_candidate->id);
+          
+      /* At this point, variable 'unique_var_at_max_dec_level' is a
+         UIP candidate. */
+
+      /* Check if 'uip_candidate' is assigned at a decision level
+         where the decision variable is existential (universal) in CDCL (SDCL). */
+      assert (uip_candidate->decision_level >= 1);
+      assert (uip_candidate->mode == QDPLL_VARMODE_UNIT || 
+              uip_candidate->mode == QDPLL_VARMODE_LBRANCH || 
+              uip_candidate->mode == QDPLL_VARMODE_RBRANCH);
+      Var *decision_var =
+        VARID2VARPTR (qdpll->pcnf.vars,
+                      qdpll->dec_vars.start[uip_candidate->decision_level - 1]);
+      assert (decision_var->decision_level == uip_candidate->decision_level);
+      assert (decision_var->mode == QDPLL_VARMODE_LBRANCH
+              || decision_var->mode == QDPLL_VARMODE_RBRANCH);
+      if (decision_var->scope->type == type)
+        {
+          assert (uip_candidate->scope->type == type);
+
+          if (qdpll->options.verbosity >= 2)
+            fprintf (stderr, "QPUP UIP search: candidate %d passed level check.\n", 
+                     uip_candidate->id);
+
+          Var *depends_on;
+          if (!(depends_on = qpup_check_dependency (qdpll, uip_candidate, type)))
+            {
+              if (qdpll->options.verbosity >= 2)
+                fprintf (stderr, "QPUP UIP search: candidate %d passed dependency check, UIP found.\n", 
+                         uip_candidate->id);
+              /* Relevant UIP found, abort traversal. */
+              assert (!qdpll->qpup_uip);
+              qdpll->qpup_uip = uip_candidate;
+              return uip_candidate;
+            }
+          else
+            {
+              if (qdpll->options.verbosity >= 2)
+                fprintf (stderr, "QPUP UIP search: candidate %d depends on variable %d, continuing.\n", 
+                         uip_candidate->id, depends_on->id);
+              return 0;
+            }
+        }
+      else
+        {
+          if (qdpll->options.verbosity >= 2)
+            fprintf (stderr, "QPUP UIP search: candidate %d failed level check, continuing.\n", 
+                     uip_candidate->id);
+          return 0;
+        }
+    }
+  else
+    {
+      if (qdpll->options.verbosity >= 2)
+        fprintf (stderr, "QPUP UIP search: no suitable UIP candidate found, continuing.\n");
+      return 0;
+    }
+}
+
+static void
+qpup_find_relevant_uip (QDPLL *qdpll, const QDPLLQuantifierType type)
+{
+  assert (type == QDPLL_QTYPE_FORALL || type == QDPLL_QTYPE_EXISTS);
+
+  if (qdpll->options.verbosity >= 2)
+    fprintf (stderr, "QPUP: UIP search started.\n");
+
+  /* First phase: traverse implication graph and find the relevant UIP. The
+     relevant UIP is the variable which will be asserted after backtracking. */
+
+  Var *cur;
+  while (!qpup_find_and_check_uip_candidate(qdpll, type) && (cur = qpup_select_next_node (qdpll)))
+    {
+      assert (QDPLL_VAR_ASSIGNED(cur));
+      assert (cur->mode == QDPLL_VARMODE_LBRANCH || cur->mode == QDPLL_VARMODE_RBRANCH || 
+              cur->mode == QDPLL_VARMODE_UNIT);
+
+      if (qdpll->options.verbosity >= 2)
+        fprintf (stderr, "\nQPUP UIP search: cur node = %d, decision level %d, trail position %d\n", 
+                 cur->id, cur->decision_level, cur->trail_pos);
+
+      if (cur->mode == QDPLL_VARMODE_LBRANCH || cur->mode == QDPLL_VARMODE_RBRANCH)
+        {
+          /* Variable 'cur' was assigned as decision. */
+          if (qdpll->options.verbosity >= 2)
+            fprintf (stderr, "QPUP UIP search: cur node %d is a decision.\n", cur->id);
+        }
+      else
+        {
+          if (qdpll->options.verbosity >= 2)
+            fprintf (stderr, "QPUP UIP search: cur node %d is a unit, pushing predecessors.\n", cur->id);
+          assert (cur->mode == QDPLL_VARMODE_UNIT);
+          assert (cur->scope->type == type);
+          assert (cur->antecedent);
+          /* Collect literals of 'cur' antecedent, ignoring 'cur' itself. */
+          qpup_traverse_implication_graph_push_nodes (qdpll, 
+                                                      cur->antecedent->lits, 
+                                                      cur->antecedent->lits + cur->antecedent->num_lits, 
+                                                      cur, type);
+          /* Collect traversed units on separate stack. That is used later for
+             the actual production of QPUP clauses. */
+          QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_units, cur);
+        }
+    }
+
+  /* NOTE: if 'qdpll->qpup_uip' is NULL after the while-loop then the empty constraint will be
+     derived in the end. */
+  if (qdpll->options.verbosity >= 2)
+    {
+      if (!qdpll->qpup_uip)
+        fprintf (stderr, "QPUP UIP search: no proper UIP found; expecting derivation "\
+                 "of the empty constraint or asserting initial cube.\n");
+      fprintf (stderr, "QPUP: UIP search completed.\n");
+    }
+}
+
+static void
+qpup_collect_weak_predict_lits (QDPLL *qdpll, Var *var, LitID lit, const QDPLLQuantifierType type)
+{
+  assert (!qdpll->options.no_lazy_qpup);
+  assert (qdpll->qpup_uip);
+  assert (!lit || var == LIT2VARPTR(qdpll->pcnf.vars, lit));
+  if (!lit)
+    {
+      /* Workaround: need to figure out phase of literal to be collected in
+         certain cases. */
+      lit = var->id;
+      if (type == QDPLL_QTYPE_EXISTS)
+        {
+          if (var->assignment == QDPLL_ASSIGNMENT_TRUE)
+            lit = -lit;
+        }
+      else if (var->assignment == QDPLL_ASSIGNMENT_FALSE)
+        lit = -lit;
+    }
+
+  if (var->scope->type == type)
+    {
+      /* In CDCL (SDCL), 'var' is existential (universal). */
+      /* Here, no double pushing can occur. */
+      assert (!var->qpup_predict_mark);
+      var->qpup_predict_mark = 1;
+      QDPLL_PUSH_STACK(qdpll->mm, var->scope->cover_lits, lit);
+    }
+  else
+    {
+      /* In CDCL (SDCL), 'var' is universal (existential). */
+      /* Skip literals which would produce a tautology; they will not occur in
+         the learned constraint. */
+      if (qpup_is_var_pos_marked(var) && qpup_is_var_neg_marked(var))
+        return;
+      /* Skip literals where the UIP variable depends on AND which are (1)
+         either unassigned or (2) assigned at a larger or equal decision level
+         than the UIP variable. Such literals would become unassigned after
+         backtracking to the asserting level and thus the learned constraint
+         would not be asserting. Hence these literals cannot occur in the
+         learned clause. */
+      if ((!(QDPLL_VAR_ASSIGNED(var) && var->decision_level < qdpll->qpup_uip->decision_level)) 
+          && qdpll->dm->depends(qdpll->dm, var->id, qdpll->qpup_uip->id))
+        return;
+      /* Otherwise, collect literal if not already present. */
+      if (!var->qpup_predict_mark)
+        {
+          var->qpup_predict_mark = 1;
+          QDPLL_PUSH_STACK(qdpll->mm, var->scope->cover_lits, lit);
+        }
+    }
+}
+
+
+static void
+qpup_collect_weak_predict_lits_aux (QDPLL *qdpll, LitIDStack *empty_constraint_lits, 
+                                    const QDPLLQuantifierType type)
+{
+  assert (!qdpll->options.no_lazy_qpup);
+
+  if (!qdpll->qpup_uip)
+    return;
+
+  /* A predicted literal 'lit' will be pushed on the stack
+     'cover_lits' in its scope 'var(lit)->scope'. This way, we can
+     collect all predicted literals in sorted order already, no explicit
+     sorting is necessary. */
+
+  Var *vars = qdpll->pcnf.vars;
+
+  if (!QDPLL_EMPTY_STACK(qdpll->qpup_units))
+    {
+      Var **vp, **ve;
+      for (vp = qdpll->qpup_units.top - 1, ve = qdpll->qpup_units.start; ve <= vp; vp--)
+        {
+          Var *var = *vp;
+          assert (var->antecedent);
+          if (!qdpll->options.bump_vars_once)
+            learnt_constraint_mtf (qdpll, var->antecedent);
+          LitID *p, *e;
+          for (p = var->antecedent->lits, e = p + var->antecedent->num_lits; p < e; p++)
+            {
+              LitID lit = *p;
+              Var *v = LIT2VARPTR(vars, lit);
+              if (!qdpll->options.bump_vars_once)
+                increase_var_activity (qdpll, v);
+              qpup_unmark_var (v);
+              if (v->scope->type != type)
+                qpup_collect_weak_predict_lits (qdpll, v, lit, type);
+            }
+        }
+    }
+
+  LitID *p, *e;
+  for (p = empty_constraint_lits->start, e = empty_constraint_lits->top; p < e; p++)
+    {
+      LitID lit = *p;
+      Var *v = LIT2VARPTR(vars, lit);
+      if (!qdpll->options.bump_vars_once)
+        increase_var_activity (qdpll, v);
+      qpup_unmark_var (v);
+      if (v->scope->type != type)
+        qpup_collect_weak_predict_lits (qdpll, v, lit, type);
+    }
+
+  /* Push collected literals in order of scopes on stack
+     'qdpll->qpup_weak_predicted_lits'. */
+  Scope *s;
+  for (s = qdpll->pcnf.scopes.first; s; s = s->link.next)
+    {
+      LitID *p, *e;
+      for (p = s->cover_lits.start, e = s->cover_lits.top; p < e; p++)
+        {
+          LitID lit = *p;
+          Var *var = LIT2VARPTR(vars, lit);
+          assert (var->qpup_predict_mark);
+          var->qpup_predict_mark = 0;
+          QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_weak_predict_lits, lit);
+          if (!qdpll->options.bump_vars_once)
+            increase_var_activity (qdpll, var);
+        }
+      QDPLL_RESET_STACK(s->cover_lits);
+    }
+
+#ifndef NDEBUG
+  assert_lits_sorted (qdpll, qdpll->qpup_weak_predict_lits.start, 
+                      qdpll->qpup_weak_predict_lits.top);
+#endif
+}
+
+
+/* Print information about a literal which will definitely occur in
+   the learned clause. This function considers only existential
+   (universal) literals in CDCL (SDCL).*/
+static void
+qpup_print_info_kept_literals (QDPLL *qdpll, Var * var, const QDPLLQuantifierType type)
+{
+  const char *type_string = type == QDPLL_QTYPE_EXISTS ? 
+    "QPUP predict exist." : "QPUP predict univ.";
+  LitID lit = var->id;
+  if (type == QDPLL_QTYPE_EXISTS)
+    {
+      if (var->assignment == QDPLL_ASSIGNMENT_TRUE)
+        lit = -lit;
+    }
+  else if (var->assignment == QDPLL_ASSIGNMENT_FALSE)
+    lit = -lit;
+  fprintf (stderr, "%s lit. %d: DEFINITELY IN\n", type_string, lit);
+  /* Here, no double pushing can occur. */
+  QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_kept_lits, lit);
+}
+
+
+/* After the UIP has been found, check whether there are nodes on stack
+   'qdpll->qpup_nodes' which would prevent the production of an asserting
+   constraint or which would prevent the reduction of literals yielding
+   tautologies. */
+static void
+qpup_check_remaining_nodes (QDPLL *qdpll, const QDPLLQuantifierType type)
+{
+  assert (type == QDPLL_QTYPE_FORALL || type == QDPLL_QTYPE_EXISTS);
+
+  if (qdpll->options.verbosity >= 2)
+    fprintf (stderr, "\nQPUP: node checking started on %u remaining nodes.\n", 
+             (unsigned int)QDPLL_COUNT_STACK(qdpll->qpup_nodes));
+
+  /* Second phase: check remaining nodes on stack. */
+
+  Var *cur;
+  while ((cur = qpup_select_next_node (qdpll)))
+    {
+      assert (qdpll->qpup_uip);
+      if (qdpll->options.verbosity >= 2)
+        fprintf (stderr, "QPUP node checking: cur node = %d, decision level %d, trail position %d\n", 
+                 cur->id, cur->decision_level, cur->trail_pos);
+
+      /* Ignore found UIP. */
+      if (cur == qdpll->qpup_uip)
+        {
+          if (qdpll->options.verbosity >= 2)
+            {
+              fprintf (stderr, "QPUP node checking: cur node is found UIP, skip.\n");
+              qpup_print_info_kept_literals (qdpll, cur, type);
+            }
+          if (!qdpll->options.no_lazy_qpup)
+            qpup_collect_weak_predict_lits (qdpll, cur, 0, type);
+          continue;
+        }
+
+      assert (QDPLL_VAR_ASSIGNED(cur));
+      assert (QDPLL_VAR_ASSIGNED(qdpll->qpup_uip));
+      assert (cur->decision_level < qdpll->qpup_uip->decision_level);
+
+      if (cur->mode == QDPLL_VARMODE_LBRANCH || cur->mode == QDPLL_VARMODE_RBRANCH)
+        {
+          /* Variable 'cur' was assigned as decision. */
+          if (qdpll->options.verbosity >= 2)
+            {
+              fprintf (stderr, "QPUP node checking: cur node %d is a decision.\n", cur->id);
+              qpup_print_info_kept_literals (qdpll, cur, type);
+            }
+          if (!qdpll->options.no_lazy_qpup)
+            qpup_collect_weak_predict_lits (qdpll, cur, 0, type);
+        }
+      else
+        {
+          assert (cur->mode == QDPLL_VARMODE_UNIT);
+          assert (cur->scope->type == type);
+
+          Var *depends_on;
+          if (!(depends_on = qpup_check_dependency (qdpll, cur, type)))
+            {
+              /* Variable 'cur' was assigned as unit but does not prevent constraint reduction. */
+              if (qdpll->options.verbosity >= 2)
+                {
+                  fprintf (stderr, "QPUP node checking: cur node %d does not prevent reduction.\n", cur->id);
+                  qpup_print_info_kept_literals (qdpll, cur, type);
+                }
+              if (!qdpll->options.no_lazy_qpup)
+                qpup_collect_weak_predict_lits (qdpll, cur, 0, type);
+            }
+          else
+            {
+              if (qdpll->options.verbosity >= 2 && depends_on)
+                fprintf (stderr, "QPUP node checking: cur node %d prevents reduction of %d, pushing predecessors.\n", 
+                         cur->id, depends_on->id);
+
+              /* There is a universal vars on stack 'qdpll->qpup_vars'
+                 where 'cur' depends on. That is, 'cur' would prevent
+                 universal reduction of that variable during QPUP. Continue
+                 traversal until literals which block universal reduction are
+                 resolved out. Collect literals like in first phase. See also 
+                 function 'qpup_check_dependency(...)' for additional comments. */
+              assert (cur->antecedent);
+              qpup_traverse_implication_graph_push_nodes (qdpll, 
+                                                          cur->antecedent->lits, 
+                                                          cur->antecedent->lits + cur->antecedent->num_lits, 
+                                                          cur, type);
+              /* Collect traversed units on separate stack. That is used later for
+                 the actual production of QPUP clauses. */
+              QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_units, cur);
+            }
+        }
+    }
+
+  if (qdpll->options.verbosity >= 2)
+    fprintf (stderr, "QPUP: node checking completed.\n");
+}
+
+
+/* Called from function 'qpup_print_info_literals_aux(...)'. */
+static void
+qpup_print_info_literals (QDPLL *qdpll, LitID lit, LitID *ante_lits_start, 
+                          LitID *ante_lits_end, const QDPLLQuantifierType type)
+{
+  assert (qdpll->options.verbosity >= 2);
+  assert (ante_lits_start <= ante_lits_end);
+  assert (qdpll->qpup_uip);
+  assert (QDPLL_VAR_ASSIGNED(qdpll->qpup_uip));
+  Var *var = LIT2VARPTR(qdpll->pcnf.vars, lit);
+  const char *type_string = type == QDPLL_QTYPE_EXISTS ? "QPUP predict univ." : "QPUP predict exist.";
+
+  /* This function ignores existential (universal) literals in CDCL (SDCL). */
+  if ((type == QDPLL_QTYPE_EXISTS && !QDPLL_VAR_FORALL(var)) || 
+      (type == QDPLL_QTYPE_FORALL && !QDPLL_VAR_EXISTS(var)))
+    return;
+
+  /* A universal literal will DEFINITELY NOT occur in the learned
+     clause if it would produce a tautology (i.e. its variable has
+     complementary marks set) or if the UIP variable depends on it and
+     the universal variable would become unassigned after
+     backtracking. */
+  if (qpup_is_var_pos_marked(var) && qpup_is_var_neg_marked(var))
+    {
+      /* The literal's variable would produce a tautology. */
+      fprintf (stderr, " %s lit. %d compl. occs: DEFINITELY OUT\n", type_string, lit);
+    }
+  else
+    {
+      /* Check if there is a literal in the antecedent which definitely
+         prevents reduction of 'var'. */
+      LitID *p, *e;
+      for (p = ante_lits_start, e = ante_lits_end; p < e; p++)
+        {
+          Var *v = LIT2VARPTR(qdpll->pcnf.vars, *p);
+          if (v->scope->type != var->scope->type && qdpll->dm->depends (qdpll->dm, var->id, v->id))
+            {
+              /* Variable 'v' in the antecedent would prevent reduction of
+                 'var'. Check if 'v' was collected on stack 'qpup_kept_lits' as
+                 'DEFINITELY IN' the learned clause. In this case, both variables 
+                 'var' and 'v' will be carried over during QPUP computations to
+                 the final learned constraint. */
+              LitID *p1, *e1;
+              for (p1 = qdpll->qpup_kept_lits.start, e1 = qdpll->qpup_kept_lits.top; p1 < e1; p1++)
+                {
+                  Var *v1 = LIT2VARPTR(qdpll->pcnf.vars, *p1);
+                  if (v == v1)
+                    break;
+                }
+              if (p1 < e1)
+                {
+                  fprintf (stderr, " %s lit. %d < %d: DEFINITELY IN\n", type_string, lit, *p1);
+                  break;
+                }
+            }
+        }
+      /* Variables labelled as 'MAYBE IN' may or may not occur in the learned
+         clause: we were not able to make a definite decision at this point based
+         on local information in the antecedent only. However, it should never be
+         the case that the learned clause contains a universal which was neither
+         labelled 'DEFINITELY IN' nor 'MAYBE IN'. */
+      if (p == e)
+        fprintf (stderr, " %s lit. %d: MAYBE IN\n", type_string, lit);
+    }
+}
+
+
+/* Check antecedent constraints and empty constraint for literals which
+   definitely (not) occur or may occur in the learned constraint. */
+static void
+qpup_print_info_literals_aux (QDPLL *qdpll, LitIDStack *empty_constraint_lits, const QDPLLQuantifierType type)
+{
+  if (!qdpll->qpup_uip)
+    return;
+  assert (qdpll->options.verbosity >= 2);
+
+  fprintf (stderr, "\nQPUP predicting %s literals:\n", 
+           type == QDPLL_QTYPE_EXISTS ? "universal" : "existential");
+
+  if (!QDPLL_EMPTY_STACK(qdpll->qpup_units))
+    {
+      Var **vp, **ve;
+      for (vp = qdpll->qpup_units.top - 1, ve = qdpll->qpup_units.start; ve <= vp; vp--)
+        {
+          Var *var = *vp;
+          assert (var->antecedent);
+          LitID *p, *e;
+          for (p = var->antecedent->lits, e = p + var->antecedent->num_lits; p < e; p++)
+            {
+              LitID lit = *p;
+              Var *v = LIT2VARPTR(qdpll->pcnf.vars, lit);
+              qpup_print_info_literals (qdpll, lit, var->antecedent->lits, 
+                                        var->antecedent->lits + var->antecedent->num_lits, type);
+            }
+        }
+    }
+
+  LitID *p, *e;
+  for (p = empty_constraint_lits->start, e = empty_constraint_lits->top; p < e; p++)
+    {
+      LitID lit = *p;
+      Var *v = LIT2VARPTR(qdpll->pcnf.vars, lit);
+      qpup_print_info_literals (qdpll, lit, empty_constraint_lits->start, 
+                                empty_constraint_lits->top, type);
+    }
+
+  fprintf (stderr, "QPUP predicting %s literals completed.\n", 
+           type == QDPLL_QTYPE_EXISTS ? "universal" : "existential");
+}
+
+/* Traverse the implication graph backwards starting from the empty clause. In
+   CDCL, existential units and decisions are nodes to be visited. */
+static void
+qpup_traverse_implication_graph (QDPLL *qdpll, LitIDStack *constraint_lits, 
+                                 const QDPLLQuantifierType type)
+{
+  assert (type == QDPLL_QTYPE_FORALL || type == QDPLL_QTYPE_EXISTS);
+  /* Initialize search: collect nodes to be visited from empty constraint. */
+  qpup_traverse_implication_graph_push_nodes (qdpll, constraint_lits->start, 
+                                              constraint_lits->top, 0, type);
+  /* Find the relevant UIP. */
+  qpup_find_relevant_uip (qdpll, type);
+  /* Check unvisited nodes on the stack which would prevent
+     universal reduction during QPUP computation. */
+  qpup_check_remaining_nodes (qdpll, type);
+
+  if (qdpll->options.verbosity >= 2)
+    qpup_print_info_literals_aux (qdpll, constraint_lits, type);
+}
+
+/* For assertion checking only; Returns non-zero iff literal 'lit' is
+   contained in the array of literals bounded by 'start' and 'end'. */
+static int 
+qpup_res_find_lit (LitID *start, LitID *end, LitID lit)
+{
+  assert (start <= end);
+
+  LitID *p;
+  for (p = start; p < end; p++)
+    if (*p == lit)
+      return 1;
+
+  return 0;
+}
+
+/* For assertion checking only: returns non-zero if the literal set contains
+   duplicate literals. */
+static int
+qpup_has_duplicate_lits (LitID *start, LitID *end)
+{
+  assert (start <= end);
+
+  LitID *p;
+  for (p = start; p < end; p++)
+    {
+      LitID lit = *p;
+      if (qpup_res_find_lit (p + 1, end, lit))
+        return 1;
+    }
+
+  return 0;
+}
+
+
+/* For assertion checking only: returns non-zero if the literal set is
+   a tautology. */
+static int
+qpup_is_tautology (LitID *start, LitID *end)
+{
+  assert (start <= end);
+
+  LitID *p;
+  for (p = start; p < end; p++)
+    {
+      LitID lit = *p;
+      if (qpup_res_find_lit (start, end, -lit))
+        return 1;
+    }
+
+  return 0;
+}
+
+
+static void
+qpup_res_reduce_by_depschemes_aux (QDPLL *qdpll, LitID lit, const QDPLLQuantifierType type)
+{
+  Var *vars = qdpll->pcnf.vars;
+  Var *var = LIT2VARPTR(vars, lit);
+  const QDPLLQuantifierType var_type = var->scope->type;
+  QDPLLMemMan *mm = qdpll->mm;
+
+  assert (!LEARN_VAR_MARKED (var));
+  if (QDPLL_LIT_NEG (lit))
+    LEARN_VAR_NEG_MARK (var);
+  else
+    LEARN_VAR_POS_MARK (var);
+
+  assert (qdpll->state.decision_level != 0 || var->decision_level == 0 ||
+          var->decision_level == QDPLL_INVALID_DECISION_LEVEL);
+  assert (LEARN_VAR_MARKED (var));
+  assert (QDPLL_LIT_POS (lit) || LEARN_VAR_NEG_MARKED (var));
+  assert (QDPLL_LIT_NEG (lit) || LEARN_VAR_POS_MARKED (var));
+  assert (!(LEARN_VAR_POS_MARKED (var) && LEARN_VAR_NEG_MARKED (var)));
+
+  if (var_type == QDPLL_QTYPE_FORALL)
+    {
+      Var *rep = VARID2VARPTR (vars,  
+                               qdpll->dm->get_class_rep (qdpll->dm,
+                                                         var->id, 0));
+      if (!QDPLL_VAR_POS_MARKED (rep))
+        {
+          QDPLL_VAR_POS_MARK (rep);
+          assert (QDPLL_COUNT_STACK (rep->type_red_member_lits) == 0);
+          QDPLL_PUSH_STACK (mm, qdpll->wreason_a, rep);
+        }
+      /* Collect class members. */
+      QDPLL_PUSH_STACK (mm, rep->type_red_member_lits, lit);
+    }
+  else
+    {
+      /* NOTE: here 'type == EXISTS' means that we do CDCL and
+         hence must forall-reduce clauses, and 'type == FORALL'
+         indicates SDCL and exists-reducing cubes. */
+      Var *rep = type == QDPLL_QTYPE_FORALL ? 
+        VARID2VARPTR (vars, qdpll->dm->get_class_rep (qdpll->dm, var->id, 1)) :
+        VARID2VARPTR (vars, qdpll->dm->get_class_rep (qdpll->dm, var->id, 0));
+      if (!QDPLL_VAR_POS_MARKED (rep))
+        {
+          QDPLL_VAR_POS_MARK (rep);
+          assert (QDPLL_COUNT_STACK (rep->type_red_member_lits) == 0);
+          QDPLL_PUSH_STACK (mm, qdpll->wreason_e, rep);
+        }
+      /* Collect class members. */
+      QDPLL_PUSH_STACK (mm, rep->type_red_member_lits, lit);
+    }
+}
+
+
+static void
+qpup_res_reduce_by_depschemes (QDPLL *qdpll, LitIDStack *stack, 
+                               const QDPLLQuantifierType type)
+{
+  assert (QDPLL_EMPTY_STACK (qdpll->wreason_a));
+  assert (QDPLL_EMPTY_STACK (qdpll->wreason_e));
+
+  LitIDStack tmp;
+  QDPLL_INIT_STACK(tmp);
+  LitIDStack *tmp_p = &tmp;
+
+  /* Collect data to be used in function 'typ_reduce'. */
+  LitID *p, *e;
+  for (p = stack->start, e = stack->top; p < e; p++)
+    qpup_res_reduce_by_depschemes_aux (qdpll, *p, type);
+
+  qdpll->dm->reduce_lits (qdpll->dm, &stack, &tmp_p, type, 1);
+
+  for (p = stack->start, e = stack->top; p < e; p++)
+    LEARN_VAR_UNMARK (LIT2VARPTR(qdpll->pcnf.vars, *p));
+
+  QDPLL_DELETE_STACK(qdpll->mm, *tmp_p);
+
+  *tmp_p = *stack;
+}
+
+
+/* Constraint reduction. */
+static void
+qpup_res_reduce (QDPLL *qdpll, LitIDStack *stack, const ConstraintID trace_id, 
+                 const QDPLLQuantifierType type)
+{
+#ifndef NDEBUG
+  assert_lits_sorted (qdpll, stack->start, stack->top);
+  do{
+    Var *p, *e;
+    for (p = qdpll->pcnf.vars, e = p + qdpll->pcnf.size_vars; p < e; p++)
+      {
+        assert (!LEARN_VAR_MARKED(p));
+        assert (!QDPLL_VAR_MARKED(p));
+      }
+  } while(0);
+#endif
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, " QPUP res-reduce: sorted constraint: ");
+      print_lits (qdpll, stack->start, QDPLL_COUNT_STACK(*stack), 0);
+    }
+
+  unsigned int num_lits_before_red = QDPLL_COUNT_STACK(*stack);
+
+  /* Cut off trailing literals of universal/existential variables, which
+     corresponds to reductions by the trivial dependency scheme. This is always
+     possible to the hierarchy of dependency schemes induced by subset relationship. */
+  while (QDPLL_COUNT_STACK(*stack))
+    {
+      Var *v = LIT2VARPTR(qdpll->pcnf.vars, *(stack->top - 1));
+      if (v->scope->type != type)
+        {
+          QDPLL_POP_STACK(*stack);
+          assert (!LEARN_VAR_MARKED (v));
+          qpup_res_unmark_var(v);
+        }
+      else 
+        break;
+    }
+
+  /* Additionally, perform dependency scheme specific reductions. */
+  if (!qdpll->options.depman_simple)
+    qpup_res_reduce_by_depschemes (qdpll, stack, type);
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, " QPUP res-reduce: reduced constraint: ");
+      print_lits (qdpll, stack->start, QDPLL_COUNT_STACK(*stack), 0);
+    }
+
+  if (qdpll->options.trace)
+    {
+      if (QDPLL_COUNT_STACK(*stack) < num_lits_before_red)
+        {
+          /* Trace reduced constraint. */
+          qdpll->cur_constraint_id++;
+          qdpll->trace_constraint (qdpll->cur_constraint_id, stack->start,
+                                   QDPLL_COUNT_STACK (*stack), trace_id, 0);
+        }
+      else
+        assert (QDPLL_COUNT_STACK(*stack) == num_lits_before_red);
+    }
+
+#if COMPUTE_STATS
+  qdpll->stats.total_type_reduce_lits += 
+    (num_lits_before_red - QDPLL_COUNT_STACK(*stack));
+#endif
+}
+
+/* Parameter 'check_marks == false' if we collect a marked literal
+   which is part of the working reason already. Only push the literal on
+   the stack. Otherwise, a potentially unseen literal is marked and collected. */
+static void
+qpup_res_merge_lits_aux (QDPLL *qdpll, QDPLLMemMan *mm, Var *vars, LitIDStack *stack, 
+                         LitID lit, Var *pivot, const int check_marks)
+{
+  Var *v = LIT2VARPTR(vars, lit);
+  assert (!(qpup_res_is_var_pos_marked(v) && qpup_res_is_var_neg_marked(v)));
+  /* Ignore literal of pivot variable. */
+  if (v != pivot)
+    {
+      /* Additional safeguard: must not add complementary literals. */
+      QDPLL_ABORT_QDPLL ((QDPLL_LIT_NEG(lit) && qpup_res_is_var_pos_marked(v)) || 
+                         (QDPLL_LIT_POS(lit) && qpup_res_is_var_neg_marked(v)), 
+                         "fatal error: generated tautology!");
+      if (check_marks)
+        {
+          if (!qpup_res_is_var_marked(v))
+            {
+              qpup_res_mark_var_by_lit (v, lit);
+              QDPLL_PUSH_STACK(mm, *stack, lit);
+              if (!qdpll->options.bump_vars_once)
+                increase_var_activity (qdpll, v);
+            }
+        }
+      else
+        {
+          assert (qpup_res_is_var_marked(v));
+          QDPLL_PUSH_STACK(mm, *stack, lit);
+        }
+    }
+  else
+    qpup_res_unmark_var(v);
+}
+
+/* Perform one step of Q-resolution without reduction. Reduction is done by
+   function 'qpup_res_reduce(...)'. Assumption: literals in 'start1,end1' are
+   already marked and will be collected without mark testing. Literals from
+   'start2,end2' are pushed onto the stack only if not marked already. This
+   way, it is possible to keep variables marked across different calls of this
+   function. After the final resolvent has been produced, variables are
+   unmarked. */
+static void
+qpup_res_merge_literals (QDPLL *qdpll, Var *pivot, LitIDStack *resolvent_lits, 
+                         LitID *start1, LitID *end1, Constraint *antecedent2, 
+                         const QDPLLQuantifierType type)
+{
+#if COMPUTE_STATS
+  if (type == QDPLL_QTYPE_EXISTS)
+    qdpll->stats.num_unsat_res_steps++;
+  else
+    qdpll->stats.num_sat_res_steps++;
+#endif
+
+  LitID *start2 = antecedent2->lits;
+  LitID *end2 = start2 + antecedent2->num_lits;
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "  QPUP merge-literals: pivot %d\n", pivot->id);
+      fprintf (stderr, "   side constraint 1: ");
+      print_lits(qdpll, start1, end1 - start1, 0);
+      fprintf (stderr, "   side constraint 2: ");
+      print_lits(qdpll, start2, end2 - start2, 0);
+    }
+
+  assert (start1 < end1);
+  assert (start2 < end2);
+#ifndef NDEBUG
+  assert_lits_sorted (qdpll, start1, end1);
+  assert_lits_sorted (qdpll, start2, end2);
+#endif
+  QDPLLMemMan *mm = qdpll->mm;
+  Var *vars = qdpll->pcnf.vars;
+  LitIDStack tmp;
+  QDPLL_INIT_STACK(tmp);
+
+  LitID *p1 = start1;
+  LitID *p2 = start2;
+
+  while (1)
+    {
+      assert (p1 < end1);
+      assert (p2 < end2);
+      LitID lit1 = *p1;
+      LitID lit2 = *p2;
+      int compared = compare_lits_by_variable_nesting (qdpll, type == QDPLL_QTYPE_FORALL, lit1, lit2);
+      if (compared < 0)
+        {
+          qpup_res_merge_lits_aux (qdpll, mm, vars, &tmp, lit1, pivot, 0);
+          p1++;
+          if (p1 == end1)
+            break;
+        }
+      else if (compared > 0)
+        {
+          qpup_res_merge_lits_aux (qdpll, mm, vars, &tmp, lit2, pivot, 1);
+          p2++;
+          if (p2 == end2)
+            break;
+        }
+      else
+        {
+          /* Special case: poth pointers point at literal of same
+             variable. Collect one literal, increase both pointers. */
+          assert (compared == 0);
+          assert (LIT2VARID(lit1) == LIT2VARID(lit2));
+          /* Additional safeguard: must avoid tautology. */
+          QDPLL_ABORT_QDPLL((lit1 == -lit2 && (VarID)LIT2VARID(lit1) != pivot->id), 
+                            "fatal error: generated tautology!");
+          /* Ignore literal of pivot variable. */
+          qpup_res_merge_lits_aux (qdpll, mm, vars, &tmp, lit1, pivot, 0);
+          p1++;
+          p2++;
+          if (p1 == end1 || p2 == end2)
+            break;
+        }
+    }
+  assert (p1 == end1 || p2 == end2);
+
+  for (; p1 < end1; p1++)
+    {
+      LitID lit = *p1;
+      qpup_res_merge_lits_aux (qdpll, mm, vars, &tmp, lit, pivot, 0);
+    }
+
+  for (; p2 < end2; p2++)
+    {
+      LitID lit = *p2;
+      qpup_res_merge_lits_aux (qdpll, mm, vars, &tmp, lit, pivot, 1);
+    }
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "  QPUP merge-literals resolvent on %d: ", pivot->id);
+      print_lits(qdpll, tmp.start, tmp.top - tmp.start, 0);
+    }
+
+#ifndef NDEBUG
+  assert (!qpup_is_tautology(tmp.start, tmp.top));
+  assert (!qpup_has_duplicate_lits(tmp.start, tmp.top));
+  assert_lits_sorted (qdpll, tmp.start, tmp.top);
+#endif
+
+  /* Swap literal stacks: 'tmp' currently stores the literals of the
+     resolvent; copy to stack 'resolvent_lits'. */
+  LitIDStack swap = tmp;
+  tmp = *resolvent_lits;
+  *resolvent_lits = swap;
+
+  QDPLL_DELETE_STACK(mm, tmp);
+}
+
+
+/* Compute the QPUP constraint for variable 'pivot' and store its literals in
+   'resolvent_lits'. If 'pivot' is NULL then QPUP is computed for the empty
+   constraint. Successively resolve the original antecedent with the
+   previously computed QPUP constraints of unit literals. */
+static ConstraintID
+qpup_compute (QDPLL *qdpll, Var *pivot, LitIDStack *resolvent_lits, 
+              LitID *orig_ante_lits_start, LitID *orig_ante_lits_end, 
+              const ConstraintID trace_id, const QDPLLQuantifierType type)
+{
+  assert (orig_ante_lits_start <= orig_ante_lits_end);
+  assert (QDPLL_EMPTY_STACK(*resolvent_lits));
+
+  ConstraintID ante_trace_id = trace_id;
+  LitID *lp, *le;
+
+  /* Collect and mark literals of original antecedent on stack 'resolvent_lits'. */
+  for (lp = orig_ante_lits_start, le = orig_ante_lits_end; lp < le; lp++)
+    {
+      LitID lit = *lp;
+      Var *v = LIT2VARPTR(qdpll->pcnf.vars, lit);
+      assert (!qpup_res_is_var_marked (v));
+      qpup_res_mark_var_by_lit(v, lit);
+      QDPLL_PUSH_STACK(qdpll->mm, *resolvent_lits, lit);
+      if (!qdpll->options.bump_vars_once)
+        increase_var_activity (qdpll, v);
+    }
+
+  /* Resolve the current resolvent given by stack 'resolvent_lits'
+     with precomputed qpup constraints. */
+  for (lp = orig_ante_lits_start, le = orig_ante_lits_end; lp < le; lp++)
+    {
+      Var *v = LIT2VARPTR(qdpll->pcnf.vars, *lp);
+      /* On-the-fly clearing pos/neg-marks of variables visited during
+         implication graph traversal. Might unmark variable multiple times. */
+      qpup_unmark_var (v);
+      assert (!v->qpup_constraint || 
+              (v != pivot && v->scope->type == type && v->mode == QDPLL_VARMODE_UNIT));
+
+      if (v->qpup_constraint)
+        {
+          if (qdpll->options.verbosity >= 2)
+            {
+              fprintf (stderr, " QPUP compute: resolving on %d, using qpup(%d) with constr_id=%d: ", 
+                       v->id, v->id, v->qpup_constraint->id);
+              print_constraint (qdpll, v->qpup_constraint);
+            }
+
+          /* Resolve on 'v': collect literals from 'v->qpup_constraint',
+             which must have been computed already since nodes are processed
+             in propagation order (i.e. in trail order). */
+
+          qpup_res_merge_literals (qdpll, v, resolvent_lits, 
+                                   resolvent_lits->start, resolvent_lits->top, 
+                                   v->qpup_constraint, type);
+
+          if (qdpll->options.trace)
+            {
+              qdpll->cur_constraint_id++;
+              qdpll->trace_constraint (qdpll->cur_constraint_id, resolvent_lits->start,
+                                       QDPLL_COUNT_STACK (*resolvent_lits), ante_trace_id,
+                                       v->qpup_constraint->id);
+              ante_trace_id = qdpll->cur_constraint_id;
+            }
+        }
+    }
+
+  /* Unmark variables on stack 'resolvent_lits'. */
+  for (lp = resolvent_lits->start, le = resolvent_lits->top; lp < le; lp++)
+    {
+      Var *v = LIT2VARPTR(qdpll->pcnf.vars, *lp);
+      assert (qpup_res_is_var_marked(v));
+      assert (!(qpup_res_is_var_pos_marked(v) && qpup_res_is_var_neg_marked(v)));
+      qpup_res_unmark_var(v);
+    }
+
+  if (qdpll->options.trace)
+    {
+      /* Print dummy step if no resolution step occurred. This overhead can be
+         avoided if no explicit QPUP constraints are allocated but original
+         antecedents are re-used if possible. */
+      if (ante_trace_id == trace_id)
+        {
+          qdpll->cur_constraint_id++;
+          qdpll->trace_constraint (qdpll->cur_constraint_id, resolvent_lits->start,
+                                   QDPLL_COUNT_STACK (*resolvent_lits), ante_trace_id,
+                                   0);
+          ante_trace_id = qdpll->cur_constraint_id;
+        }
+    }
+
+  return ante_trace_id;
+}
+
+/* Produce the QPUP constraint for variable 'pivot'. The literals of the
+   resulting constraint are stored on stack 'resolvent_lits'. Literals of the
+   original antecedent constraint of 'pivot' are given by
+   'orig_ante_lits_start,orig_ante_lits_end'. */
+static void
+qpup_resolve_and_reduce (QDPLL *qdpll, Var *pivot, LitIDStack *resolvent_lits, 
+                         LitID *orig_ante_lits_start, LitID *orig_ante_lits_end, 
+                         const ConstraintID trace_id, const QDPLLQuantifierType type)
+{
+  assert (!qdpll->options.trace || trace_id);
+  /* For tracing only: 'qpup_constr_id' is the ID of the final constraint produced by 'qpup_compute'. */
+  ConstraintID qpup_constr_id = qpup_compute (qdpll, pivot, resolvent_lits, 
+                                              orig_ante_lits_start, orig_ante_lits_end, trace_id, type);
+  
+  /* Universal reduction on collected literals to get final resolvent. */
+  qpup_res_reduce (qdpll, resolvent_lits, qpup_constr_id, type);
+}
+
+/* Compute QPUP constraints for visited nodes until finally the learnt
+   constraint is obtained. The parameter 'empty_constraint_lits' is a stack of
+   literals of the conflicting clause/initial cube. The QPUP constraint of the
+   conflicting clause/initial cube will be learnt. */
+static Constraint *
+qpup_do_forward_resolutions (QDPLL *qdpll, LitIDStack *empty_constraint_lits, const QDPLLQuantifierType type)
+{
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_nodes));
+
+  if (qdpll->options.verbosity >= 2)
+    fprintf (stderr, "\nQPUP: forward resolutions started.\n");
+
+  /* Consider visited nodes (i.e. variables which were assigned as units) in
+     propagation order. Since variables on stack 'qdpll->qpup_units' were
+     pushed in reverse propagation order, we go from top to bottom in that
+     stack to get the desired ordering. */
+
+  /* Auxiliary stack holding literals during construction of QPUP constraint. */
+  LitIDStack qpup_constraint_lits;
+  QDPLL_INIT_STACK(qpup_constraint_lits);
+
+  /* Explicit emptyness check required for SDCL: might start from the empty
+     initial cube. In this case, no resolutions are carried out. This case cannot
+     happen in CDCL. */
+  if (!QDPLL_EMPTY_STACK(qdpll->qpup_units))
+    {
+      Var **p, **e;
+      for (p = qdpll->qpup_units.top - 1, e = qdpll->qpup_units.start; e <= p; p--)
+        {
+          Var *unit = *p;
+          assert (unit->mode == QDPLL_VARMODE_UNIT);
+          assert (unit->scope->type == type);
+          assert (unit->antecedent);
+          assert (QDPLL_EMPTY_STACK(qpup_constraint_lits));
+
+          /* Compute the QPUP constraint for variable 'unit': check the
+             original constraint 'unit->antecedent' which caused 'unit' to be
+             assigned as unit literal; resolve over all variables which were
+             unit, using the previously computed QPUP constraints of that
+             variables. This is possible since we process variables in
+             propagation order. */
+
+          if (qdpll->options.verbosity >= 2)
+            {
+              fprintf (stderr, "\nQPUP compute: generating qpup(%d), original antecedent (constr_id=%d): ", 
+                       unit->id, unit->antecedent->id);
+              print_lits (qdpll, unit->antecedent->lits, unit->antecedent->num_lits, 0);
+            }
+
+          if (!qdpll->options.bump_vars_once)
+            learnt_constraint_mtf (qdpll, unit->antecedent);
+
+          qpup_resolve_and_reduce (qdpll, unit, &qpup_constraint_lits, 
+                                   unit->antecedent->lits, unit->antecedent->lits + unit->antecedent->num_lits, 
+                                   unit->antecedent->id, type);
+
+          if (qdpll->options.verbosity >= 2)
+            {
+              fprintf (stderr, "QPUP compute: completed qpup(%d), constr_id=%d, reduced result: ", 
+                       unit->id, qdpll->cur_constraint_id);
+              print_lits (qdpll, qpup_constraint_lits.start, QDPLL_COUNT_STACK(qpup_constraint_lits), 0);
+            }
+
+          /* ID of constraint to be constructed was printed already. Must decrease ID-field 
+             in struct QDPLL by one since it is incremented again in function 'create_constraint'.  */
+          if (qdpll->options.trace)
+            {
+              assert (qdpll->cur_constraint_id > 0);
+              qdpll->cur_constraint_id--;
+            }
+
+          /* Allocate QPUP constraint of variable 'unit' and copy literals. */
+          assert (!unit->qpup_constraint);
+          unit->qpup_constraint = create_constraint (qdpll, QDPLL_COUNT_STACK(qpup_constraint_lits), 
+                                                     type == QDPLL_QTYPE_FORALL);
+          memcpy (unit->qpup_constraint->lits, qpup_constraint_lits.start, 
+                  QDPLL_COUNT_STACK(qpup_constraint_lits) * sizeof (LitID));
+
+          QDPLL_RESET_STACK(qpup_constraint_lits);
+          /* Completed QPUP computation for variable 'unit'. */
+        }
+    }
+
+  /* Finally, compute the QPUP constraint for the empty constraint. */
+  assert (QDPLL_EMPTY_STACK(qpup_constraint_lits));
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "\nQPUP compute: generating qpup(0) on empty constraint (constr_id=%d): ", 
+               qdpll->res_cons_id);
+      print_lits (qdpll, empty_constraint_lits->start, QDPLL_COUNT_STACK(*empty_constraint_lits), 0);
+    }
+
+  qpup_resolve_and_reduce (qdpll, 0, &qpup_constraint_lits, empty_constraint_lits->start, 
+                           empty_constraint_lits->top, qdpll->res_cons_id, type);
+
+  if (qdpll->options.trace)
+    {
+      assert (qdpll->cur_constraint_id > 0);
+      qdpll->cur_constraint_id--;
+    }
+
+  Constraint *qpup_learnt_constraint = create_constraint (qdpll, QDPLL_COUNT_STACK(qpup_constraint_lits), 
+                                                          type == QDPLL_QTYPE_FORALL);
+  memcpy (qpup_learnt_constraint->lits, qpup_constraint_lits.start, 
+          QDPLL_COUNT_STACK(qpup_constraint_lits) * sizeof (LitID));
+
+  QDPLL_DELETE_STACK(qdpll->mm, qpup_constraint_lits);
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "QPUP: forward resolutions completed.\n");
+      fprintf (stderr, "QPUP: computed final constraint qpup(0): ");
+      if (qpup_learnt_constraint->num_lits == 0)
+        fprintf (stderr, "empty.\n");
+      else
+        print_constraint (qdpll, qpup_learnt_constraint);
+    }
+
+  return qpup_learnt_constraint;
+}
+
+/* Expensive assertion: check that variable marks used for QPUP have all been
+   reset, all data cleared. */
+static void
+assert_qpup_data_cleared (QDPLL *qdpll)
+{
+  Var *p, *e;
+  for (p = qdpll->pcnf.vars, e = p + qdpll->pcnf.size_vars; p < e; p++)
+    {
+      assert (!p->qpup_mark_pos);
+      assert (!p->qpup_mark_neg);
+      assert (!p->qpup_constraint);
+      assert (!p->qpup_res_mark_pos);
+      assert (!p->qpup_res_mark_neg);
+      assert (!p->qpup_predict_mark);
+      assert (!p->mark_learn0);
+      assert (!p->mark_learn1);
+      assert (!QDPLL_VAR_POS_MARKED (p));
+      assert (!QDPLL_VAR_NEG_MARKED (p));
+      assert (!QDPLL_VAR_MARKED (p));
+      assert (!p->scope || QDPLL_EMPTY_STACK(p->scope->cover_lits));
+    }
+  assert (!qdpll->qpup_uip);
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_nodes));
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_vars));
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_units));
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_kept_lits));
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_weak_predict_lits));
+}
+
+/* Given the constraint 'qpup_constraint' to be learnt, compute the decision
+   level where that constraint is asserting. */
+static unsigned int
+qpup_compute_asserting_level (QDPLL *qdpll, Var *asserted_var, 
+                              Constraint *qpup_constraint, const QDPLLQuantifierType type)
+{
+  assert (asserted_var);
+  assert (qpup_constraint);
+
+  unsigned int asserting_level = QDPLL_INVALID_DECISION_LEVEL, highest = 0;
+  QDPLLDepManGeneric *dm = qdpll->dm;
+
+  LitID *p, *e;
+  for (p = qpup_constraint->lits, e = p + qpup_constraint->num_lits; p < e; p++)
+    {
+      LitID lit = *p;
+      Var *var = LIT2VARPTR(qdpll->pcnf.vars, lit);
+      unsigned int cur_level = var->decision_level;
+
+      if (type == var->scope->type
+          || dm->depends (dm, var->id, asserted_var->id))
+        {
+          if (cur_level > highest)
+            {
+              assert (cur_level != QDPLL_INVALID_DECISION_LEVEL);
+              asserting_level = highest;
+              highest = cur_level;
+            }
+          else if (cur_level > asserting_level)
+            {
+              assert (cur_level != QDPLL_INVALID_DECISION_LEVEL);
+              asserting_level = cur_level;
+            }
+        }
+    }
+
+  QDPLL_ABORT_QDPLL (asserting_level == QDPLL_INVALID_DECISION_LEVEL, 
+                     "unexpected asserting level!");
+  assert (asserting_level != QDPLL_INVALID_DECISION_LEVEL);
+  return asserting_level;
+}
+
+
+/* Add the learnt constraint 'qpup_constraint' to list of constraint, set
+   literal watchers. */
+static void
+qpup_import_learnt_constraint (QDPLL *qdpll, Constraint *qpup_constraint, 
+                               unsigned int asserting_level, const QDPLLQuantifierType type)
+{
+  assert (qdpll->qpup_uip);
+  assert (qpup_constraint->num_lits > 0);
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "\nImporting QPUP constraint (id=%d): ", qpup_constraint->id);
+      print_constraint (qdpll, qpup_constraint);
+      fprintf (stderr, "\n");
+    }
+
+  assert (!qpup_constraint->learnt);
+  qpup_constraint->learnt = 1;
+
+  QDPLLMemMan *mm = qdpll->mm;
+  LitID *p, *e;
+  for (p = qpup_constraint->lits, 
+         e = p + qpup_constraint->num_lits; 
+       p < e; 
+       p++)
+    {
+      LitID lit = *p;
+      Var *var = LIT2VARPTR(qdpll->pcnf.vars, lit);
+
+      if (qdpll->options.bump_vars_once)
+        increase_var_activity (qdpll, var);
+
+      if (qdpll->options.no_spure_literals &&
+          !qdpll->options.no_pure_literals)
+        {
+          BLitsOcc blit = {lit, qpup_constraint};
+          if (!qpup_constraint->is_cube)
+            {
+              if (QDPLL_LIT_NEG (lit))
+                QDPLL_PUSH_STACK(mm, var->neg_occ_clauses, blit);
+              else
+                QDPLL_PUSH_STACK(mm, var->pos_occ_clauses, blit);
+            }
+          else
+            {
+              blit.constraint = BLIT_MARK_PTR(blit.constraint);
+              if (QDPLL_LIT_NEG (lit))
+                QDPLL_PUSH_STACK(mm, var->neg_occ_cubes, blit);
+              else
+                QDPLL_PUSH_STACK(mm, var->pos_occ_cubes, blit);
+            }
+        }
+    }
+
+  /* Prepend to list of constraints. */
+  if (!qpup_constraint->is_cube)
+    LINK_FIRST (qdpll->pcnf.learnt_clauses, qpup_constraint, link);
+  else
+    {
+      assert (qpup_constraint->is_cube);
+      LINK_FIRST (qdpll->pcnf.learnt_cubes, qpup_constraint, link);
+    }
+
+  set_learnt_constraint_lit_watchers (qdpll, qpup_constraint,
+                                      asserting_level, qdpll->qpup_uip, type);
+}
+
+static void
+qpup_cleanup_aux_constraints (QDPLL *qdpll, Constraint *learnt_constraint, 
+                              const QDPLLQuantifierType type)
+{
+  /* Free computed QPUP constraints. */
+  Var *v;
+  while (!QDPLL_EMPTY_STACK(qdpll->qpup_units))
+    {
+      v = QDPLL_POP_STACK(qdpll->qpup_units);
+      assert (v->qpup_constraint);
+      delete_constraint (qdpll, v->qpup_constraint);
+      v->qpup_constraint = 0;
+    }
+}
+
+/* Stack 'constraint_lits' stores the literals of the current empty clause /
+   initial cube. First, find a suitable UIP node and identify all variables
+   'var' for which 'QPUP(var)' has to be computed. For that purpose the
+   implication graph is traversed exactly once in reverse propagation
+   order. Finally, the QPUP constraints are computed by traversing relevant
+   parts of the graph into the other direction, i.e. towards the empty
+   clause/cube. */
+static Constraint *
+qpup_compute_learnt_constraint (QDPLL *qdpll, LitIDStack *empty_constraint_lits, 
+                                const QDPLLQuantifierType type)
+{
+  assert (type == QDPLL_QTYPE_FORALL || type == QDPLL_QTYPE_EXISTS);
+  assert (!qdpll->options.trace || qdpll->res_cons_id);
+  assert (!qdpll->options.traditional_qcdcl || 
+          !qdpll->options.no_qpup_cdcl || !qdpll->options.no_qpup_sdcl);
+  assert (!(!qdpll->options.no_lazy_qpup && qdpll->options.trace));
+  QDPLL_ABORT_QDPLL(!qdpll->options.no_lazy_qpup && qdpll->options.trace, 
+                    "Must combine '--no-lazy-qpup' with tracing to generate resolution steps!");
+
+  /* Reset marks which were set during 'get_initial_reason'. */
+  LitID *p, *e;
+  for (p = empty_constraint_lits->start, e = empty_constraint_lits->top; p < e; p++)
+    {
+      assert (LEARN_VAR_MARKED(LIT2VARPTR(qdpll->pcnf.vars, *p)));
+      LEARN_VAR_UNMARK(LIT2VARPTR(qdpll->pcnf.vars, *p));
+    }
+
+#ifndef NDEBUG
+  /* Expensive assertion! */
+  assert_qpup_data_cleared (qdpll);
+#endif
+
+  assert (!qdpll->qpup_uip);
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_nodes));
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_vars));
+  assert (QDPLL_EMPTY_STACK(qdpll->qpup_units));
+
+  if (qdpll->options.verbosity >= 2)
+    fprintf (stderr, "QPUP: started.\n");
+
+  qpup_traverse_implication_graph (qdpll, empty_constraint_lits, type);
+
+  Constraint *qpup_learnt_constraint;
+
+  if (qdpll->options.no_lazy_qpup)
+    {
+      /* Compute learnt constraint using explicit resolution steps. */
+      qpup_learnt_constraint = qpup_do_forward_resolutions (qdpll, empty_constraint_lits, type);
+      qpup_cleanup_aux_constraints (qdpll, qpup_learnt_constraint, type);
+    }
+  else
+    {
+      /* Build learnt constraint from predicted literals WITHOUT any resolutions. */
+      qpup_collect_weak_predict_lits_aux (qdpll, empty_constraint_lits, type);
+      /* Exactly ONE application of constraint reduction needed! */
+      qpup_res_reduce (qdpll, &qdpll->qpup_weak_predict_lits, 0, type);
+
+      if (qdpll->options.verbosity >= 2)
+        {
+          fprintf (stderr, "\nPredicted constraint: ");
+          LitID *p, *e;
+          for (p = qdpll->qpup_weak_predict_lits.start, e = qdpll->qpup_weak_predict_lits.top; p < e; p++)
+            fprintf (stderr, "%d ", *p);
+          fprintf (stderr, "\n");
+        }
+
+      qpup_learnt_constraint = 
+        create_constraint (qdpll, QDPLL_COUNT_STACK(qdpll->qpup_weak_predict_lits), 
+                           type == QDPLL_QTYPE_FORALL);
+      memcpy (qpup_learnt_constraint->lits, qdpll->qpup_weak_predict_lits.start, 
+              QDPLL_COUNT_STACK(qdpll->qpup_weak_predict_lits) * sizeof (LitID));
+    }
+
+#ifndef NDEBUG
+  assert (!qpup_is_tautology(qpup_learnt_constraint->lits, 
+                             qpup_learnt_constraint->lits + qpup_learnt_constraint->num_lits));
+  assert (!qpup_has_duplicate_lits(qpup_learnt_constraint->lits, 
+                                   qpup_learnt_constraint->lits + qpup_learnt_constraint->num_lits));
+  assert_lits_sorted (qdpll, qpup_learnt_constraint->lits, 
+                      qpup_learnt_constraint->lits + qpup_learnt_constraint->num_lits);
+#endif
+  /* Empty constraint derived iff no proper UIP found or if initial cube is already asserting. */
+  assert (qdpll->qpup_uip || qpup_learnt_constraint->num_lits == 0);
+  assert (!qdpll->qpup_uip || qpup_learnt_constraint->num_lits != 0);
+
+  QDPLL_RESET_STACK(qdpll->qpup_vars);
+  QDPLL_RESET_STACK(qdpll->qpup_nodes);
+  QDPLL_RESET_STACK(qdpll->qpup_units);
+  QDPLL_RESET_STACK(qdpll->qpup_kept_lits);
+  QDPLL_RESET_STACK(qdpll->qpup_weak_predict_lits);
+  qdpll->res_cons_id = 0;
+
+  if (qdpll->options.verbosity >= 2)
+    fprintf (stderr, "QPUP: completed.\n");
+
+  assert (QDPLL_EMPTY_STACK (qdpll->wreason_a));
+  assert (QDPLL_EMPTY_STACK (qdpll->wreason_e));
+
+  return qpup_learnt_constraint;
+}
+
+/* END: QPUP code. */
 
 static unsigned int
 generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
@@ -6145,6 +7811,7 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
   LitIDStack *lit_stack_tmp = &(qdpll->add_stack_tmp);
   LitID *p;
 
+  assert (!qdpll->options.trace || !qdpll->res_cons_id);
   assert (qdpll->cnt_hi_dl_type_lits == 0);
   assert (qdpll->hi_dl_type_var == 0);
   assert (qdpll->hi_type_dl == 0);
@@ -6153,8 +7820,6 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
   assert (QDPLL_EMPTY_STACK (qdpll->wreason_e));
   assert (QDPLL_COUNT_STACK (*lit_stack) == 0);
   assert (QDPLL_COUNT_STACK (*lit_stack_tmp) == 0);
-  assert (!qdpll->orig_wreason);
-  assert (!qdpll->orig_antecedent);
 #ifndef NDEBUG
 #if QDPLL_ASSERT_LEARN_VARS_UNMARKED
   assert_learn_vars_unmarked (qdpll);
@@ -6183,17 +7848,90 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
           fprintf (stderr, ": ");
         }
 
-      if (!qdpll->orig_wreason)
-        print_lits (qdpll, lit_stack->start, QDPLL_COUNT_STACK (*lit_stack),
-                    0);
-      else
-        print_lits (qdpll, qdpll->orig_wreason->lits,
-                    qdpll->orig_wreason->num_lits,
-                    qdpll->orig_wreason->size_lits);
+      print_lits (qdpll, lit_stack->start, QDPLL_COUNT_STACK (*lit_stack),
+                  0);
     }
 
   /* Now lit-stack contains literals of either
      conflicting clause or cover-set/satisfied cube. */
+
+
+  /* START: compute learnt constraint by QPUP. */
+
+  Constraint *qpup_constraint = 0;
+
+  if (!qdpll->options.traditional_qcdcl || (type == QDPLL_QTYPE_EXISTS && !qdpll->options.no_qpup_cdcl) || 
+      (type == QDPLL_QTYPE_FORALL && !qdpll->options.no_qpup_sdcl))
+    {
+      qpup_constraint = qpup_compute_learnt_constraint (qdpll, lit_stack, type);
+
+      /* Start: reset data for classical learning. */
+      /* Unmark variables marked during computation of initial reason. */
+#ifndef NDEBUG
+      LitID *p;
+      for (p = lit_stack->start; p < lit_stack->top; p++)
+        assert(!LEARN_VAR_MARKED (LIT2VARPTR (vars, *p)));
+#endif
+
+      QDPLL_RESET_STACK (*lit_stack);
+      assert (QDPLL_COUNT_STACK (*lit_stack_tmp) == 0);
+      reset_stop_crit_data (qdpll);
+      /* END: reset data for classical learning. */
+
+      if (qdpll->qpup_uip)
+        {
+#if COMPUTE_STATS
+          if (type == QDPLL_QTYPE_FORALL)
+            {
+              qdpll->stats.total_learnt_cubes++;
+              qdpll->stats.total_learnt_cubes_size += qpup_constraint->num_lits;
+            }
+          else
+            {
+              qdpll->stats.total_learnt_clauses++;
+              qdpll->stats.total_learnt_clauses_size += qpup_constraint->num_lits;
+            }
+#endif
+          unsigned int asserting_level = qpup_compute_asserting_level (qdpll, qdpll->qpup_uip, 
+                                                                       qpup_constraint, type);
+          qpup_import_learnt_constraint (qdpll, qpup_constraint, asserting_level, type);
+
+          assert (qpup_constraint->num_lits > 0);
+          /* Set assignment to be forced by learnt constraint. */
+          assert (!qdpll->state.forced_assignment.var);
+          qdpll->state.forced_assignment.var = qdpll->qpup_uip;
+          assert (QDPLL_VAR_ASSIGNED(qdpll->qpup_uip));
+          assert (!qdpll->state.forced_assignment.assignment);
+          qdpll->state.forced_assignment.assignment = -qdpll->qpup_uip->assignment;
+          assert (!qdpll->state.forced_assignment.mode);
+          qdpll->state.forced_assignment.mode = QDPLL_VARMODE_UNIT;
+          assert (!qdpll->state.forced_assignment.antecedent);
+          qdpll->state.forced_assignment.antecedent = qpup_constraint;
+
+          /* Reset QPUP data. */
+          qdpll->qpup_uip = 0;
+
+          decay_var_activity (qdpll);
+
+          return 1 + asserting_level;
+        }
+      else
+        {
+          assert (qpup_constraint->num_lits == 0);
+          /* Reset QPUP data. */
+          qdpll->qpup_uip = 0;
+          delete_constraint (qdpll, qpup_constraint);
+          return QDPLL_INVALID_DECISION_LEVEL;
+        }
+    }
+
+  /* END: compute learnt constraint by QPUP. */
+
+  qdpll->res_cons_id = 0;
+
+
+
+
 
 #if COMPUTE_TIMES
   const double start = time_stamp ();
@@ -6216,6 +7954,8 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
     {
       lit = *p;
       var = LIT2VARPTR (vars, lit);
+      if (qdpll->options.bump_vars_once)
+        increase_var_activity (qdpll, var);
       assert (!success
               || !(LEARN_VAR_POS_MARKED (var) && LEARN_VAR_NEG_MARKED (var)));
       LEARN_VAR_UNMARK (var);
@@ -6308,8 +8048,7 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
               !qdpll->options.no_pure_literals)
             {
               BLitsOcc blit = { lit, learnt_constraint };
-              /* Add all literals to occurrence stacks. 
-                 POSSIBLE OPTIMIZATION: could factor out code. */
+              /* Add all literals to occurrence stacks. */
               if (type == QDPLL_QTYPE_EXISTS)
                 {
                   if (QDPLL_LIT_NEG (lit))
@@ -6370,13 +8109,13 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
           print_constraint (qdpll, learnt_constraint);
         }
 
-
       /* As in Minisat, decay variables by increasing 'delta'. */
       decay_var_activity (qdpll);
 
       QDPLL_RESET_STACK (*lit_stack);
       assert (QDPLL_COUNT_STACK (*lit_stack_tmp) == 0);
       reset_stop_crit_data (qdpll);
+
       /* Fix: we must keep assignments at asserting level, hence add 1. */
       return 1 + asserting_level;
     }
@@ -6385,6 +8124,7 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
       QDPLL_RESET_STACK (*lit_stack);
       assert (QDPLL_COUNT_STACK (*lit_stack_tmp) == 0);
       reset_stop_crit_data (qdpll);
+
       return QDPLL_INVALID_DECISION_LEVEL;
     }
 }
@@ -6790,10 +8530,6 @@ select_decision_assignment (QDPLL * qdpll, Var * decision_var)
    in 'blit' disables the constraint in 'blit'. If so, then need not
    update watchers -> return 0. Otherwise return the stripped pointer
    to the constraint. */
-/* NOTE: used for unit and pure lit
-   detection; OPTIMIZATION: when using spure-literals then will never
-   see cubes here, could also used separate functions. This seems to
-   be a hot spot. */
 static Constraint *
 check_disabling_blocking_lit (QDPLL * qdpll, BLitsOcc blit_occ,
                               const int called_on_pure_lits)
@@ -6805,7 +8541,7 @@ check_disabling_blocking_lit (QDPLL * qdpll, BLitsOcc blit_occ,
     qdpll->stats.blits_tested++;
 #endif
   /* NOTE: do NOT deref constraint pointer here, since this is exactly
-     what we want to avoid by blocking literals! */
+     what we want to avoid by blocking literals. */
   assert (blit_occ.blit);
   assert (blit_occ.constraint);
   Constraint *constraint = blit_occ.constraint;
@@ -7569,6 +9305,29 @@ print_config (QDPLL * qdpll)
   else
     fprintf (stderr, "--trace=0\n");
 
+  if (qdpll->options.no_qpup_cdcl)
+    fprintf (stderr, "--no-qpup-cdcl=1\n");
+  else
+    fprintf (stderr, "--no-qpup-cdcl=0\n");
+
+  if (qdpll->options.no_qpup_sdcl)
+    fprintf (stderr, "--no-qpup-sdcl=1\n");
+  else
+    fprintf (stderr, "--no-qpup-sdcl=0\n");
+
+  if (qdpll->options.traditional_qcdcl)
+    fprintf (stderr, "--traditional-qcdcl=1\n");
+  else
+    fprintf (stderr, "--traditional-qcdcl=0\n");
+  if (qdpll->options.no_lazy_qpup)
+    fprintf (stderr, "--no-lazy-qpup=1\n");
+  else
+    fprintf (stderr, "--no-lazy-qpup=0\n");
+  if (qdpll->options.bump_vars_once)
+    fprintf (stderr, "--bump-vars-once=1\n");
+  else
+    fprintf (stderr, "--bump-vars-once=0\n");
+
 
   fprintf (stderr, "----------------------------\n\n");
 }
@@ -7808,7 +9567,7 @@ solve (QDPLL * qdpll)
     }
 
   state = set_up_watchers (qdpll);
-  /*TODO at this point: if the original formula was decided right away
+  /* At this point: if the original formula was decided right away
      in watcher initialization, then we must output information. Case
      UNSAT: either input formula has a clause containing ONLY universal
      literals; we can simply print that clause, which proves UNSAT. Or,
@@ -8098,6 +9857,12 @@ qdpll_delete (QDPLL * qdpll)
   QDPLL_DELETE_STACK (mm, qdpll->wreason_e);
   QDPLL_DELETE_STACK (mm, qdpll->dec_vars);
   QDPLL_DELETE_STACK (mm, qdpll->smaller_type_lits);
+  QDPLL_DELETE_STACK (mm, qdpll->qpup_nodes);
+  QDPLL_DELETE_STACK (mm, qdpll->qpup_vars);
+  QDPLL_DELETE_STACK (mm, qdpll->qpup_units);
+  QDPLL_DELETE_STACK (mm, qdpll->qpup_kept_lits);
+  QDPLL_DELETE_STACK (mm, qdpll->qpup_weak_predict_lits);
+
   /* Delete scopes. */
   Scope *s, *n;
   for (s = qdpll->pcnf.scopes.first; s; s = n)
@@ -8187,6 +9952,28 @@ qdpll_configure (QDPLL * qdpll, char *configure_str)
         }
       else if (strlen (configure_str) != 0 && strcmp (configure_str, "=qrp"))
         QDPLL_ABORT_QDPLL (1, "unknown tracing format!");
+    }
+  else if (!strcmp (configure_str, "--traditional-qcdcl"))
+    {
+      qdpll->options.traditional_qcdcl = qdpll->options.no_qpup_cdcl = qdpll->options.no_qpup_sdcl = 1;
+    }
+  else if (!strcmp (configure_str, "--no-qpup-cdcl"))
+    {
+      qdpll->options.no_qpup_cdcl = 1;
+      qdpll->options.traditional_qcdcl = 1;
+    }
+  else if (!strcmp (configure_str, "--no-qpup-sdcl"))
+    {
+      qdpll->options.no_qpup_sdcl = 1;
+      qdpll->options.traditional_qcdcl = 1;
+    }
+  else if (!strcmp (configure_str, "--no-lazy-qpup"))
+    {
+      qdpll->options.no_lazy_qpup = 1;
+    }
+  else if (!strcmp (configure_str, "--bump-vars-once"))
+    {
+      qdpll->options.bump_vars_once = 1;
     }
   else if (!strcmp (configure_str, "--no-pure-literals"))
     {
@@ -8677,6 +10464,9 @@ qdpll_add (QDPLL * qdpll, LitID id)
 QDPLLResult
 qdpll_sat (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL(qdpll->options.depman_qdag && qdpll->options.trace,
+                    "Trace mode must be combined with '--dep-man=simple'!");
+
 #if COMPUTE_TIMES
   qdpll->time_stats.sat_time_start = time_stamp ();
 #endif
@@ -8714,7 +10504,7 @@ qdpll_sat (QDPLL * qdpll)
 
 
 /* Get assignment of variable.  
-   NOTE/TODO: we do NOT check whether the
+   NOTE: we do NOT check whether the
    formula has been decided, this is the caller's responsibility. */
 QDPLLAssignment
 qdpll_get_value (QDPLL * qdpll, VarID id)
@@ -8781,7 +10571,6 @@ qdpll_print (QDPLL * qdpll, FILE * out)
         {
           /* For empty clause, print out two complementary unit
              clauses to be QDIMACS-compliant. Using id 1 here. */
-          /* TODO: fix this to use a declared variable. */
           fprintf (out, "%d 0\n", 1);
           fprintf (out, "%d 0\n", -1);
         }
@@ -9339,10 +11128,10 @@ qdpll_print_stats (QDPLL * qdpll)
            qdpll->stats.total_type_reduce_effort /
            ((float) qdpll->stats.total_type_reduce_calls) : 0);
   fprintf (stderr, "Total type-red. lits:\t\t%llu\n",
-           qdpll->stats.total_type_reduce_by_deps);
+           qdpll->stats.total_type_reduce_lits);
   fprintf (stderr, "Avg. type-red. lits per call:\t%f\n\n",
            qdpll->stats.total_type_reduce_calls ?
-           qdpll->stats.total_type_reduce_by_deps /
+           qdpll->stats.total_type_reduce_lits /
            (float) qdpll->stats.total_type_reduce_calls : 0);
 
   fprintf (stderr, "Choose-vars: \t\t%llu\n",

@@ -2,8 +2,8 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012 Florian Lonsing and Aina Niemetz, Johannes Kepler
- University, Linz, Austria and Vienna University of Technology, Vienna,  Austria.
+ Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
+ University, Linz, Austria and Vienna University of Technology, Vienna, Austria. 
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -36,8 +36,8 @@
 
 
 #define VERSION						\
-  "DepQBF 1.0\n"					\
-  "Copyright 2010, 2011, 2012 Florian Lonsing and Aina Niemetz,\n"	\
+  "DepQBF 2.0\n"					\
+  "Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz,\n" \
   "Johannes Kepler University, Linz, Austria and\n"\
 "Vienna University of Technology, Vienna, Austria.\n"			\
 "This is free software; see COPYING for copying conditions.\n"		\
@@ -56,9 +56,25 @@
 "\n"\
 "  -h, --help                      display usage information\n"\
 "  -v                              enable verbosity incrementally (at most '-v -v')\n"\
+"  --qdo                           QDIMACS output generation (partial certificate):\n"\
+"                                    If the outermost (i.e. leftmost) quantifier block\n"\
+"                                    of a satisfiable QBF is existentially quantified,\n"\
+"                                    then print an assignment to the variables of this\n"\
+"                                    block (and dually for unsatisfiable QBFs and\n"\
+"                                    universal variables from the outermost block, if\n"\
+"                                    that block is universally quantified).\n"\
+"  --traditional-qcdcl             apply a traditional variant of clause and cube learning (QCDCL),\n"\
+"                                    which was applied in the previous version 1.0 of DepQBF.\n"\
+"                                    In this version 2.0, by default lazy QPUP-based QCDCL is applied.\n"\
+"  --no-lazy-qpup                  disable lazy QPUP-based QCDCL and carry out all resolution steps.\n"\
+"  --no-qpup-cdcl                  apply traditional QCDCL for clause learning (instead of QPUP).\n"\
+"  --no-qpup-sdcl                  apply traditional QCDCL for cube learning (instead of QPUP).\n"\
 "  --trace[=<format>]              dump trace in <format> to <stdout>\n"\
 "                                    format: qrp  ... ascii QRP format (default)\n"\
 "                                            bqrp ... binary QRP format\n"\
+"                                    NOTE: tracing must be combined with options '--dep-man=simple' and\n"\
+"                                          either '--traditional-qcdcl' (which disables QPUP-based QCDCL)\n"\
+"                                          or '--no-lazy-qpup' (to enable tracing with QPUP-based QCDCL).\n"\
 "  --dep-man=<val>                 set dependency manager: if <val>=qdag (default) then the solver\n"\
 "                                    uses the standard dependency scheme; if <val>=simple then the\n"\
 "                                    solver uses the given quantifier prefix of the input formula\n"	\
@@ -168,7 +184,7 @@ parse (QDPLLApp * app, QDPLL * qdpll, FILE * in, int trace)
 
   assert (in);
 
-  char c;
+  int c;
   while ((c = getc (in)) != EOF)
     {
       PARSER_SKIP_SPACE_WHILE (c);
@@ -451,6 +467,7 @@ sig_handler (int sig)
 #if (COMPUTE_STATS || COMPUTE_TIMES)
   qdpll_print_stats (qdpll);
 #endif
+  signal (sig, SIG_DFL);
   raise (sig);
 }
 
@@ -462,6 +479,7 @@ sigalrm_handler (int sig)
 #if (COMPUTE_STATS || COMPUTE_TIMES)
   qdpll_print_stats (qdpll);
 #endif
+  signal (sig, SIG_DFL);
   raise (sig);
 }
 
@@ -472,6 +490,7 @@ set_signal_handlers (QDPLLApp * app)
   signal (SIGINT, sig_handler);
   signal (SIGTERM, sig_handler);
   signal (SIGALRM, sigalrm_handler);
+  signal (SIGXCPU, sigalrm_handler);
 }
 
 

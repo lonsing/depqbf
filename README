@@ -1,17 +1,46 @@
-July 2012
+
+August 2013
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-This is version 1.0 of the search-based QBF solver DepQBF. Compared to the
-previously released version 0.1, it includes the following major changes:
+This is version 2.0 of the search-based QBF solver DepQBF. Compared to the
+previously released version 1.0, it includes the following major changes:
 
-- Some code maintenance and bug fixes
+- Some code maintenance and bug fixes.
 
-- Blocking literals to improve cache performance
+  Many thanks to Adam Foltzer and Allen Van Gelder for valuable feedback.
 
-- Trace generation (contributed by Aina Niemetz): DepQBF 1.0 can produce
+- Advanced clause and cube learning based on QBF Pseudo Unit Propagation as
+  presented in the following paper: "Florian Lonsing, Uwe Egly, Allen Van
+  Gelder: Efficient Clause Learning for Quantified Boolean Formulas via QBF
+  Pseudo Unit Propagation. In Proc. SAT 2013."
+
+  NOTE: by default, this version of DepQBF applies a lazy variant of
+  QPUP-based QCDCL where no resolution steps are carried out. The traditional
+  approach to QCDCL which was implemented in version 1.0 of DepQBF is still
+  available by command line option '--traditional-qcdcl'. Please see also the
+  command line documentation by calling './depqbf -h'.
+
+Version 2.0 is the source-release of the version of DepQBF which participated
+in the QBF Gallery 2013:
+
+  http://www.kr.tuwien.ac.at/events/qbfgallery2013/
+
+
+General features of DepQBF are:
+
+- Generation of QDIMACS output (partial certificate): if the outermost
+  (i.e. leftmost) quantifier block of a satisfiable QBF is existentially
+  quantified, then DepQBF can print an assignment to the variables of this
+  block (and dually for unsatisfiable QBFs and universal variables from the
+  outermost block, if that block is universally quantified). To enable QDIMACS
+  output generation, run DepQBF with parameter '--qdo'. Note that the
+  assignment printed by DepQBF can be partial, i.e. not all variables are
+  necessarily assigned.
+
+- Trace generation (contributed by Aina Niemetz): DepQBF can produce
   traces in QRP format (ASCII and binary version of the QRP format are
   supported; see also usage information). If called with the '--trace' option,
   the solver prints *every* resolution step during clause and cube learning to
@@ -19,35 +48,20 @@ previously released version 0.1, it includes the following major changes:
   call './depqbf --trace input-formula.qdimacs > trace.qrp' dumps the trace
   for the QBF 'input-formula.qdimacs' to the file 'trace.qrp'. The generated
   trace file can be used to extract a certificate of (un)satisfiability of the
-  given formula using additional tools. See also the website
-  'http://fmv.jku.at/cdepqbf/' and our tool paper at SAT'12:
+  given formula using additional tools. See also the website 
+  'http://fmv.jku.at/cdepqbf/' and the related tool paper published at SAT'12.
 
-@inproceedings{DBLP:conf/sat/NiemetzPLSB12,
-  author    = {Aina Niemetz and
-               Mathias Preiner and
-               Florian Lonsing and
-               Martina Seidl and
-               Armin Biere},
-  title     = {Resolution-Based Certificate Extraction for QBF - (Tool
-               Presentation)},
-  booktitle = {SAT},
-  year      = {2012},
-  pages     = {430-435},
-  ee        = {http://dx.doi.org/10.1007/978-3-642-31612-8_33},
-  crossref  = {DBLP:conf/sat/2012},
-  bibsource = {DBLP, http://dblp.uni-trier.de}
-}
+  NOTE: tracing must be combined with the trivial dependency scheme (i.e. the
+  linear quantifier prefix ordering) by option '--dep-man=simple'. Further, to
+  enable tracing for QPUP-based QCDCL, '--no-lazy-qpup' must be specified.
 
 - The solver can be used as a library. The API is declared in file 'qdpll.h'
   and file 'qdpll_app.c' demonstrates how it can be used. Note that the API,
   apart from basic use, has not yet been thoroughly tested.
 
-
-DepQBF is free software released under GPLv3. See also file
-COPYING. Unfortunately, documentation is scarce and the code structure is not
-as readable as it should be to allow for easy modifications. Please do not
-hesitate to contact Florian Lonsing (see below) for any questions related to
-DepQBF.
+DepQBF is free software released under GPLv3. See also file COPYING. Please do
+not hesitate to contact Florian Lonsing (see below) for any questions related
+to DepQBF.
 
 DepQBF consists of a dependency manager (file 'qdpll_dep_man_qdag.c') and a
 core QDPLL solver (file 'qdpll.c'). During a run the solver queries the
@@ -72,9 +86,10 @@ Unpack the sources into a directory and call 'make'. This produces optimized
 code without assertions (default).
 
 Note: set the flag 'FULL_ASSERT' in file 'qdpll_config.h' from 0 to 1 to
-switch on *expensive* assertions. The solver will run *substantially* slower
-in this case. As usual, the compiler flag 'DNDEBUG' removes all assertions
-from the code, regardless from the value of 'FULL_ASSERT'.
+switch on *expensive* assertions (recommended only for debugging). The solver
+will run *substantially* slower in this case. As usual, the compiler flag
+'DNDEBUG' removes all assertions from the code, regardless from the value of
+'FULL_ASSERT'.
 
 
 -----------------------
@@ -115,8 +130,6 @@ statistics can be enabled by setting flag 'COMPUTE_STATS'.
 REFERENCES
 ----------
 
-A system description appeared in JSAT:
-
 @article{DBLP:journals/jsat/LonsingB10,
   author    = {Florian Lonsing and
                Armin Biere},
@@ -130,6 +143,35 @@ A system description appeared in JSAT:
   bibsource = {DBLP, http://dblp.uni-trier.de}
 }
 
+@inproceedings{DBLP:conf/sat/NiemetzPLSB12,
+  author    = {Aina Niemetz and
+               Mathias Preiner and
+               Florian Lonsing and
+               Martina Seidl and
+               Armin Biere},
+  title     = {Resolution-Based Certificate Extraction for QBF - (Tool
+               Presentation)},
+  booktitle = {SAT},
+  year      = {2012},
+  pages     = {430-435},
+  ee        = {http://dx.doi.org/10.1007/978-3-642-31612-8_33},
+  crossref  = {DBLP:conf/sat/2012},
+  bibsource = {DBLP, http://dblp.uni-trier.de}
+}
+
+@inproceedings{DBLP:conf/sat/LonsingEG13,
+  author    = {Florian Lonsing and
+               Uwe Egly and
+               Allen Van Gelder},
+  title     = {Efficient Clause Learning for Quantified Boolean Formulas
+               via QBF Pseudo Unit Propagation},
+  booktitle = {SAT 2013},
+  year      = {2013},
+  pages     = {100-115},
+  ee        = {http://dx.doi.org/10.1007/978-3-642-39071-5_9},
+  crossref  = {DBLP:conf/sat/2013},
+  bibsource = {DBLP, http://dblp.uni-trier.de}
+}
 
 -------
 CONTACT
@@ -137,4 +179,4 @@ CONTACT
 
 For comments, questions, bug reports etc. related to DepQBF please contact Florian Lonsing.
 
-See also http://www.kr.tuwien.ac.at/staff/lonsing/ and http://fmv.jku.at/depqbf/.
+See also http://www.kr.tuwien.ac.at/staff/lonsing/ and http://lonsing.github.io/depqbf/

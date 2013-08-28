@@ -2,7 +2,7 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012 Florian Lonsing and Aina Niemetz, Johannes Kepler
+ Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
  University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
@@ -132,6 +132,14 @@ struct Var
   /* Marks used in learning. */
   unsigned int mark_learn0:1;
   unsigned int mark_learn1:1;
+
+  /* Marks used for QPUP. TODO: could re-use other marks already present. */
+  unsigned int qpup_mark_pos:1;
+  unsigned int qpup_mark_neg:1;
+  unsigned int qpup_res_mark_pos:1;
+  unsigned int qpup_res_mark_neg:1;
+  unsigned int qpup_predict_mark:1;
+  Constraint *qpup_constraint;
 
   /* Mark used for qrp extraction. */
   unsigned int mark_qrp:1;

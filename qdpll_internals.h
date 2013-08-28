@@ -2,7 +2,7 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012 Florian Lonsing and Aina Niemetz, Johannes Kepler
+ Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
  University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
@@ -62,6 +62,14 @@ struct QDPLL
   unsigned int cur_constraint_id;
   unsigned int num_deps_init;
 
+  /* Stacks used for traversing implication graph in QPUP. */
+  VarPtrStack qpup_nodes;
+  VarPtrStack qpup_vars;
+  VarPtrStack qpup_units;
+  LitIDStack qpup_kept_lits;
+  LitIDStack qpup_weak_predict_lits;
+  Var *qpup_uip;
+
   QDPLLResult result;
 
   /* Tracing, support both ascii and binary QRP format. */
@@ -102,12 +110,8 @@ struct QDPLL
   /* Pointer to satisfied cube or empty clause. */
   Constraint *result_constraint;
 
-  /* For printing constraints / trace generation: if an original clause is
-     used as initial working reason or antecedent during constraint learning,
-     then print original literals. This allows to reconstruct literals that
-     were reduced by forall-reduction in parser. */
-  Constraint *orig_wreason;
-  Constraint *orig_antecedent;
+  /* For tracing only: ID of empty clause/cube or of new initial cube. */
+  ConstraintID res_cons_id;
 
   struct
   {
@@ -184,6 +188,11 @@ struct QDPLL
     unsigned int lcubes_min_init_size;
     unsigned int lcubes_max_init_size;
     unsigned int trace;
+    unsigned int traditional_qcdcl:1;
+    unsigned int no_qpup_cdcl:1;
+    unsigned int no_qpup_sdcl:1;
+    unsigned int no_lazy_qpup:1;
+    unsigned int bump_vars_once:1;
   } options;
 
 #if COMPUTE_STATS
@@ -250,7 +259,7 @@ struct QDPLL
     unsigned long long int total_constraint_dels;
     unsigned long long int total_clause_dels;
     unsigned long long int total_cube_dels;
-    unsigned long long int total_type_reduce_by_deps;
+    unsigned long long int total_type_reduce_lits;
     unsigned long long int total_sat_cubes;
     unsigned long long int total_mtf_dirty_deps_constraints;
     unsigned long long int total_type_reduce_effort;
