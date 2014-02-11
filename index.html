@@ -45,10 +45,20 @@
 
 <h2>News</h2>
 <ul>
+<li>2014-02-12: Source code of DepQBF 3.0 released.</li>
+<li>2014-02-12: DepQBF at the <a href="http://fmv.jku.at/rerise14/">ReRISE'14
+    Winter School</a>.</li>
+<li>2014-02-12: <a href="http://qbf.satisfiability.org/gallery/">QBF
+    Gallery 2014</a> affiliated to <a href="http://baldur.iti.kit.edu/sat2014/">SAT 2014</a>.</li>
+<li>2014-02-12: <a href="http://vsl2014.at/pages/QBF-index.html">QBF Workshop 2014</a>
+  affiliated to <a href="http://baldur.iti.kit.edu/sat2014/">SAT 2014</a>.</li>
+<li>2014-02-12: <a href="http://vsl2014.at/pages/QUANTIFY-index.html">QUANTIFY Workshop 2014</a>
+  affiliated to <a href="http://cs.nyu.edu/ijcar2014/">IJCAR 2014</a>.</li>
 <li>2013-08-28: Source code of DepQBF 2.0 released.</li>
-<li>2013-01-18: <a href="http://www.kr.tuwien.ac.at/events/qbfgallery2013/">QBF Gallery</a>
+<li>2013-01-18: <a href="http://www.kr.tuwien.ac.at/events/qbfgallery2013/">QBF
+    Gallery 2013</a>
   affiliated to <a href="http://sat2013.cs.helsinki.fi/">SAT 2013</a>.</li>
-<li>2013-01-17: <a href="http://fmv.jku.at/qbf2013/">QBF Workshop</a>
+<li>2013-01-17: <a href="http://fmv.jku.at/qbf2013/">QBF Workshop 2013</a>
   affiliated to <a href="http://sat2013.cs.helsinki.fi/">SAT 2013</a>.</li>
 <li>2012-09-05: Added information on certificates.</li>
 <li>2012-07-18: Source code of DepQBF 1.0 released.</li>
@@ -69,14 +79,21 @@
 
 <ul>
 <li>
-Version 2.0 (<a href="depqbf-version-2.0.tar.gz">source code</a>), see the
+Version 3.0 (<a href="depqbf-version-3.0.tar.gz">source code</a>), see the
 <a href="README.txt">README</a> file for release notes.
 </li>
 </ul>
 
 <h3>Previous versions</h3>
 
+<p><em>These versions are considered deprecated and are provided only for
+    documentation. For practical applications, please always use the latest
+  release above.</em></p>
+
 <ul>
+<li>
+Version 2.0 (<a href="depqbf-version-2.0.tar.gz">source code</a>).
+</li>
 <li>
 Version 1.0 (<a href="depqbf-version-1.0.tar.gz">source code</a>).
 </li>
@@ -100,12 +117,61 @@ decision making and clause learning. See also the JSAT system description of
 DepQBF for references and a brief outline of the idea.</p>
 
 
+<h2>Incremental Solving</h2>
+
+<p> Since version 3.0, DepQBF comes with an API which allows for incremental solving
+  based on a clause stack. Clauses can be added to and removed from the
+  current formula by push and pop operations. Incremental solving can be
+  beneficial in applications where a sequence of closely related formulae must
+  be solved. This way, the solver does not have to solve each formula from
+  scratch but tries to reuse information learned from previously solved
+  formulae. </p>
+
+
+<h2>Solving under Assumptions</h2>
+
+<p> Since version 3.0, assumptions can be added through the API of
+DepQBF. Assumptions are fixed variable assignments from the leftmost quantifier
+block of a QBF. In forthcoming calls, the solver tries to solve the formula
+under the assignments given by the added assumptions. Solving under assumptions
+is commonly used in workflows based on incremental SAT solving. In DepQBF,
+assumptions can be used as an alternative to the push and pop operations to
+support incremental QBF solving.</p>
+
+
+<h2>API Examples</h2>
+
+<p> The following examples illustrate the use of the API of DepQBF for
+  incremental solving and solving under assumptions:</p>
+
+<ul>
+<li> </li>
+<li> </li>
+</ul>
+
+<p>Please see the
+<a href="README.txt">README</a> file of the latest release for further information.</p>
+
+
+
+
+<h2>Long-Distance Resolution</h2>
+
+<p>Traditional Q-resolution as introduced in <em>H. Kleine Büning, M.Karpinski, A. Flögel: Resolution for Quantified Boolean
+    Formulas. Inf. Comput. 117(1): 12-18 (1995)</em> explicitly rules out the generation of tautological
+  resolvents. In contrast to that, long-distance resolution admits certain
+  tautological resolvents. It was first implemented in the QBF solver
+  <a href="http://www.princeton.edu/~chaff/quaffle.html"><em>quaffle</em></a> and is now also available in DepQBF.</p>
+
+
+
 <h2>Preprocessing</h2>
 
 <p>DepQBF does NOT include preprocessing, apart from cleaning up the input formula
 by removing tautological clauses and duplicate literals from clauses.</p>
 
-<p>For QBF preprocessing tools, you might want to consider <a href="http://fmv.jku.at/bloqqer/">Bloqqer</a>
+<p>Preprocessing is usually important for the performance of QBF-based
+  workflows. For QBF preprocessing tools, we refer to <a href="http://fmv.jku.at/bloqqer/">Bloqqer</a>
 or <a href="http://fmv.jku.at/qxbf/">QxBF</a>, for example.</p>
 
 
@@ -135,6 +201,19 @@ contact <a href="http://www.kr.tuwien.ac.at/staff/lonsing/">Florian Lonsing</a>.
 <h2>Publications</h2>
 
 <ul>
+
+<li> <em> Florian Lonsing and Uwe Egly. Incremental QBF Solving. Technical report
+submitted to arXiv Computing Research Repository (CoRR), February 2014. </em> </li>
+<li>Paper at LPAR'13 on long-distance resolution implemented in
+  DepQBF
+  3.0: <a href="http://dx.doi.org/10.1007/978-3-642-45221-5_21"><em>U. Egly, F. Lonsing, and M. Widl. Long-Distance Resolution:
+Proof Generation and Strategy Extraction in Search-Based QBF Solving. In
+Proc. LPAR 2013.
+</em></a></li>
+<li>Paper at SAT'13 on QPUP-based clause and cube learning implemented in
+  DepQBF 2.0: <a href="http://link.springer.com/chapter/10.1007%2F978-3-642-39071-5_9"><em>F. Lonsing, U. Egly, and A. Van Gelder. Efficient Clause Learning
+  for Quantified Boolean Formulas via QBF Pseudo Unit Propagation. SAT
+      2013.</em></a></li>
 <li> System description published in
   JSAT: <a href="http://jsat.ewi.tudelft.nl/content/volume7/JSAT7_6_Lonsing.pdf">PDF</a></li>
 <li>Slides of related talk
@@ -144,9 +223,6 @@ contact <a href="http://www.kr.tuwien.ac.at/staff/lonsing/">Florian Lonsing</a>.
       M. Preiner, F. Lonsing, M. Seidl and A. Biere: Resolution-Based
       Certificate Extraction for QBF (Tool Presentation). SAT
       2012.</em></a></li>
-<li>Paper at SAT'13 on QPUP-based clause and cube learning implemented in
-  DepQBF 2.0: <a href="http://link.springer.com/chapter/10.1007%2F978-3-642-39071-5_9"><em>F. Lonsing, U. Egly, and A. Van Gelder. Efficient Clause Learning
-  for Quantified Boolean Formulas via QBF Pseudo Unit Propagation. SAT 2013.</em></a></li>
 <li><a href="http://www.kr.tuwien.ac.at/staff/lonsing/diss/">Dissertation</a>
   by Florian Lonsing.</li>
 </ul>
