@@ -2862,9 +2862,7 @@ remove_id_from_notify_list (Var * vars, Var * owner, LitIDStack * notify_list,
   VarIDStack *other_offset_in_notify_list = last < 0 ?
     &(last_var->neg_offset_in_notify_list) : &(last_var->
                                                pos_offset_in_notify_list);
-  //#ifndef NDEBUG
-  //VarID old_list_offset = QDPLL_COUNT_STACK (*notify_list);
-  //#endif
+
   other_offset_in_notify_list->start[last_offset] = del_pos;
 
   assert (count_in_notify_clause_watcher_list (notify_list, signed_id) == 0);
@@ -3562,7 +3560,6 @@ has_constraint_spurious_pure_lit (QDPLL * qdpll, Constraint * c)
      because we use original clauses for detection. */
   if (!c->learnt && !c->is_cube)
     {
-      //DOES NOT HOLD for user-given cubes:      assert (!c->is_cube);
       return 0;
     }
   assert (!qdpll->options.no_spure_literals);
@@ -4193,9 +4190,6 @@ init_literal_watchers_for_constraint (QDPLL * qdpll, Constraint * c)
   Var *vars = qdpll->pcnf.vars;
   const int is_cube = c->is_cube;
 
-  //REMARK: could also use this code pattern for watcher update,
-  //which is MUCH cleaner BUT also possibly wastes work since we
-  //always search full lits from end to start.  
   unsigned int right_offset, left_offset;
   right_offset =
     find_init_watcher_pos (qdpll, is_cube, vars, c->lits,
@@ -4209,7 +4203,7 @@ init_literal_watchers_for_constraint (QDPLL * qdpll, Constraint * c)
           !has_constraint_spurious_pure_lit (qdpll, c))
         return is_cube ? QDPLL_SOLVER_STATE_SAT : QDPLL_SOLVER_STATE_UNSAT;
       else
-        assert (c->is_cube || c->learnt); /* assertion 'c->learnt' failed for user-given cubes. */
+        assert (c->is_cube || c->learnt); 
     }
   else if (right_offset != QDPLL_WATCHER_SAT)
     {
@@ -12699,9 +12693,6 @@ qdpll_adjust_vars (QDPLL * qdpll, VarID num)
       if (new_size_user_vars < cur_size_vars)
         new_size_user_vars = cur_size_vars;
 
-      /* For the first tests, use static size of user vars. */
-      //            QDPLL_ABORT_QDPLL(1,"Resize of user-vars temporarily disabled; use static limit.");
-
       const unsigned int cur_size_internal_vars = cur_size_vars - cur_size_user_vars;
       assert (cur_size_internal_vars <= cur_size_vars);
       const unsigned int new_size_vars = new_size_user_vars + cur_size_internal_vars; 
@@ -12732,8 +12723,6 @@ qdpll_adjust_vars (QDPLL * qdpll, VarID num)
           /* Reset dependencies here to clear any old-internal candidates
              maintained in dependency manager. */
           qdpll_reset_deps (qdpll);
-
-          //abort();
         }
       assert_internal_vars_integrity (qdpll);
     }
