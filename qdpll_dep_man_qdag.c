@@ -2,8 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
- University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
+ Johannes Kepler University, Linz, Austria and 
+ Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -18,7 +22,6 @@
  You should have received a copy of the GNU General Public License
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 
 #include <assert.h>
 #include <stdlib.h>
@@ -1656,9 +1659,12 @@ is_lit_on_lit_stack (LitIDStack * stack, LitID lit)
 /* -------------------- START: INTERNAL FUNCTIONS -------------------- */
 
 static int
-compare_lits_by_variable_nesting (QDPLL * qdpll, int is_cube, LitID lit1,
-                                  LitID lit2)
+compare_lits_by_variable_nesting (QDPLL * qdpll, LitID lit1, LitID lit2)
 {
+  /* We should never call this function in this module since sorting is too
+     costly. */
+  QDPLL_ABORT_DEPMAN (1, "reached expected dead code!");
+
   Var *vars = qdpll->pcnf.vars;
   VarID var_id1 = LIT2VARID (lit1);
   VarID var_id2 = LIT2VARID (lit2);
@@ -3609,11 +3615,6 @@ fill_candidates (QDPLLDepManQDAG * dm)
 #if COMPUTE_STATS
   assert (dm->stats.num_cur_inactive == 0);
   assert (dm->stats.num_cur_active_cands == 0);
-  /* Important: must regard top-level assignments as inactive. Such
-     assigned variables are never (de-)activated since they are
-     persistent. */
-  dm->stats.num_cur_inactive =
-    dm->dmg.qdpll->assigned_vars_top - dm->dmg.qdpll->assigned_vars;
 #endif
   Var *vars = dm->pcnf->vars;
 
@@ -3624,6 +3625,7 @@ fill_candidates (QDPLLDepManQDAG * dm)
       Var *p, *e;
       for (p = vars, e = vars + dm->pcnf->size_vars; p < e; p++)
         {
+          assert (!p->GETQDAG (type).mark_is_candidate);
           assert (!p->GETQDAG (type).mark_notified_inactive);
           assert (!p->GETQDAG (type).mark0);
           assert (!p->GETQDAG (type).mark1);
@@ -5104,9 +5106,12 @@ type_reduce (QDPLLDepManGeneric * dmg,
     {
       if (!lits_sorted)
         {
+          /* We should never call this function if the literal set is not
+             sorted since sorting is too costly. */
+          QDPLL_ABORT_DEPMAN (1, "reached expected dead code!");
           unsigned int cnt = QDPLL_COUNT_STACK (**lit_stack);
           QDPLL_SORT (qdpll, int, compare_lits_by_variable_nesting,
-                      (*lit_stack)->start, cnt, 1);
+                      (*lit_stack)->start, cnt);
         }
 
       /* Reduce literals by scope order. */
@@ -5145,9 +5150,12 @@ type_reduce (QDPLLDepManGeneric * dmg,
                                    : QDPLL_QTYPE_EXISTS);
       if (!lits_sorted)
         {
+          /* We should never call this function if the literal set is not
+             sorted since sorting is too costly. */
+          QDPLL_ABORT_DEPMAN (1, "reached expected dead code!");
           unsigned int cnt = QDPLL_COUNT_STACK (**lit_stack);
           QDPLL_SORT (qdpll, int, compare_lits_by_variable_nesting,
-                      (*lit_stack)->start, cnt, 1);
+                      (*lit_stack)->start, cnt);
         }
     }
 
@@ -5311,10 +5319,6 @@ qdpll_dep_man_reset (QDPLLDepManGeneric * dmg)
     {
       if (p->id)
         {
-          /* Remove variable from priority queue. This is done right
-             here although queue is implemented outside (this avoids
-             traversing the variable list again). */
-          p->priority_pos = QDPLL_INVALID_PQUEUE_POS;
           /* NOTE: here we also release memory held by QDAG. This is
              actually not needed and can be optimized. */
           qdpll_dep_man_notify_reset_variable (dmg, p->id);
@@ -5916,6 +5920,56 @@ qdpll_dep_man_reduce_lits (QDPLLDepManGeneric * dmg, LitIDStack ** lit_stack,
 #endif
 }
 
+
+static LitID *
+qdpll_dep_man_get_candidates (QDPLLDepManGeneric * dmg)
+{
+  QDPLLDepManQDAG *dm = (QDPLLDepManQDAG *) dmg;
+  const QDPLLDepManType type = dmg->type;
+  QDPLL_ABORT_DEPMAN (!(dm->state.init),
+		      "dependency manager not initialized.");
+
+  /* Count candidates. 
+
+     TODO: we could also maintain a counter directly in the candidate list
+     to avoid that traversal. */
+  unsigned int cnt = 0;
+  Var *vars = dm->pcnf->vars;
+  Var *c;
+  VarID cid, cidn;
+  for (cid = dm->candidates.first; cid; cid = c->qdag.cand_link.next)
+    {
+      c = VARID2VARPTR (vars, cid);
+      assert (c->GETQDAG (type).mark_is_candidate);
+      cnt++;
+    }
+
+  /* Allocate zero-terminated array of candidates. Caller is
+     responsible for releasing that memory. We do not use memory
+     manager here because caller might not have access to it to call
+     'free' afterwards. */
+  LitID *result = malloc ((cnt + 1) * sizeof (LitID));
+  memset (result, 0, (cnt + 1) * sizeof (LitID));
+  LitID *rp = result;
+
+  for (cid = dm->candidates.first; cid; cid = c->qdag.cand_link.next)
+    {
+      c = VARID2VARPTR (vars, cid);
+      assert (c->GETQDAG (type).mark_is_candidate);
+      assert (c->id > 0);
+      assert (c->scope->type == QDPLL_QTYPE_EXISTS || 
+              c->scope->type == QDPLL_QTYPE_FORALL);
+      /* Existential (universal) variables are exported as positive
+         (negative) ID. */
+      *rp++ = c->scope->type == QDPLL_QTYPE_EXISTS ? c->id : -c->id;
+      assert (rp < (result + cnt + 1));
+    }
+  assert (rp == result + cnt);
+  assert (!(*rp));
+
+  return result;
+}
+
 /* -------------------- END: CORE FUNCTIONS -------------------- */
 
 
@@ -5955,6 +6009,7 @@ qdpll_qdag_dep_man_create (QDPLLMemMan * mm, QDPLLPCNF * pcnf,
   dm->dmg.depends = qdpll_dep_man_depends;
   dm->dmg.get_class_rep = qdpll_dep_man_get_class_rep;
   dm->dmg.reduce_lits = qdpll_dep_man_reduce_lits;
+  dm->dmg.get_candidates = qdpll_dep_man_get_candidates;
 
   return dm;
 }

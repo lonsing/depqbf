@@ -2,8 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
- University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
+ Johannes Kepler University, Linz, Austria and 
+ Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -18,7 +22,6 @@
  You should have received a copy of the GNU General Public License
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 
 #ifndef QDPLL_INTERNALS_H_INCLUDED
 #define QDPLL_INTERNALS_H_INCLUDED
@@ -47,7 +50,9 @@ enum QDPLLDecisionHeuristic
   QDPLL_DH_SDCL = 0,
   QDPLL_DH_SIMPLE = 1,
   QDPLL_DH_QTYPE = 2,
-  QDPLL_DH_RANDOM = 3
+  QDPLL_DH_RANDOM = 3,
+  QDPLL_DH_FALSIFY = 4,
+  QDPLL_DH_SATISFY = 5
 };
 
 typedef enum QDPLLDecisionHeuristic QDPLLDecisionHeuristic;
@@ -61,6 +66,10 @@ struct QDPLL
   QDPLLPCNF pcnf;
   unsigned int cur_constraint_id;
   unsigned int num_deps_init;
+
+  ConstraintList cover_sets;
+
+  LitIDStack internal_cover_lits;
 
   /* Stacks used for traversing implication graph in QPUP. */
   VarPtrStack qpup_nodes;
@@ -113,10 +122,43 @@ struct QDPLL
   /* For tracing only: ID of empty clause/cube or of new initial cube. */
   ConstraintID res_cons_id;
 
+  /* For solving under assumptions: if the formula is e.g. unsatisfiable under
+     the given assumptions, then in the end the solver might produce a clause
+     containing only literals of variables assigned as assumptions. This case is
+     a generalization of solving without assumptions where in the end we derive
+     the empty clause. The final clause containing only assumption literals
+     represents the subset of the given assumptions which were in fact used to
+     show unsatisfiability. The user can access that clause through the interface
+     to retrieve the set of relevant assumption. */
+  Constraint *assumption_lits_constraint;
+
+  /* Data to fix QDIMACS output: some of the variables might be unassigned. */
+  char *qdo_assignment_table;
+  unsigned int qdo_table_bytes;
+
   struct
   {
     unsigned int scope_opened:1;
+    Scope *scope_opened_ptr;
     unsigned int decision_level;
+    /* Frame index: i.e. the number of times function 'qdpll_push' was called
+       without a corresponding 'qdpll_pop'. The frame index is zero initially,
+       it increases by one if push is called and decreases by one if pop is
+       called. Each frame index has a single internal variable associated
+       to. This variable "selects" the clauses attached to the frame. Selector
+       variables are always assigned. */
+    unsigned int cur_frame_index;
+    /* ID of a fresh internal variable to be associated to a frame. */
+    unsigned int next_free_internal_var_id;
+    /* Stack of internal variable IDs which were associated to a frame before
+       but that frame was popped off by 'qdpll_pop'. If necessary, then these
+       variables can be recycled. These variables must be set to */
+    VarIDStack popped_off_internal_vars;
+    /* Stack of internal variable IDs which are currently associated to a
+       frame. Note: there is no relation between the current frame index and the
+       internal variable associated to that frame. */
+    VarIDStack cur_used_internal_vars;
+
     unsigned int num_decisions;
     unsigned int num_backtracks;
     unsigned int pending_inits:1;
@@ -127,6 +169,15 @@ struct QDPLL
     unsigned int clause_resizes;
     unsigned int cube_resizes;
 
+    /* For incremental solving: must check learned cubes only if clauses have
+       been added after a 'push'. */
+    unsigned int pending_cubes_check:1;
+    unsigned int clauses_added_since_cube_check;
+    unsigned int num_sat_calls;
+
+    double var_act_inc;
+
+    unsigned int assumptions_given:1;
     unsigned int restarting:1;
     unsigned int num_restarts;
     unsigned int num_inner_restarts;
@@ -144,6 +195,8 @@ struct QDPLL
     } forced_assignment;
     int exceeded_soft_max_space;
     unsigned int disabled_clauses;
+    double solving_start_time;
+    unsigned int popped_off_orig_clause_cnt;
   } state;
 
   struct
@@ -163,7 +216,17 @@ struct QDPLL
     unsigned int depman_simple:1;
     unsigned int depman_qdag:1;
     unsigned int depman_qdag_print_deps_by_search:1;
+    /* Limits to be set by API function 'qdpll_setlimit'. */
+    unsigned int limit_set:1;
+    /* Max. decisions. */
     unsigned int max_dec;
+    /* Max. seconds wallclock time. */
+    unsigned int max_secs;
+    /* Max. assignments. */
+    // temporarily disabled: unsigned int max_assigned;
+    /* Max. backtracks. */
+    unsigned int max_btracks;
+    /* Max. space (soft limit). */
     unsigned int max_space;
     int seed;
     unsigned int soft_max_space;
@@ -193,6 +256,8 @@ struct QDPLL
     unsigned int no_qpup_sdcl:1;
     unsigned int no_lazy_qpup:1;
     unsigned int bump_vars_once:1;
+    unsigned int long_dist_res:1;
+    unsigned int incremental_use:1;
   } options;
 
 #if COMPUTE_STATS
@@ -249,13 +314,19 @@ struct QDPLL
     unsigned long long int total_learnt_cubes_mtfs;
     unsigned long long int total_learnt_clauses_mtfs;
     unsigned long long int total_learnt_clauses;
+    unsigned long long int total_learnt_taut_clauses;
     unsigned long long int total_learnt_clauses_size;
     unsigned long long int total_learnt_cubes;
+    unsigned long long int total_learnt_taut_cubes;
     unsigned long long int total_learnt_cubes_size;
     unsigned long long int total_unit_lcubes;
+    unsigned long long int total_unit_taut_lcubes;
     unsigned long long int total_sat_lcubes;
+    unsigned long long int total_sat_taut_lcubes;
     unsigned long long int total_unit_lclauses;
+    unsigned long long int total_unit_taut_lclauses;
     unsigned long long int total_empty_lclauses;
+    unsigned long long int total_empty_taut_lclauses;
     unsigned long long int total_constraint_dels;
     unsigned long long int total_clause_dels;
     unsigned long long int total_cube_dels;

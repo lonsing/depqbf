@@ -2,8 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
- University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
+ Johannes Kepler University, Linz, Austria and 
+ Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -18,7 +22,6 @@
  You should have received a copy of the GNU General Public License
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 
 #include <stdio.h>
 #include <string.h>

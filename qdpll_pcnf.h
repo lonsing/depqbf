@@ -2,8 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
- University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
+ Johannes Kepler University, Linz, Austria and 
+ Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -18,7 +22,6 @@
  You should have received a copy of the GNU General Public License
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 
 #ifndef QDPLL_PCNF_H_INCLUDED
 #define QDPLL_PCNF_H_INCLUDED
@@ -72,6 +75,7 @@ QDPLL_DECLARE_STACK (LitID, LitID);
 QDPLL_DECLARE_STACK (QDPLLQuantifierType, QDPLLQuantifierType);
 QDPLL_DECLARE_STACK (LitIDPtr, LitID *);
 QDPLL_DECLARE_STACK (BLitsOcc, BLitsOcc);
+QDPLL_DECLARE_STACK (ScopePtr, Scope *);
 
 typedef unsigned int QDPLLVarMode;
 #define QDPLL_VARMODE_UNDEF 0
@@ -79,12 +83,28 @@ typedef unsigned int QDPLLVarMode;
 #define QDPLL_VARMODE_PURE 2
 #define QDPLL_VARMODE_LBRANCH 3
 #define QDPLL_VARMODE_RBRANCH 4
+#define QDPLL_VARMODE_ASSUMED 5
 
 struct QDPLLPCNF
 {
+  /* Linked list of scopes internal to the solver. This list is obtained by
+     cleaning up the user-given scopes stored in the list 'user_scopes' by
+     removing variables without occurrences, removing empty scopes and merging
+     adjacent scopes of the same type. However, the list of user-given scopes
+     does not change. */
   ScopeList scopes;
-  VarID max_declared_var_id;
+  /* Linked list of user-given scopes, maintained through the API functions. */
+  ScopeList user_scopes;
+  /* Stack of pointers to scopes in linked list 'user_scopes'. This is an auxiliary
+     data structure to be used in incremental solving when the scope list
+     modified by API functions. This stack is redundant but it allows
+     maintenance of scope list to be performed in constant time. */
+  ScopePtrStack user_scope_ptrs;
+  VarID max_declared_user_var_id;
+  /* Total size of var-table. */
   VarID size_vars;
+  /* Size of that part of var-table which is reserved for user-given vars. */
+  VarID size_user_vars;
   VarID used_vars;
   Var *vars;
   ConstraintList clauses;
@@ -103,6 +123,8 @@ struct Scope
 {
   QDPLLQuantifierType type;
   unsigned int nesting;
+  /* Flag to distinguish user-given scopes from internal scopes. */
+  unsigned int is_internal:1;
   VarIDStack vars;
   ScopeLink link;
 
@@ -122,12 +144,21 @@ struct Var
   /* Two multi-purpose marks. */
   unsigned int mark0:1;
   unsigned int mark1:1;
+  /* Mark to indicate if variable is internal, i.e. used as selector
+     variable. */
+  unsigned int is_internal:1;
   unsigned int mark_propagated:1;
   unsigned int mark_is_neg_watching_cube:1;
   unsigned int mark_is_pos_watching_cube:1;
 #if COMPUTE_STATS
   unsigned int mark_stats_type_reduce_lits:1;
 #endif
+
+  /* If variable is internal: the ID of the active (i.e. not popped off) frame
+     where that variable is used as selector variable. If a frame is popped
+     off then this value has no meaning. Otherwise, the value indicates the
+     position of the variable on the stack 'cur_used_internal_vars'. */
+  unsigned int frame_index;
 
   /* Marks used in learning. */
   unsigned int mark_learn0:1;
@@ -186,7 +217,18 @@ struct Var
   BLitsOccStack pos_notify_lit_watchers;
   BLitsOccStack neg_notify_lit_watchers;
 
+  /* Pointer to internal scope of variable: will be set when importing
+     a variable from its user-scope. */
   Scope *scope;
+  /* Pointer to user scope: will be set when the user adds the
+     variable to its scope through the API. 
+     NOTE: this pointer is necessary because we must universal-reduce
+     clauses based on the user-prefix at the time when they are
+     added. Hence we must use the nesting levels of the user scopes to sort
+     literals in added clauses. */
+  Scope *user_scope;
+  /* Position of this variable's ID on the stack of variables of its user-scope. */
+  unsigned int offset_in_user_scope_vars;
   unsigned int priority_pos;
   double priority;
 
@@ -207,6 +249,7 @@ struct Constraint
   /* Counting the number of times a constraint is watched by a
      variable. */
   unsigned int is_watched:(sizeof (unsigned int) * 8 - 2);
+  unsigned int is_taut:1;
 
   unsigned int dep_init_level:(sizeof (unsigned int) * 8 - 1);
   /* NOTE: only for '--no-spure-literals'; marks constraints to be cleaned up. */
@@ -310,23 +353,23 @@ struct Constraint
     *(p) = tmp;                                        \
   } while (0)
 
-#define INTERNAL_SORTING_CMPSWAP(Q, T,cmp,iscube,p,q)	      \
+#define INTERNAL_SORTING_CMPSWAP(Q, T,cmp,p,q)                \
   do {                                                        \
-    if ((cmp) (Q, iscube, *(p), *(q)) > 0)		      \
+    if ((cmp) (Q, *(p), *(q)) > 0)                            \
       INTERNAL_SORTING_SWAP (T, p, q);                        \
   } while(0)
 
-#define INTERNAL_INSERTION_SORT(Q,T,cmp,a,n,iscube)			\
+#define INTERNAL_INSERTION_SORT(Q,T,cmp,a,n)                            \
   do {									\
     T pivot;								\
     int l = 0, r = (n) - 1, i, j;					\
     for (i = r; i > l; i--)						\
-      INTERNAL_SORTING_CMPSWAP (Q, T, cmp, iscube, (a) + i - 1, (a) + i); \
+      INTERNAL_SORTING_CMPSWAP (Q, T, cmp, (a) + i - 1, (a) + i);       \
     for (i = l + 2; i <= r; i++)                                        \
       {									\
         j = i;								\
         pivot = (a)[i];							\
-        while ((cmp) (Q, iscube, pivot, (a)[j - 1]) < 0)		\
+        while ((cmp) (Q, pivot, (a)[j - 1]) < 0)                        \
           {								\
 	    (a)[j] = (a)[j - 1];					\
 	    j--;							\
@@ -336,22 +379,22 @@ struct Constraint
   } while (0)
 
 #ifdef NDEBUG
-#define CHECK_SORTED(Q,cmp,a,n,iscube) do { } while(0)
+#define CHECK_SORTED(Q,cmp,a,n) do { } while(0)
 #else
-#define CHECK_SORTED(Q,cmp,a,n,iscube)				\
+#define CHECK_SORTED(Q,cmp,a,n)                                 \
   do {								\
     int i;							\
     for (i = 0; i < (n) - 1; i++)				\
-      assert ((cmp) (Q, iscube, (a)[i], (a)[i + 1]) <= 0);	\
+      assert ((cmp) (Q, (a)[i], (a)[i + 1]) <= 0);              \
   } while(0)
 #endif
 
-#define QDPLL_SORT(Q,T,cmp,a,n,iscube)				\
+#define QDPLL_SORT(Q,T,cmp,a,n)                                 \
   do {								\
     T * aa = (a);						\
     int nn = (n);						\
-    INTERNAL_INSERTION_SORT (Q, T, cmp, aa, nn, iscube);	\
-    CHECK_SORTED (Q, cmp, aa, nn, iscube);			\
+    INTERNAL_INSERTION_SORT (Q, T, cmp, aa, nn);                \
+    CHECK_SORTED (Q, cmp, aa, nn);                              \
   } while (0)
 
 #endif

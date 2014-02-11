@@ -2,8 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
- University, Linz, Austria and Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
+ Johannes Kepler University, Linz, Austria and 
+ Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -19,13 +23,12 @@
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef QDPLL_CONFIG_H_INCLUDED
 #define QDPLL_CONFIG_H_INCLUDED
 
 #include <limits.h>
 
-/* This switch enables all expensive assertions (anyway overwridden by
+/* This switch enables all expensive assertions (anyway overridden by
  'NDEBUG'). */
 #define FULL_ASSERT 0
 
@@ -70,10 +73,22 @@
 /* End: assertion switches. */
 
 #define DEFAULT_VARS_SIZE (1 << 0)
+#define DEFAULT_USER_VARS_SIZE (1 << 0)
+#define DEFAULT_INTERNAL_VARS_INCREASE (100)
 #define QDPLL_INVALID_DECISION_LEVEL UINT_MAX
 
 #define COMPUTE_STATS 0
 #define COMPUTE_TIMES 0
+
+/* When generating initial cubes, make sure that first we collect an
+assignment which satisfies all the clauses WITHOUT reducing innermost
+existential literals on the fly. */
+#define COLLECT_FULL_COVER_SETS 1
+
+/* Allow to collect as many cover sets as 'COLLECT_FULL_COVER_SETS_MULT_LIMIT'
+   times the current maximal number of learned cubes. */
+#define COLLECT_FULL_COVER_SETS_MULT_LIMIT (1)
+
 
 /* Type of default dependency manager. 'QDPLL_DEPMAN_TYPE_SIMPLE' is the
    original quantifier prefix and 'QDPLL_DEPMAN_TYPE_QDAG' causes the solver to

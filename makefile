@@ -1,5 +1,5 @@
-#CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -O3 
 CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -O3 
+#CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -g3 -DNDEBUG
 #CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -g3 
 #CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -g3 -pg -fprofile-arcs -ftest-coverage -static
 OBJECTS=qdpll_main.o qdpll_app.o qdpll.o qdpll_mem.o qdpll_dep_man_qdag.o

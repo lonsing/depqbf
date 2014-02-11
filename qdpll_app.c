@@ -2,8 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
- Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz, Johannes Kepler
- University, Linz, Austria and Vienna University of Technology, Vienna, Austria. 
+
+ Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
+ Johannes Kepler University, Linz, Austria and 
+ Vienna University of Technology, Vienna, Austria.
+
+ Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -18,7 +22,6 @@
  You should have received a copy of the GNU General Public License
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,17 +38,19 @@
 #include "qdpll_internals.h"
 
 
-#define VERSION						\
-  "DepQBF 2.0\n"					\
-  "Copyright 2010, 2011, 2012, 2013 Florian Lonsing and Aina Niemetz,\n" \
-  "Johannes Kepler University, Linz, Austria and\n"\
-"Vienna University of Technology, Vienna, Austria.\n"			\
-"This is free software; see COPYING for copying conditions.\n"		\
-"There is NO WARRANTY, to the extent permitted by law.\n"
+#define VERSION                                                         \
+  "DepQBF 3.0\n"                                                        \
+  "Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing,\n"           \
+  "  Johannes Kepler University, Linz, Austria and\n"                   \
+  "  Vienna University of Technology, Vienna, Austria.\n"               \
+  "Copyright 2012 Aina Niemetz, "                                       \
+  "Johannes Kepler University, Linz, Austria.\n"                        \
+  "This is free software; see COPYING for copying conditions.\n"        \
+  "There is NO WARRANTY, to the extent permitted by law.\n"
 
 
 
-#define USAGE \
+#define USAGE1 \
 "usage: depqbf [ <option> ... ] [ <in-file> ]\n"\
 "\n"\
 "  where <in-file> is a file in (Q)DIMACS format (default: stdin)\n"\
@@ -56,16 +61,23 @@
 "\n"\
 "  -h, --help                      display usage information\n"\
 "  -v                              enable verbosity incrementally (at most '-v -v')\n"\
+"  --pretty-print                  print the parsed formula after cleaning up (delete tautologies,\n"\
+"                                    superfluous variables, quantifier blocks, and literals; sort \n"\
+"                                    literals in clauses by quantifier nesting levels and IDs).\n"\
+"  --incremental-use               Relevant ONLY for API use: enable incremental solving. \n"\
+ "                                   Must be combined with '--dep-man=simple'. \n"      \
 "  --qdo                           QDIMACS output generation (partial certificate):\n"\
 "                                    If the outermost (i.e. leftmost) quantifier block\n"\
 "                                    of a satisfiable QBF is existentially quantified,\n"\
 "                                    then print an assignment to the variables of this\n"\
-"                                    block (and dually for unsatisfiable QBFs and\n"\
-"                                    universal variables from the outermost block, if\n"\
-"                                    that block is universally quantified).\n"\
+"                                    block (and dual for unsatisfiable QBFs and\n"\
+"                                    universal variables from the outermost block,\n"\
+"                                    if that block is universally quantified).\n"\
 "  --traditional-qcdcl             apply a traditional variant of clause and cube learning (QCDCL),\n"\
-"                                    which was applied in the previous version 1.0 of DepQBF.\n"\
-"                                    In this version 2.0, by default lazy QPUP-based QCDCL is applied.\n"\
+"                                    which was applied in previous versions of DepQBF.\n"\
+"                                    In this version 3.0, by default lazy QPUP-based QCDCL is applied.\n"\
+"  --long-dist-res                 Apply long-distance resolution in constraint learning. \n"\
+"                                    Must be combined with '--traditional-qcdcl' and '--dep-man=simple'.\n"\
 "  --no-lazy-qpup                  disable lazy QPUP-based QCDCL and carry out all resolution steps.\n"\
 "  --no-qpup-cdcl                  apply traditional QCDCL for clause learning (instead of QPUP).\n"\
 "  --no-qpup-sdcl                  apply traditional QCDCL for cube learning (instead of QPUP).\n"\
@@ -74,7 +86,9 @@
 "                                            bqrp ... binary QRP format\n"\
 "                                    NOTE: tracing must be combined with options '--dep-man=simple' and\n"\
 "                                          either '--traditional-qcdcl' (which disables QPUP-based QCDCL)\n"\
-"                                          or '--no-lazy-qpup' (to enable tracing with QPUP-based QCDCL).\n"\
+"                                          or '--no-lazy-qpup' (to enable tracing with QPUP-based QCDCL).\n"
+
+#define USAGE2 \
 "  --dep-man=<val>                 set dependency manager: if <val>=qdag (default) then the solver\n"\
 "                                    uses the standard dependency scheme; if <val>=simple then the\n"\
 "                                    solver uses the given quantifier prefix of the input formula\n"	\
@@ -95,6 +109,9 @@
 "  --orestart-dist-inc=<val>       increase distance of outer restarts by <val> (default 5)\n"\
 "  --irestart-dist-init=<val>      set initial distance of inner restarts to <val> (default 100)\n"\
 "  --irestart-dist-inc=<val>       increase distance of inner restarts by <val> (default 10)\n"\
+"  --max-dec=<val>                 Abort after <val> assignments by decision making.\n"\
+"  --max-btracks=<val>             Abort after <val> backtracks.\n"\
+"  --max-secs=<val>                Abort after <val> seconds.\n"\
 "\n"
 
 
@@ -175,6 +192,8 @@ print_abort_err (QDPLLApp * app, char *msg, ...)
     c = getc (in);
 
 
+/* TODO: there should not be any tracing in this module. Instead, read the
+   input formula, clean it up and then write any trace information. */
 static void
 parse (QDPLLApp * app, QDPLL * qdpll, FILE * in, int trace)
 {
@@ -495,7 +514,7 @@ set_signal_handlers (QDPLLApp * app)
 
 
 static void
-print_result_message (QDPLLApp * app, QDPLL * qdpll, QDPLLResult result)
+print_result_message (QDPLLApp * app, QDPLL * qdpll, QDPLLResult result, FILE *stream)
 {
   /* Print result message; this may not always be desired and depends on the 
      current usage of the solver library. */
@@ -503,13 +522,13 @@ print_result_message (QDPLLApp * app, QDPLL * qdpll, QDPLLResult result)
     {
       /* Print own output format. */
       if (result == QDPLL_RESULT_SAT)
-        fprintf (stdout, "SAT\n");
+        fprintf (stream, "SAT\n");
       else if (result == QDPLL_RESULT_UNSAT)
-        fprintf (stdout, "UNSAT\n");
+        fprintf (stream, "UNSAT\n");
       else if (!app->options.pretty_print && !app->options.deps_only)
         {
           assert (result == QDPLL_RESULT_UNKNOWN);
-          fprintf (stdout, "UNKNOWN\n");
+          fprintf (stream, "UNKNOWN\n");
         }
     }
   else
@@ -523,7 +542,8 @@ print_result_message (QDPLLApp * app, QDPLL * qdpll, QDPLLResult result)
 static void
 print_usage ()
 {
-  fprintf (stdout, USAGE);
+  fprintf (stdout, USAGE1);
+  fprintf (stdout, USAGE2);
 }
 
 
@@ -588,9 +608,9 @@ qdpll_main (int argc, char **argv)
     }
   else
     {
-      result = qdpll_sat (qdpll);
+        result = qdpll_sat (qdpll);
 #if (COMPUTE_STATS || COMPUTE_TIMES)
-      qdpll_print_stats (qdpll);
+        qdpll_print_stats (qdpll);
 #endif
     }
 
@@ -599,7 +619,7 @@ qdpll_main (int argc, char **argv)
   else if (app.options.trace == TRACE_BQRP)
     fprintf (stdout, "%cr ", 0);
 
-  print_result_message (&app, qdpll, result);
+  print_result_message (&app, qdpll, result, stdout);
 
   cleanup (qdpll, &app);
 
