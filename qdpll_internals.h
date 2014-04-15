@@ -65,7 +65,6 @@ struct QDPLL
   LitIDStack add_stack_tmp;
   QDPLLPCNF pcnf;
   unsigned int cur_constraint_id;
-  unsigned int num_deps_init;
 
   ConstraintList cover_sets;
 
@@ -161,9 +160,6 @@ struct QDPLL
 
     unsigned int num_decisions;
     unsigned int num_backtracks;
-    unsigned int pending_inits:1;
-    unsigned int top_level_re_init_dist;
-    unsigned int deps_init_trail_disabled;
     unsigned int lclauses_size;
     unsigned int lcubes_size;
     unsigned int clause_resizes;
@@ -197,6 +193,8 @@ struct QDPLL
     unsigned int disabled_clauses;
     double solving_start_time;
     unsigned int popped_off_orig_clause_cnt;
+    /* Flag to toggle import of user given prefix. */
+    unsigned int no_scheduled_import_user_scopes:1;
   } state;
 
   struct
@@ -332,7 +330,6 @@ struct QDPLL
     unsigned long long int total_cube_dels;
     unsigned long long int total_type_reduce_lits;
     unsigned long long int total_sat_cubes;
-    unsigned long long int total_mtf_dirty_deps_constraints;
     unsigned long long int total_type_reduce_effort;
     unsigned long long int total_type_reduce_calls;
     unsigned long long int total_type_reduce_costs;

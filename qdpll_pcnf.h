@@ -158,7 +158,13 @@ struct Var
      where that variable is used as selector variable. If a frame is popped
      off then this value has no meaning. Otherwise, the value indicates the
      position of the variable on the stack 'cur_used_internal_vars'. */
-  unsigned int frame_index;
+  unsigned int frame_index:((8 * sizeof(unsigned int)) - 1);
+  /* Flag to indicate whether the variable is currently on the stack
+    'qdpll->state.cur_used_internal_vars', i.e. it is the selector variable of
+    an active frame. This is necessary to prevent the solver from cleaning up
+    selector variables of empty frames created by a 'push' without adding
+    clauses. */
+  unsigned int is_cur_used_internal_var:1;
 
   /* Marks used in learning. */
   unsigned int mark_learn0:1;
@@ -251,7 +257,6 @@ struct Constraint
   unsigned int is_watched:(sizeof (unsigned int) * 8 - 2);
   unsigned int is_taut:1;
 
-  unsigned int dep_init_level:(sizeof (unsigned int) * 8 - 1);
   /* NOTE: only for '--no-spure-literals'; marks constraints to be cleaned up. */
   unsigned int deleted:1;
 

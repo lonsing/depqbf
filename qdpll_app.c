@@ -39,7 +39,7 @@
 
 
 #define VERSION                                                         \
-  "DepQBF 3.0\n"                                                        \
+  "DepQBF 3.01\n"                                                        \
   "Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing,\n"           \
   "  Johannes Kepler University, Linz, Austria and\n"                   \
   "  Vienna University of Technology, Vienna, Austria.\n"               \
@@ -597,7 +597,13 @@ qdpll_main (int argc, char **argv)
   parse (&app, qdpll, app.options.in, app.options.trace);
 
   if (app.options.pretty_print)
-    qdpll_print (qdpll, stdout);
+    {
+      /* Call 'qdpll_gc' to clean up the formula by removing variables
+         which have no occurrences and removing empty quantifier
+         blocks. */
+      qdpll_gc (qdpll);
+      qdpll_print (qdpll, stdout);
+    }
   else if (app.options.deps_only)
     {
       qdpll_init_deps (qdpll);

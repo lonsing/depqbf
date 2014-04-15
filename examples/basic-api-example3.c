@@ -24,8 +24,15 @@ int main (int argc, char** argv)
 
   /* Add a fresh variable with 'id == 1' to the open block. */
   qdpll_add (depqbf, 1);
+  qdpll_add (depqbf, 99);
   /* Close open scope. */
   qdpll_add (depqbf, 0);
+
+  assert(qdpll_is_var_declared (depqbf, 1));
+  assert(qdpll_is_var_declared (depqbf, 99));
+  assert(!qdpll_is_var_declared (depqbf, 50));
+  assert(!qdpll_is_var_declared (depqbf, 51));
+  assert(!qdpll_is_var_declared (depqbf, 52));
 
   /* Add a new existential block at nesting level 2. */
   qdpll_new_scope_at_nesting (depqbf, QDPLL_QTYPE_EXISTS, 2);
@@ -62,6 +69,13 @@ int main (int argc, char** argv)
 
   /* Must reset the solver before adding further clauses or variables. */
   qdpll_reset (depqbf);
+
+  /* Var 99 still is declared although no clauses were added containing literals of 99 before. */
+  assert(qdpll_is_var_declared (depqbf, 1));
+  assert(qdpll_is_var_declared (depqbf, 99));
+  assert(!qdpll_is_var_declared (depqbf, 50));
+  assert(!qdpll_is_var_declared (depqbf, 51));
+  assert(!qdpll_is_var_declared (depqbf, 52));
 
   /* Open a new frame of clauses. Clauses added after the 'push' can be
      removed later by calling 'pop'. */
@@ -110,7 +124,6 @@ int main (int argc, char** argv)
      e 2 0
      1 -2 0
      -1 2 0 */
-  qdpll_print (depqbf, stdout);
 
   res = qdpll_sat (depqbf);
   /* The formula is satisfiable again because we discarded the clause '1 2 0'
