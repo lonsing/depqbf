@@ -13137,13 +13137,17 @@ qdpll_get_value (QDPLL * qdpll, VarID id)
     {
       assert (qdpll->qdo_table_bytes == 0);
 
+      /* Must properly handle default scope. */
       Scope *outer = qdpll->pcnf.scopes.first;
       assert (outer);
       assert (outer->is_internal);
       assert (outer->type == QDPLL_QTYPE_EXISTS);
-      if (QDPLL_COUNT_STACK (outer->vars) == 0 && outer->link.next)
+      assert (qdpll->pcnf.user_scopes.first);
+      if (outer->type != qdpll->pcnf.user_scopes.first->type && 
+          outer->link.next)
         {
           outer = outer->link.next;
+          assert (outer);
           assert (QDPLL_COUNT_STACK (outer->vars) != 0);
           assert (outer->nesting != QDPLL_DEFAULT_SCOPE_NESTING);
         }
@@ -13156,7 +13160,11 @@ qdpll_get_value (QDPLL * qdpll, VarID id)
       if ((qdpll->result == QDPLL_RESULT_SAT && outer->type == QDPLL_QTYPE_EXISTS) ||
           (qdpll->result == QDPLL_RESULT_UNSAT && outer->type == QDPLL_QTYPE_FORALL))
         {
-          if (qdo_has_outer_scope_unassigned_vars (qdpll, outer, qdpll->result))
+          /* Bug fix: must check if 'result_constraint' is set (set
+             only if we have top-level conflict/solution). If it is not
+             set then we return 'QDPLL_ASSIGNMENT_UNDEF' below for
+             variables which have not been assigned a value. */
+          if (qdpll->result_constraint && qdo_has_outer_scope_unassigned_vars (qdpll, outer, qdpll->result))
             {
               qdpll->qdo_table_bytes = (qdpll_get_max_declared_var_id (qdpll) + 1) * sizeof (char);
               qdpll->qdo_assignment_table = (char *) qdpll_malloc (qdpll->mm, qdpll->qdo_table_bytes);
@@ -13256,8 +13264,6 @@ qdpll_print (QDPLL * qdpll, FILE * out)
 void
 qdpll_print_qdimacs_output (QDPLL * qdpll)
 {
-  QDPLL_ABORT_QDPLL (qdpll->qdo_assignment_table || qdpll->qdo_table_bytes, 
-                     "Unexpected computed assignment.");
   /* NOTE: here we print the largest declared variable ID and the
      number of used original clauses. This might differ from the preamble
      of the original input file if that file was not strictly QDIMACS
@@ -13281,9 +13287,12 @@ qdpll_print_qdimacs_output (QDPLL * qdpll)
   assert (outer);
   assert (outer->is_internal);
   assert (outer->type == QDPLL_QTYPE_EXISTS);
-  if (QDPLL_COUNT_STACK (outer->vars) == 0 && outer->link.next)
+  assert (qdpll->pcnf.user_scopes.first);
+  if (outer->type != qdpll->pcnf.user_scopes.first->type && 
+      outer->link.next)
     {
       outer = outer->link.next;
+      assert (outer);
       assert (QDPLL_COUNT_STACK (outer->vars) != 0);
       assert (outer->nesting != QDPLL_DEFAULT_SCOPE_NESTING);
     }
@@ -13291,16 +13300,6 @@ qdpll_print_qdimacs_output (QDPLL * qdpll)
   if ((result == QDPLL_RESULT_SAT && outer->type == QDPLL_QTYPE_EXISTS) ||
       (result == QDPLL_RESULT_UNSAT && outer->type == QDPLL_QTYPE_FORALL))
     {
-      assert (!qdpll->qdo_assignment_table);      
-      assert (!qdpll->qdo_table_bytes);
-
-      if (qdo_has_outer_scope_unassigned_vars (qdpll, outer, result))
-        {
-          qdpll->qdo_table_bytes = (qdpll_get_max_declared_var_id (qdpll) + 1) * sizeof (char);
-          qdpll->qdo_assignment_table = (char *) qdpll_malloc (qdpll->mm, qdpll->qdo_table_bytes);
-          qdo_fix_outer_scope_unassigned_vars(qdpll, outer, result, qdpll->qdo_assignment_table);
-        }
-
       Var *vars = qdpll->pcnf.vars;
       VarID *p, *e;
       for (p = outer->vars.start, e = outer->vars.top; p < e; p++)
@@ -13308,40 +13307,11 @@ qdpll_print_qdimacs_output (QDPLL * qdpll)
           assert (*p);
           Var *var = VARID2VARPTR (vars, *p);
           assert (var->id);
-
-          /* Print either the values assigned during the search process or the
-             values computed by traversing the final conflict/solution graph
-             which are stored in the table 'assignment_table'. For variables
-             which are unassigned, i.e. which were neither assigned by the
-             solver nor for which a value was computed in
-             'qdo_fix_outer_scope_unassigned_vars', the value 'false' is
-             printed by default. In this case, such variables can be regarded
-             as redundant as the formula's truth value was determined without
-             considering them at all. */
+          QDPLLAssignment a;
           /* Do not print assignments of internal variables. */
-          if (!var->is_internal && var->assignment != QDPLL_ASSIGNMENT_UNDEF)
-            fprintf (stdout, "V %d 0\n",
-                     var->assignment == QDPLL_ASSIGNMENT_TRUE ?
-                     var->id : -(var->id));
-          else if (!var->is_internal)
-            {
-              assert (qdpll->qdo_assignment_table);
-              /* NOTE: in order to print an assignment for EVERY variable in
-                 the leftmost block, the following IF-condition has to be
-                 deleted. */
-              if (qdpll->qdo_assignment_table[var->id] != QDPLL_ASSIGNMENT_UNDEF)
-                fprintf (stdout, "V %d 0\n",
-                         qdpll->qdo_assignment_table[var->id] == QDPLL_ASSIGNMENT_TRUE ?
-                         var->id : -(var->id));
-            }
-        }
-
-      if (qdpll->qdo_assignment_table)
-        {
-          assert (qdpll->qdo_table_bytes);
-          qdpll_free (qdpll->mm, qdpll->qdo_assignment_table, qdpll->qdo_table_bytes);
-          qdpll->qdo_assignment_table = 0;
-          qdpll->qdo_table_bytes = 0;
+          if (!var->is_internal && (a = qdpll_get_value (qdpll, var->id)) != QDPLL_ASSIGNMENT_UNDEF)
+            fprintf (stdout, "V %d 0\n", 
+                     a == QDPLL_ASSIGNMENT_FALSE ? -var->id : var->id);
         }
     }
 }

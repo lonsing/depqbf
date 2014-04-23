@@ -39,7 +39,7 @@
 
 
 #define VERSION                                                         \
-  "DepQBF 3.01\n"                                                        \
+  "DepQBF 3.02\n"                                                        \
   "Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing,\n"           \
   "  Johannes Kepler University, Linz, Austria and\n"                   \
   "  Vienna University of Technology, Vienna, Austria.\n"               \
