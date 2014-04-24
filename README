@@ -5,7 +5,7 @@ April 2014
 GENERAL INFORMATION
 -------------------
 
-This is version 3.01 of the search-based QBF solver DepQBF. Compared to
+This is version 3.02 of the search-based QBF solver DepQBF. Compared to
 version 3.0, the semantics of the API for incremental use of the solver has
 been adapted. Please see the header file 'qdpll.h' for comments and the code
 examples in the subdirectory "examples" of the release.
@@ -14,10 +14,16 @@ The example './examples/basic-api-example2.c' is the most comprehensive one
 and demonstrates the use of the API and, in particular, the 'qdpll_gc'
 function.
 
-Many thanks to Robert Koenighofer, Martin Kronegger, and Andreas Pfandler for
-valuable feedback.
+Version 3.02 fixes a segmentation fault in the QDIMACS output generation by
+the API functions 'qdpll_get_value' and 'qdpll_print_qdimacs_output'. 
 
-Compared to the previously released version 2.0, DepQBF 3.01 includes the
+Version 3.02 supports shared library generation (contributed by Thomas
+Krennwallner).
+
+Many thanks to Robert Koenighofer, Thomas Krennwallner, Martin Kronegger, and
+Andreas Pfandler for valuable feedback.
+
+Compared to the previously released version 2.0, DepQBF 3.02 includes the
 following major changes:
 
 - Incremental solving: the API of the solver allows for incremental solving
