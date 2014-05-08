@@ -1,0 +1,92 @@
+
+May 2014
+
+-------------------
+GENERAL INFORMATION
+-------------------
+
+DepQBF is a QBF solver written in C. DepQBF4J enables java applications to use
+DepQBF as a library. It provides a wrapper for the API functions of DepQBF
+which is implemented using the Java Native Interface (JNI).
+
+This is in particular interesting, because now not only applications written
+in C/C++ but also in Java can benefit from the advantages of DepQBF such as:
+
+ - no need to write the QBF formulas to a file. Instead, the formula can be
+   added to DepQBF using its API functions. This is expected to produce less
+   I/O overhead compared to calling DepQBF via system calls from a Java
+   program and reading the formula from a file.
+
+ - make use of incremental QBF solving (possibly a huge performance
+   increase, depending on your application domain)
+
+ - QBF solving under assumptions (for advanced users)
+
+This version of DepQBF4J builds upon DepQBF 3.03. It is compatible with later,
+modified versions of DepQBF provided that the signature of the functions in
+DepQBF's API (see the header file 'qdpll.h' in the source distribution of
+DepQBF) do not change compared to DepQBF 3.03. It is possible to add new
+functions to DepQBF's API without the need to change the current version of
+DepQBF4J.
+
+The purpose of DepQBF4J is to make QBF solving more accessible to users who
+prefer Java over C and who are interested in using QBF as a modeling language
+for their applications.
+
+The SAT solver Sat4j (http://www.sat4j.org/) is related to DepQBF4J in that it
+provides SAT solving for Java applications. Sat4j, however, is written
+entirely in Java whereas DepQBF4J is a Java wrapper for DepQBF, which is
+written in C.
+
+Many thanks to Florian Lonsing for his great help.
+
+
+-------
+LICENSE
+-------
+
+DepQBF4J is free software released under GPLv3:
+
+https://www.gnu.org/copyleft/gpl.html
+
+See also the file COPYING.
+
+
+-------------------------------------------
+COMPILING DepQBF4J AND RUNNING ITS EXAMPLES
+-------------------------------------------
+
+1) Extract the compressed DepQBF4J archive.
+
+2) Change into the folder 'jni' and build DepQBF + DepQBF4J with the
+   command 'make'.  In case the environment variable JAVA_HOME is not
+   specified on your system, edit the makefile and uncomment the line
+   '#JAVA_HOME=/usr/lib/jvm/java-6-sun-1.6.0.26' (if necessary, edit
+   according to your java setup. The header file 'jni.h' must be found 
+   under the path given by the environment variable JAVA_HOME).
+
+3) Change back into the directory where this readme file is located.
+
+4) Run the examples from the current directory with the following commands:
+
+   java -ea -Djava.library.path=jni -cp src/ depqbf4j.Example_basic_api_example
+   java -ea -Djava.library.path=jni -cp src/ depqbf4j.Example_basic_api_example2
+   java -ea -Djava.library.path=jni -cp src/ depqbf4j.Example_basic_api_example3
+   java -ea -Djava.library.path=jni -cp src/ depqbf4j.Example_basic_manual_selectors
+
+   NOTE: add the option -ea only if you want to enable assertions.
+
+   These examples demonstrate the use of DepQBF4J in Java programs. They
+   replicate the C code examples which are part of the DepQBF source
+   distribution.
+
+-------
+CONTACT
+-------
+
+For comments, questions, bug reports etc. related to DepQBF4J, do not
+hesitate to contact Martin Kronegger and/or Andreas Pfandler:
+
+http://dbai.tuwien.ac.at/staff/kronegger/
+
+http://dbai.tuwien.ac.at/staff/pfandler/
