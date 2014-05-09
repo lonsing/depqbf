@@ -26,10 +26,10 @@
 
         <a href="https://github.com/lonsing/depqbf" class="button fork"><strong>View On GitHub</strong></a>
         <div class="downloads">
-          <span>Download latest release:</span>
+          <span>Download the latest release:</span>
           <ul>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-3.02.zip" class="button">ZIP</a></li>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-3.02.tar.gz" class="button">TAR</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-3.03.zip" class="button">ZIP</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-3.03.tar.gz" class="button">TAR</a></li>
           </ul>
         </div>
       </div><!-- end banner -->
@@ -45,7 +45,8 @@
 
 <h2>News</h2>
 <ul>
-<li>2014-04-23: <b>Source code of DepQBF 3.02 released.</b></li>
+<li>2014-05-09: <b>Source code of DepQBF 3.03 released, including DepQBF4J.</b></li>
+<li>2014-04-23: Source code of DepQBF 3.02 released.</li>
 <li>2014-04-15: Source code of DepQBF 3.01 released.</li>
 <li>2014-02-12: Source code of DepQBF 3.0 released.</li>
 <li>2014-02-12: DepQBF at the <a href="http://fmv.jku.at/rerise14/">ReRiSE'14
@@ -81,7 +82,7 @@
 
 <ul>
 <li>
-Version 3.02 (<a href="https://github.com/lonsing/depqbf/archive/version-3.02.tar.gz">source code</a>), see the
+Version 3.03 (<a href="https://github.com/lonsing/depqbf/archive/version-3.03.tar.gz">source code</a>), see the
 <a href="README.txt">README</a> file for release notes.
 </li>
 </ul>
@@ -90,9 +91,12 @@ Version 3.02 (<a href="https://github.com/lonsing/depqbf/archive/version-3.02.ta
 
 <p><em>These versions are considered <b>deprecated</b> and are provided only for
     documentation. For practical applications, please always use the latest
-  release above.</em></p>
+  release above (unless stated otherwise).</em></p>
 
 <ul>
+<li>
+Version 3.02 (<a href="https://github.com/lonsing/depqbf/archive/version-3.02.tar.gz">source code</a>).
+</li>
 <li>
 Version 3.01 (<a href="https://github.com/lonsing/depqbf/archive/version-3.01.tar.gz">source code</a>).
 </li>
@@ -155,13 +159,31 @@ support incremental QBF solving.</p>
 
 
 <p>
-  The <a href="https://github.com/lonsing/depqbf/archive/version-3.02.tar.gz">latest
+  The <a href="https://github.com/lonsing/depqbf/archive/version-3.03.tar.gz">latest
     release</a> comes with <a href="https://github.com/lonsing/depqbf/blob/master/examples/basic-api-example2.c">examples</a> which illustrate the use of the API of DepQBF for
   incremental solving and solving under assumptions. Please see the
 <a href="README.txt">README</a> file of the latest release for further information.</p>
 
 <p> The slides presented at the <a href="http://fmv.jku.at/rerise14/">ReRiSE'14
     Winter School</a> give an overview of the API of DepQBF: <a href="./depqbf-in-practice.pdf">slides</a>.</p>
+
+
+
+<h2>DepQBF4J: A Java Interface of DepQBF</h2>
+
+<p>DepQBF4J enables Java applications to use DepQBF as a library. It provides a
+wrapper for the API functions of DepQBF which is implemented using the Java
+Native Interface (JNI). Using DepQBF as a library within other programs avoids
+I/O overhead and allows for a tighter integration of DepQBF in QBF-based
+workflows.</p>
+
+<p>The purpose of DepQBF4J is to make QBF solving more accessible to users who
+prefer Java over C and who are interested in using QBF as a modeling language
+for their applications.</p>
+
+<p>The <a href="https://github.com/lonsing/depqbf/archive/version-3.03.tar.gz">latest
+release</a> of DepQBF (version 3.03 or later) includes DepQBF4J in a subdirectory, including Java code
+examples. You can browse the code of DepQBF4J <a href="https://github.com/lonsing/depqbf/tree/master/DepQBF4J-0.1">here</a>.</p>
 
 
 
