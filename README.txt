@@ -1,11 +1,11 @@
 
-April 2014
+May 2014
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-This is version 3.02 of the search-based QBF solver DepQBF. Compared to
+This is version 3.03 of the search-based QBF solver DepQBF. Compared to
 version 3.0, the semantics of the API for incremental use of the solver has
 been adapted. Please see the header file 'qdpll.h' for comments and the code
 examples in the subdirectory "examples" of the release.
@@ -13,6 +13,15 @@ examples in the subdirectory "examples" of the release.
 The example './examples/basic-api-example2.c' is the most comprehensive one
 and demonstrates the use of the API and, in particular, the 'qdpll_gc'
 function.
+
+Version 3.03 includes the first release of DepQBF4J, a Java interface to
+DepQBF which allows to call DepQBF as a library from Java programs. Please see
+the README file in the subdirectory './DepQBF4J-0.1' for further information
+and usage examples. DepQBF4J is based on the Java Native Interface (JNI) and
+was implemented by Martin Kronegger and Andreas Pfandler.
+
+Version 3.03 fixes a wrong assertion in the file 'qdpll.c' but otherwise is
+equivalent to version 3.02.
 
 Version 3.02 fixes a segmentation fault in the QDIMACS output generation by
 the API functions 'qdpll_get_value' and 'qdpll_print_qdimacs_output'. 
@@ -23,7 +32,7 @@ Krennwallner).
 Many thanks to Robert Koenighofer, Thomas Krennwallner, Martin Kronegger, and
 Andreas Pfandler for valuable feedback.
 
-Compared to the previously released version 2.0, DepQBF 3.02 includes the
+Compared to the previously released version 2.0, DepQBF 3.03 includes the
 following major changes:
 
 - Incremental solving: the API of the solver allows for incremental solving
