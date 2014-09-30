@@ -1,11 +1,11 @@
 
-May 2014
+September 2014
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-This is version 3.03 of the search-based QBF solver DepQBF. Compared to
+This is version 3.04 of the search-based QBF solver DepQBF. Compared to
 version 3.0, the semantics of the API for incremental use of the solver has
 been adapted. Please see the header file 'qdpll.h' for comments and the code
 examples in the subdirectory "examples" of the release.
@@ -14,7 +14,10 @@ The example './examples/basic-api-example2.c' is the most comprehensive one
 and demonstrates the use of the API and, in particular, the 'qdpll_gc'
 function.
 
-Version 3.03 includes the first release of DepQBF4J, a Java interface to
+Version 3.04 fixes the return value of the API function
+'qdpll_new_scope_at_nesting', but otherwise is equivalent to version 3.03.
+
+Since version 3.03, DepQBF includes the first release of DepQBF4J, a Java interface to
 DepQBF which allows to call DepQBF as a library from Java programs. Please see
 the README file in the subdirectory './DepQBF4J-0.1' for further information
 and usage examples. DepQBF4J is based on the Java Native Interface (JNI) and
@@ -32,7 +35,7 @@ Krennwallner).
 Many thanks to Robert Koenighofer, Thomas Krennwallner, Martin Kronegger, and
 Andreas Pfandler for valuable feedback.
 
-Compared to the previously released version 2.0, DepQBF 3.03 includes the
+Compared to the previously released version 2.0, DepQBF 3.04 includes the
 following major changes:
 
 - Incremental solving: the API of the solver allows for incremental solving
@@ -145,6 +148,11 @@ switch on *expensive* assertions (recommended only for debugging). The solver
 will run *substantially* slower in this case. As usual, using the compiler
 flag 'DNDEBUG' removes all assertions from the code, regardless from the value
 of 'FULL_ASSERT'.
+
+Compilation on a Mac:
+
+Depending on your system, it might be necessary to replace "-soname"
+by "-install_name" in the makefile.
 
 
 -----------------------

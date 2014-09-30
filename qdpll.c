@@ -12956,8 +12956,8 @@ qdpll_new_scope (QDPLL * qdpll, QDPLLQuantifierType qtype)
    Variables can be added to the scope opened by the most recent call of this
    function by 'qdpll_add' (similar to 'qdpll_new_scope'). The opened scope
    must be closed by adding '0' via 'qdpll_add'. Adjacent scopes of the same
-   quantifier type can be added but they will be merged into a single
-   scope. Returns the nesting of the added scope, which should be used as a
+   quantifier type can be added (but internally they will be merged into a single
+   scope). Returns the nesting of the added scope, which should be used as a
    handle of this scope, and which can safely be passed to
    'qdpll_add_var_to_scope'.
    NOTE: the run time of this function is linear in the length of quantifier prefix. */
@@ -13018,7 +13018,8 @@ qdpll_new_scope_at_nesting (QDPLL * qdpll, QDPLLQuantifierType qtype, Nesting ne
       assert (QDPLL_COUNT_STACK(qdpll->pcnf.user_scope_ptrs) == 
               qdpll->pcnf.user_scopes.cnt);
 
-      return s->nesting;
+      assert (qdpll->state.scope_opened_ptr == scope);
+      return qdpll->state.scope_opened_ptr->nesting;
     }
 }
 
