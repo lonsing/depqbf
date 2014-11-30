@@ -23,17 +23,17 @@
 package depqbf4j;
 
 public class DepQBF4J {
-	public static byte QTYPE_EXISTS = -1;
-	public static byte QTYPE_UNDEF = 0;
-	public static byte QTYPE_FORALL = 1;
+	public static final byte QTYPE_EXISTS = -1;
+	public static final byte QTYPE_UNDEF = 0;
+	public static final byte QTYPE_FORALL = 1;
 
-	public static byte RESULT_UNKNOWN = 0;
-	public static byte RESULT_SAT = 10;
-	public static byte RESULT_UNSAT = 20;
+	public static final byte RESULT_UNKNOWN = 0;
+	public static final byte RESULT_SAT = 10;
+	public static final byte RESULT_UNSAT = 20;
 
-	public static byte ASSIGNMENT_FALSE = -1;
-	public static byte ASSIGNMENT_UNDEF = 0;
-	public static byte ASSIGNMENT_TRUE = 1;
+	public static final byte ASSIGNMENT_FALSE = -1;
+	public static final byte ASSIGNMENT_UNDEF = 0;
+	public static final byte ASSIGNMENT_TRUE = 1;
 
 	static {
 		System.loadLibrary("depqbf4j");
