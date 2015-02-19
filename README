@@ -32,6 +32,7 @@ illustrated by './examples/basic-clause-groups-api-example.c'
 Many thanks to Robert Koenighofer, Adria Gascon, Thomas Krennwallner, Martin
 Kronegger, Andreas Pfandler, and Simon Cruanes for valuable feedback.
 
+
 --------
 FEATURES
 --------
@@ -184,6 +185,20 @@ DepQBF.
 By default, statistical output is disabled. To enable statistics, set the flag
 'COMPUTE_STATS' in file 'qdpll_config.h' from 0 to 1. Similarly, time
 statistics can be enabled by setting flag 'COMPUTE_STATS'.
+
+
+-------------------------------
+IMPORTANT NOTE ON PREPROCESSING
+-------------------------------
+
+DepQBF is a plain solver and does not have built-in preprocessing. However,
+preprocessing typically increases the performance considerably. It is highly
+recommended -- for non-incremental solving -- to combine DepQBF with
+preprocessors such as Bloqqer and/or QxBF, for example:
+
+http://fmv.jku.at/bloqqer/
+
+http://fmv.jku.at/qxbf/
 
 
 --------------------------------------
