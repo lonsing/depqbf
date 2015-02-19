@@ -28,8 +28,8 @@
         <div class="downloads">
           <span>Download the latest release:</span>
           <ul>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-3.04.zip" class="button">ZIP</a></li>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-3.04.tar.gz" class="button">TAR</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-4.0.zip" class="button">ZIP</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-4.0.tar.gz" class="button">TAR</a></li>
           </ul>
         </div>
       </div><!-- end banner -->
@@ -45,6 +45,10 @@
 
 <h2>News</h2>
 <ul>
+<li><b>2015-02-19: Source code of DepQBF 4.0 released, including a novel API
+    for incremental solving.</b></li>
+<li>2015-02-19: <a href="http://fmv.jku.at/qbf15/"><b>QBF Workshop 2015</b></a>
+  affiliated to <a href="http://www.cs.utexas.edu/~marijn/sat15/">SAT 2015</a>.</li>
 <li>2015-01-26: <a href="http://fmv.jku.at/quantify15/"><b>QUANTIFY Workshop 2015</b></a>
   affiliated to <a href="http://conference.mi.fu-berlin.de/cade-25/home">CADE 2015</a>.</li>
 <li>2014-09-30: Source code of DepQBF 3.04 released.</li>
@@ -95,13 +99,13 @@ Bronze medal in the Applications Track of the <a href="http://qbf.satisfiability
     GPLv3</a>. Source code is available
   from GitHub
   at <a href="https://github.com/lonsing/depqbf">https://github.com/lonsing/depqbf</a>. Alternatively,
-  source code can be downloaded using the links below.</p>
+  source code can be downloaded here.</p>
 
 <h3>Latest release</h3>
 
 <ul>
 <li>
-Version 3.04 (<a href="https://github.com/lonsing/depqbf/archive/version-3.04.tar.gz">source code</a>), see the
+Version 4.0 (<a href="https://github.com/lonsing/depqbf/archive/version-4.0.tar.gz">source code</a>), see the
 <a href="README.txt">README</a> file for release notes.
 </li>
 </ul>
@@ -113,6 +117,9 @@ Version 3.04 (<a href="https://github.com/lonsing/depqbf/archive/version-3.04.ta
   release above (unless stated otherwise).</em></p>
 
 <ul>
+<li>
+Version 3.04 (<a href="https://github.com/lonsing/depqbf/archive/version-3.04.tar.gz">source code</a>).
+</li>
 <li>
 Version 3.03 (<a href="https://github.com/lonsing/depqbf/archive/version-3.03.tar.gz">source code</a>).
 </li>
@@ -165,6 +172,30 @@ DepQBF for references and a brief outline of the idea.</p>
   scratch but tries to reuse information learned from previously solved
   formulae. </p>
 
+<p>
+Version 4.0 (or later) provides an API for incremental solving by clause groups. A clause
+group is a set of clauses which is incrementally added to and deleted from the
+formula. The clause group API generalizes the push/pop API and is suitable for
+incremental applications where the underlying formula is modified in a non-uniform
+way. The design of the clause group API is inspired by the SAT
+solver <a href="https://www.princeton.edu/~chaff/zchaff.html">zChaff</a>. Implementation
+details and an overview of the API can be found in the following technical report:
+</p>
+
+<p>
+Florian Lonsing and Uwe Egly: 
+<em>DepQBF: An Incremental QBF Solver Based on Clause Groups.</em> 
+Technical report, arXiv/CoRR, February 2015. <a href="http://arxiv.org/abs/1502.02484">http://arxiv.org/abs/1502.02484</a>
+</p>
+
+
+<h3>Unsatisfiable Cores</h3>
+
+<p>
+The clause group API of DepQBF version 4.0 (or later) allows for a convenient
+extraction of unsatisfiable cores of QBFs.
+</p>
+
 
 <h2>Solving under Assumptions</h2>
 
@@ -176,18 +207,29 @@ is commonly used in workflows based on incremental SAT solving. In DepQBF,
 assumptions can be used as an alternative to the push and pop operations to
 support incremental QBF solving.</p>
 
+<p><b>For performance reasons, however, it is recommended to use either the
+  push/pop API or the clause group API for incremental solving.</b></p>
+
 
 <h2>API Examples</h2>
 
-
 <p>
-  The <a href="https://github.com/lonsing/depqbf/archive/version-3.03.tar.gz">latest
-    release</a> comes with <a href="https://github.com/lonsing/depqbf/blob/master/examples/basic-api-example2.c">examples</a> which illustrate the use of the API of DepQBF for
+  The <a href="https://github.com/lonsing/depqbf/archive/version-4.0.tar.gz">latest
+    release</a> comes with <a href="https://github.com/lonsing/depqbf/blob/master/examples/">examples</a> which illustrate the use of the API of DepQBF for
   incremental solving and solving under assumptions. Please see the
-<a href="README.txt">README</a> file of the latest release for further information.</p>
+<a href="README.txt">README</a> file of the latest release for further
+information.</p>
+
+<ul>
+<li>Example: <a href="https://github.com/lonsing/depqbf/blob/master/examples/basic-api-example2.c">basic use, push/pop API</a></li>
+<li>Example: <a href="https://github.com/lonsing/depqbf/blob/master/examples/basic-clause-groups-api-example.c">clause
+    group API</a></li>
+</ul>
 
 <p> The slides presented at the <a href="http://fmv.jku.at/rerise14/">ReRiSE'14
-    Winter School</a> give an overview of the API of DepQBF: <a href="./depqbf-in-practice.pdf">slides</a>.</p>
+    Winter School</a> give an overview of the API of
+  DepQBF: <a href="./depqbf-in-practice.pdf">slides</a>. (This set of slides
+  does not yet include the clause group API, which is part of version 4.0.)</p>
 
 
 
@@ -203,9 +245,9 @@ workflows.</p>
 prefer Java over C and who are interested in using QBF as a modeling language
 for their applications.</p>
 
-<p>The <a href="https://github.com/lonsing/depqbf/archive/version-3.03.tar.gz">latest
+<p>The <a href="https://github.com/lonsing/depqbf/archive/version-4.0.tar.gz">latest
 release</a> of DepQBF (version 3.03 or later) includes DepQBF4J in a subdirectory, including Java code
-examples. You can browse the code of DepQBF4J <a href="https://github.com/lonsing/depqbf/tree/master/DepQBF4J-0.1">here</a>.</p>
+examples. You can browse the code of DepQBF4J <a href="https://github.com/lonsing/depqbf/tree/master/DepQBF4J-0.2">here</a>.</p>
 
 
 
@@ -257,9 +299,9 @@ contact <a href="http://www.kr.tuwien.ac.at/staff/lonsing/">Florian Lonsing</a>.
 <ul>
 
 <li> Paper at CP 2014 on incremental QBF solving: <em> Florian Lonsing and Uwe
-    Egly. Incremental QBF
-      Solving. In Proceedings of the 20th International Conference on Principles and Practice of
-Constraint Programming, LNCS, Springer, 2014. To appear (<a href="http://arxiv.org/abs/1402.2410">Preprint</a>).</em> </li>
+    Egly. <a href="http://dx.doi.org/10.1007/978-3-319-10428-7_38">Incremental QBF
+      Solving.</a> In Proceedings of the 20th International Conference on Principles and Practice of
+Constraint Programming, LNCS, Springer, 2014. (<a href="http://arxiv.org/abs/1402.2410">Preprint</a>).</em> </li>
 
 <li> Extended abstract at ICMS 2014 on incremental QBF solving: <a href="http://link.springer.com/chapter/10.1007%2F978-3-662-44199-2_48"><em> Florian Lonsing and Uwe
     Egly. Incremental QBF
