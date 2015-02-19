@@ -3,8 +3,8 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
- Johannes Kepler University, Linz, Austria and 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 
  Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
@@ -23,12 +23,17 @@
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "qdpll.h"
+#ifndef QDPLL_EXIT_H_INCLUDED
+#define QDPLL_EXIT_H_INCLUDED
 
-int qdpll_main (int argc, char **argv);
-
-int
-main (int argc, char **argv)
+enum QDPLLExitCodes
 {
-  return qdpll_main (argc, argv);
-}
+  QDPLL_EXIT_SUCC = 0,
+  QDPLL_EXIT_ERR = 1,
+  QDPLL_EXIT_SAT = 10,
+  QDPLL_EXIT_UNSAT = 20
+};
+
+typedef enum QDPLLExitCodes QDPLLExitCodes;
+
+#endif

@@ -3,11 +3,9 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
- Johannes Kepler University, Linz, Austria and 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
-
- Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -72,6 +70,7 @@ QDPLL_DECLARE_STACK (ConstraintPtr, Constraint *);
 QDPLL_DECLARE_STACK (VarPtr, Var *);
 QDPLL_DECLARE_STACK (VarID, VarID);
 QDPLL_DECLARE_STACK (LitID, LitID);
+QDPLL_DECLARE_STACK (ClauseGroupID, ClauseGroupID);
 QDPLL_DECLARE_STACK (QDPLLQuantifierType, QDPLLQuantifierType);
 QDPLL_DECLARE_STACK (LitIDPtr, LitID *);
 QDPLL_DECLARE_STACK (BLitsOcc, BLitsOcc);
@@ -154,23 +153,29 @@ struct Var
   unsigned int mark_stats_type_reduce_lits:1;
 #endif
 
-  /* If variable is internal: the ID of the active (i.e. not popped off) frame
-     where that variable is used as selector variable. If a frame is popped
-     off then this value has no meaning. Otherwise, the value indicates the
+  /* If variable is internal: the ID of the active (i.e. not deleted) clause group 
+     where that variable is used as selector variable. If a group is deleted
+     then this value has no meaning. Otherwise, the value indicates the
      position of the variable on the stack 'cur_used_internal_vars'. */
-  unsigned int frame_index:((8 * sizeof(unsigned int)) - 1);
+  unsigned int clause_group_id:((8 * sizeof(unsigned int)) - 2);
   /* Flag to indicate whether the variable is currently on the stack
     'qdpll->state.cur_used_internal_vars', i.e. it is the selector variable of
     an active frame. This is necessary to prevent the solver from cleaning up
     selector variables of empty frames created by a 'push' without adding
     clauses. */
   unsigned int is_cur_used_internal_var:1;
+  /* Flag to indicate whether a variable is currently the selector variable of
+     an inactive clause group. Inactive clause groups are temporarily deleted
+     by assigning their selector variable to true. However, unlike for
+     permanently deleted groups, these variables remain on stack
+     'cur_used_internal_vars' and are not garbage collected. This flag is
+     reset if an inactice clause group is activated again. */
+  unsigned int is_cur_inactive_group_selector:1;
 
   /* Marks used in learning. */
   unsigned int mark_learn0:1;
   unsigned int mark_learn1:1;
 
-  /* Marks used for QPUP. TODO: could re-use other marks already present. */
   unsigned int qpup_mark_pos:1;
   unsigned int qpup_mark_neg:1;
   unsigned int qpup_res_mark_pos:1;

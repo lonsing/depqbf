@@ -69,12 +69,12 @@ public class Example_basic_api_example2 {
 		   the output of the above 'qdpll_print'. However, the variable is still
 		   present in the prefix of the formula. We can check this by calling
 		   'qdpll_is_var_declared', passing the respective variable ID. */
-		assert DepQBF4J.isVarDeclared(1) != 0;
-		assert DepQBF4J.isVarDeclared(2) != 0;
-		assert DepQBF4J.isVarDeclared(3) != 0;
+		assert DepQBF4J.isVarDeclared(1);
+		assert DepQBF4J.isVarDeclared(2);
+		assert DepQBF4J.isVarDeclared(3);
 
 		/* For example, we did not declare a variable with ID 99. */
-		assert DepQBF4J.isVarDeclared(99) == 0;
+		assert !DepQBF4J.isVarDeclared(99);
 
 		/* Some assertions which demonstrate how to inspect the current prefix. */
 		assert DepQBF4J.getScopeType(1) == DepQBF4J.QTYPE_EXISTS;
@@ -98,9 +98,9 @@ public class Example_basic_api_example2 {
 		   the variables 1 and 2 do not occur in clauses any more. However, these
 		   variables are still present in the prefix, and the prefix remains
 		   unchanged. */
-		assert DepQBF4J.isVarDeclared(1) != 0;
-		assert DepQBF4J.isVarDeclared(2) != 0;
-		assert DepQBF4J.isVarDeclared(3) != 0;
+		assert DepQBF4J.isVarDeclared(1);
+		assert DepQBF4J.isVarDeclared(2);
+		assert DepQBF4J.isVarDeclared(3);
 		assert DepQBF4J.getScopeType(1) == DepQBF4J.QTYPE_EXISTS;
 		assert DepQBF4J.getScopeType(2) == DepQBF4J.QTYPE_FORALL;
 		assert DepQBF4J.getScopeType(3) == DepQBF4J.QTYPE_EXISTS;
@@ -126,11 +126,11 @@ public class Example_basic_api_example2 {
 
 			/* Variables 1 and 2 have been deleted by 'qdpll_gc', including their
 			   quantifier blocks because these blocks became empty. */
-			assert DepQBF4J.isVarDeclared(1) == 0;
-			assert DepQBF4J.isVarDeclared(2) == 0;
+			assert !DepQBF4J.isVarDeclared(1);
+			assert !DepQBF4J.isVarDeclared(2);
 			/* Variable 3 still occurs in a clause and hence 'qdpll_gc' does not clean
 			   it up. */
-			assert DepQBF4J.isVarDeclared(3) != 0;
+			assert DepQBF4J.isVarDeclared(3);
 			/* The current prefix consists of the existential block containing variable
 			   3 only. This block is now at nesting level 1 because the other blocks
 			   have been deleted by 'qdpll_gc'. */
@@ -145,7 +145,7 @@ public class Example_basic_api_example2 {
 			DepQBF4J.newScopeAtNesting(DepQBF4J.QTYPE_EXISTS, 1);
 			DepQBF4J.add(1);
 			DepQBF4J.add(0);
-			assert DepQBF4J.isVarDeclared(1) != 0;
+			assert DepQBF4J.isVarDeclared(1);
 
 			assert DepQBF4J.getNestingOfVar(1) == 1;
 			/* The block of variable 3 now appears at nesting level 2 because we added a
@@ -157,7 +157,7 @@ public class Example_basic_api_example2 {
 			DepQBF4J.newScopeAtNesting(DepQBF4J.QTYPE_FORALL, 2);
 			DepQBF4J.add(2);
 			DepQBF4J.add(0);
-			assert DepQBF4J.isVarDeclared(2) != 0;
+			assert DepQBF4J.isVarDeclared(2);
 
 			assert DepQBF4J.getNestingOfVar(1) == 1;
 			assert DepQBF4J.getNestingOfVar(2) == 2;

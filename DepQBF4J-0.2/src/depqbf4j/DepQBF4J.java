@@ -3,7 +3,7 @@
 
  DepQBF4J, a tool that enables Java applications to use DepQBF as a library.
 
- Copyright 2014 Martin Kronegger and Andreas Pfandler
+ Copyright 2014, 2015 Martin Kronegger and Andreas Pfandler
  Vienna University of Technology, Vienna, Austria.
 
  DepQBF4J is free software: you can redistribute it and/or modify
@@ -97,7 +97,7 @@ public class DepQBF4J {
 	/**
 	 * See qdpll.h from DepQBF for details.
 	 */
-	public static native int hasVarActiveOccs(int varId);
+	public static native boolean hasVarActiveOccs(int varId);
 
 	/**
 	 * See qdpll.h from DepQBF for details.
@@ -153,7 +153,7 @@ public class DepQBF4J {
 	/**
 	 * See qdpll.h from DepQBF for details.
 	 */
-	public static native int varDepends(int varId1, int varId2);
+	public static native boolean varDepends(int varId1, int varId2);
 
 	/**
 	 * See qdpll.h from DepQBF for details.
@@ -168,7 +168,7 @@ public class DepQBF4J {
 	/**
 	 * See qdpll.h from DepQBF for details.
 	 */
-	public static native int isVarDeclared(int varId);
+	public static native boolean isVarDeclared(int varId);
 
 	/**
 	 * See qdpll.h from DepQBF for details.
@@ -224,4 +224,52 @@ public class DepQBF4J {
 	 * See qdpll.h from DepQBF for details.
 	 */
 	public static native int[] getRelevantAssumptions();
+
+/* ------------ START: API functions for clause groups ------------ */
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+        public static native int newClauseGroup();
+
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+        public static native void deleteClauseGroup(int cgid);
+
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+        public static native void openClauseGroup(int cgid);
+
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+        public static native int getOpenClauseGroup();
+
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+        public static native boolean existsClauseGroup(int cgid);
+
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+        public static native void closeClauseGroup(int cgid);
+
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+	public static native int[] getRelevantClauseGroups();
+
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+        public static native void activateClauseGroup(int cgid);
+
+	/**
+	 * See qdpll.h from DepQBF for details.
+	 */
+        public static native void deactivateClauseGroup(int cgid);
+
+/* ------------ END: API functions for clause groups ------------ */
 }

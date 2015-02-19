@@ -3,8 +3,8 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
- Johannes Kepler University, Linz, Austria and 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 
  Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
@@ -1270,8 +1270,6 @@ assert_mark_non_candidates_from_exists (QDPLLDepManQDAG * dm, Scope * scope)
   VarPtrStack succ;
   QDPLL_INIT_STACK (succ);
 
-  /* NOTE: could actually start at universal variables directly. */
-
   VarID *p, *e;
   for (p = scope->vars.start, e = scope->vars.top; p < e; p++)
     {
@@ -1594,8 +1592,6 @@ referenced_by_active_existential_var (Var * vars, Var * v)
   if (v->GETQDAG (type).cnt.forall.active_direct_refs_by_exist_var != 0)
     return 1;
 
-  /* UNCLEAR: is it possible to return early under certain conditions? */
-
   /* Check if 'v' is indirectly referenced by removed transitive edge. */
   unsigned int i, end = v->GETQDAG (type).dedges.size;
   Edge *d;
@@ -1608,8 +1604,6 @@ referenced_by_active_existential_var (Var * vars, Var * v)
 
         Var *par;
         VarID parid = dvar->id;
-        /* NOTE: we conjecture that we can start at 'parid == dvar->cpar->id' 
-           since 'dvar' already checked above. */
 
         while (parid)
           {
@@ -1710,8 +1704,6 @@ create_edge (QDPLLMemMan * mm)
 
 /* Re-link all c-children of 'oldpar' to 'newpar', set pointers appropriately.
    This is required when existential classes are merged during insertion of c-edges. */
-
-/* TODO: need not explicitly unlink all children, can also append list to newpar's list!!! */
 static void
 fix_cchilds (Var * vars, Var * oldpar, Var * newpar, Var * oldparpar)
 {
@@ -1736,95 +1728,91 @@ fix_cchilds (Var * vars, Var * oldpar, Var * newpar, Var * oldparpar)
 }
 
 
-#define SWAP(v1, v2)                                \
+#define SWAP(v1, v2)                                  \
   do {                                                \
-    Var *tmp;                                        \
-    tmp = v1;                                        \
-    v1 = v2;                                        \
-    v2 = tmp;                                        \
+    Var *tmp;                                         \
+    tmp = v1;                                         \
+    v1 = v2;                                          \
+    v2 = tmp;                                         \
   } while (0)
 
 
-#define FIX_EDGE_PQS(vars, from, to, table, pq)                        \
+#define FIX_EDGE_PQS(vars, from, to, table, pq)                       \
   do {                                                                \
-    assert (from->id != to);                                        \
-    Edge *e;                                                        \
-    Var *tail_var;                                                \
-    while ((e = pq_remove_one (&(from)->pq)))                        \
+    assert (from->id != to);                                          \
+    Edge *e;                                                          \
+    Var *tail_var;                                                    \
+    while ((e = pq_remove_one (&(from)->pq)))                          \
       {                                                                \
-        tail_var = VARID2VARPTR(vars, e->tail_var);                \
-        et_remove (&(tail_var->table), from->id);                \
-        assert (tail_var->scope->nesting == e->priority);        \
-            assert (e->head_var == from->id);                        \
-        assert (e->priority < from->scope->nesting);                \
+        tail_var = VARID2VARPTR(vars, e->tail_var);                    \
+        et_remove (&(tail_var->table), from->id);                      \
+        assert (tail_var->scope->nesting == e->priority);              \
+        assert (e->head_var == from->id);                               \
+        assert (e->priority < from->scope->nesting);                    \
         assert (e->priority < VARID2VARPTR(vars, (to))->scope->nesting); \
-                                                                \
-        if (!HAS_EDGE(tail_var, to, table))                        \
-          {                                                        \
-            e->head_var = to;                                        \
+                                                                        \
+        if (!HAS_EDGE(tail_var, to, table))                             \
+          {                                                             \
+            e->head_var = to;                                           \
             pq_insert (mm, &(VARID2VARPTR(vars, (to))->pq), e, e->priority); \
-            et_insert(mm, &(tail_var->table), e);                        \
-          }                                                        \
-        else                                                        \
-          {                                                        \
-            delete_edge(mm, e);                                        \
-          }                                                        \
-      }                                                                \
+            et_insert(mm, &(tail_var->table), e);                       \
+          }                                                             \
+        else                                                            \
+          {                                                             \
+            delete_edge(mm, e);                                         \
+          }                                                             \
+      }                                                                 \
   } while (0)
 
 
-#define UPSHIFT_EDGES(vars, v, table, pq)                                \
-  do {                                                                        \
-    assert (UF_IS_REP (v,0,type));                                                \
-    Edge *e;                                                                \
+#define UPSHIFT_EDGES(vars, v, table, pq)                               \
+  do {                                                                  \
+    assert (UF_IS_REP (v,0,type));                                      \
+    Edge *e;                                                            \
     Var *cpar, *cur, *prev, *edge_from, *v_tmp = v;                        \
-    VarID cparid;                                                        \
-    unsigned int en;                                                        \
-    while ((cparid = v_tmp->GETQDAG(type).cedges.cpar) &&                        \
-           (cpar = VARID2VARPTR(vars, cparid)))                                \
-      {                                                                        \
-        assert (!(e = pq_access_min(&(v_tmp->pq)))                        \
+    VarID cparid;                                                       \
+    unsigned int en;                                                    \
+    while ((cparid = v_tmp->GETQDAG(type).cedges.cpar) &&               \
+           (cpar = VARID2VARPTR(vars, cparid)))                         \
+      {                                                                 \
+        assert (!(e = pq_access_min(&(v_tmp->pq)))                      \
                 || (en = VARID2VARPTR(vars, e->tail_var)->scope->nesting) == e->priority); \
                                                                         \
-        while ((e = pq_access_min (&(v_tmp->pq))) &&                        \
-               (en = e->priority) < cpar->scope->nesting)                \
-          {                                                                \
-            e = pq_remove_min (&(v_tmp->pq));                                \
+        while ((e = pq_access_min (&(v_tmp->pq))) &&                    \
+               (en = e->priority) < cpar->scope->nesting)               \
+          {                                                             \
+            e = pq_remove_min (&(v_tmp->pq));                           \
             edge_from = VARID2VARPTR(vars, e->tail_var);                \
-            assert (v_tmp == VARID2VARPTR(vars, e->head_var));                \
-            assert (edge_from->scope->nesting == en);                        \
-            et_remove (&(edge_from->table), v_tmp->id);                        \
+            assert (v_tmp == VARID2VARPTR(vars, e->head_var));          \
+            assert (edge_from->scope->nesting == en);                   \
+            et_remove (&(edge_from->table), v_tmp->id);                 \
                                                                         \
-            cur = prev = cpar;                                                \
+            cur = prev = cpar;                                          \
                                                                         \
-            while ((cparid = cur->GETQDAG(type).cedges.cpar) &&                        \
+            while ((cparid = cur->GETQDAG(type).cedges.cpar) &&         \
                    (cur = VARID2VARPTR(vars, cparid)) &&                \
-                   en < cur->scope->nesting)                                \
-              {                                                                \
-                prev = cur;                                                \
-              }                                                                \
+                   en < cur->scope->nesting)                            \
+              {                                                         \
+                prev = cur;                                             \
+              }                                                         \
                                                                         \
-            if (!HAS_EDGE (edge_from, prev->id, table))                        \
-              {                                                                \
-                e->head_var = prev->id;                                        \
+            if (!HAS_EDGE (edge_from, prev->id, table))                 \
+              {                                                         \
+                e->head_var = prev->id;                                 \
                 pq_insert (mm, &(prev->pq), e, en);                        \
-                et_insert (mm, &(edge_from->table), e);                        \
-              }                                                                \
+                et_insert (mm, &(edge_from->table), e);                 \
+              }                                                         \
             else                                                        \
               {                        /* delete d-edge (is already removed from pq) */ \
-                delete_edge (mm, e);                                        \
-              }                                                                \
-          }                                                                \
+                delete_edge (mm, e);                                    \
+              }                                                         \
+          }                                                             \
                                                                         \
-        /* UNCLEAR: could we somehow re-use cur or prev here for next var ? */ \
-        v_tmp = cpar;                                                        \
-      }                                                                        \
+        v_tmp = cpar;                                                   \
+      }                                                                 \
   } while (0)
 
 
-/* NOTE: in 'qdag' we fixed this function to be used for d-edges and s-edges. 
-   Returning 'prev' is only relevant for  s-edges -> this should be fixed! 
-*/
 static Var *
 balance (Var * vars, Var * v1, Var ** v2)
 {
@@ -1893,8 +1881,6 @@ insert_edge_aux (QDPLLMemMan * mm, Var * from, Var * to)
 static void
 insert_edge (QDPLLDepManQDAG * dm, Var * from, Var * to)
 {
-  /* NOTE: we do not have to use copies for 'from, to' when balancing. 
-     This is different from the macro-based version. */
   Var *vars = dm->pcnf->vars;
   QDPLLMemMan *mm = dm->mm;
   assert (QDPLL_SCOPE_EXISTS (to->scope));
@@ -1907,7 +1893,6 @@ insert_edge (QDPLLDepManQDAG * dm, Var * from, Var * to)
           || from->scope->type != to->scope->type);
   assert (from->scope->nesting < to->scope->nesting);
 
-  /* TODO: use one balance-semantics for insertion of d-edges and s-edges. */
   if (QDPLL_SCOPE_FORALL (from->scope))
     balance (vars, from, &to);
   else
@@ -2195,7 +2180,7 @@ extract_dependencies_from_lits (QDPLLDepManQDAG * dm, LitID * lits,
                            (LIT2VARPTR (vars, *tmp_p))
                            && LIT2VARPTR (vars,
                                           *tmp_p)->decision_level <= 0));
-                  insert_edge (dm, LIT2VARPTR (vars, *tmp_p), uf_find (vars, LIT2VARPTR (vars, *last_e_p), 0, type));        /* TODO: cache uf_find */
+                  insert_edge (dm, LIT2VARPTR (vars, *tmp_p), uf_find (vars, LIT2VARPTR (vars, *last_e_p), 0, type));
                   tmp_p++;
                 }
               while (tmp_p < prev_p);
@@ -2215,8 +2200,7 @@ extract_dependencies_from_lits (QDPLLDepManQDAG * dm, LitID * lits,
                       (QDPLL_VAR_MARKED_PROPAGATED (LIT2VARPTR (vars, *tmp_p))
                        && LIT2VARPTR (vars,
                                       *tmp_p)->decision_level <= 0));
-              insert_edge (dm, LIT2VARPTR (vars, *tmp_p), uf_find (vars, LIT2VARPTR (vars, *last_e_p), 0, type));        /* TODO: cache uf_find */
-              /* TODO: MUST CHECK PROP HERE! */
+              insert_edge (dm, LIT2VARPTR (vars, *tmp_p), uf_find (vars, LIT2VARPTR (vars, *last_e_p), 0, type));
               tmp_p++;
             }
           while (tmp_p < prev_p);
@@ -2229,13 +2213,7 @@ extract_dependencies_from_lits (QDPLLDepManQDAG * dm, LitID * lits,
 
 
 /* New code for removing transitive dependencies. Apply explicit search if 
-   suspected transtive dependencies are reachable. 
-   NOTE: this function should remove transtivie edges in general, but maybe 
-   we can speed up this process if we exploit properties of inserted edges 
-   (when avoding transitive edges)
-   NOTE: we currently only follow d-edges, but should in some situations also 
-   follows forest successors?
-*/
+   suspected transtive dependencies are reachable. */
 static int
 remove_transitivities (QDPLLDepManQDAG * dm)
 {
@@ -2518,7 +2496,7 @@ assert_merged_univ_vars (Var * vars, Scope * s)
     }
 }
 
-/* TODO: use parameterized function. */
+
 static void
 assert_merged_exist_vars (Var * vars, Scope * s)
 {
@@ -2551,8 +2529,6 @@ assert_merged_exist_vars (Var * vars, Scope * s)
 
 #endif
 
-
-/* TODO: same code as for universal variables -> use one parameterized function. */
 static void
 cleanup_non_rep_sedges (QDPLLMemMan * mm, Var * vars, Var * v)
 {
@@ -2616,7 +2592,6 @@ cleanup_non_rep_dedges (QDPLLMemMan * mm, Var * vars, Var * v)
 }
 
 
-/* TODO: same code as for universal merging -> use one parameterized function. */
 static void
 merge_exist_scope_vars_by_sedges (QDPLLMemMan * mm, Var * vars, Scope * s,
                                   const QDPLLDepManType type)
@@ -2942,8 +2917,7 @@ build_linear_dependency_graph (QDPLLDepManQDAG * dm)
     }
 
   /* Next, insert forest edges between existential scopes and s-edges
-     from exist-vars to exist-classes. NOTE: here we anticipate some
-     work to be done originally by class merging algorithm. */
+     from exist-vars to exist-classes. */
   Scope *prev;
   for (prev = dm->pcnf->scopes.last; prev; prev = prev->link.prev)
     if (QDPLL_SCOPE_EXISTS (prev) && prev->GETPART (type).classes[0].first)
@@ -3667,7 +3641,6 @@ fill_candidates (QDPLLDepManQDAG * dm)
 
           /* Mark forest roots as as beginning of
              inactive-sedge-frontier. */
-          /* NOTE: could factor out code. */
           if (QDPLL_SCOPE_EXISTS (s) && !v->GETQDAG (type).cedges.cpar)
             v->GETQDAG (type).cnt.exists.inactive_sedge_frontier = 1;
 
@@ -3990,7 +3963,7 @@ get_universal_candidates_top_down (QDPLLDepManQDAG * dm, Var * var)
 #ifndef NDEBUG
           else
             {
-              /* TODO: assert no member is candidate. */
+              /* assert no member is candidate. */
             }
 #endif
         }
@@ -4010,7 +3983,7 @@ get_universal_candidates_top_down (QDPLLDepManQDAG * dm, Var * var)
 #ifndef NDEBUG
           else
             {
-              /* TODO: assert that all d-edge-tail-vars of 'c' are actively referenced by exist. var. */
+              /* all d-edge-tail-vars of 'c' are actively referenced by exist. var. */
             }
 #endif
         }
@@ -4100,23 +4073,12 @@ notify_inactive_exists (QDPLLDepManQDAG * dm, Var * inactive_var,
         assert (inactive_class->scope->nesting < svar->scope->nesting);
         assert (UF_IS_REP (svar, 0, type));
         assert (svar->GETQDAG (type).cedges.cpar == inactive_var_rep->id);
-
-        /* NOTE: counter 'active_direct_refs_by_sedge' is actually an
-           optimization but not crucial for the notification. We could
-           do with just the propagated-counters in the classes by
-           inspecting all incoming s-edges for all 'svars' in this
-           loop. Clearly, the counter as used now avoids such
-           inspections. 
-           Further we could also use a watcher scheme instead of counters. */
-
         assert (svar->GETQDAG (type).cnt.exists.active_direct_refs_by_sedge >
                 0);
         svar->GETQDAG (type).cnt.exists.active_direct_refs_by_sedge--;
         assert (svar->GETQDAG (type).cnt.exists.active_direct_refs_by_sedge ==
                 count_direct_active_refs_by_sedge (vars, svar));
 
-        /* NOTE: can factor out code because 'inactive_sedge_frontier'
-           never changes within this loop. */
         if (rep_is_inactive &&
             svar->GETQDAG (type).cnt.exists.active_direct_refs_by_sedge == 0)
           get_universal_candidates_top_down (dm, svar);
@@ -4350,7 +4312,7 @@ undo_get_universal_candidates_top_down (QDPLLDepManQDAG * dm, Var * var)
 #ifndef NDEBUG
           else
             {
-              /* TODO: assert that all d-edge-tail-vars of 'c' are actively referenced by exist. var. */
+              /* all d-edge-tail-vars of 'c' are actively referenced by exist. var. */
               assert (!c->GETQDAG (type).cnt.exists.inactive_sedge_frontier);
             }
 #endif
@@ -4405,9 +4367,6 @@ notify_active_exists (QDPLLDepManQDAG * dm, Var * active_var,
         assert (svar->GETQDAG (type).cnt.exists.active_direct_refs_by_sedge ==
                 count_direct_active_refs_by_sedge (vars, svar));
 
-        /* NOTE: can factor out code because 'inactive_sedge_frontier'
-           never changes within this loop. */
-        /* NOTE: we do this only if counter goes from 0 to 1. */
         if (active_var_rep->GETQDAG (type).cnt.exists.inactive_sedge_frontier
             && svar->GETQDAG (type).cnt.exists.active_direct_refs_by_sedge ==
             1)
@@ -4962,17 +4921,10 @@ type_reduce_by_std_deps_adv (QDPLL * qdpll, LitIDStack ** lit_stack,
       LitIDStack *other = *lit_stack_tmp;
       assert (QDPLL_EMPTY_STACK (*other));
 
-      //NB: can optimize loop by assuming that lit-stack is always non-empty.
-
-      //NB can optimize loop since e.g. by 'type' can never remove univs from cubes.
-
       /* Traverse collected classes like merge-sort to add literals in
          scope order. */
       while (cp < ce && op < oe)
         {
-          //TODO: optimize loop: do not re-deref pointers since only one
-          //pointer moves during each iteration. NB: must never enter this
-          //loop if wreason is empty. Can also keep nesting of non-moved ptr in variable.
           cvar = *cp;
           ovar = *op;
           if (cvar->scope->nesting <= ovar->scope->nesting)
@@ -5124,7 +5076,7 @@ type_reduce (QDPLLDepManGeneric * dmg,
 #endif
           lit = *elemp;
           lit_var = LIT2VARPTR (vars, lit);
-          if (other_type != lit_var->scope->type)
+          if (!lit_var->is_internal && other_type != lit_var->scope->type)
             {
               LEARN_VAR_UNMARK (lit_var);
               QDPLL_POP_STACK (**lit_stack);
@@ -5144,6 +5096,9 @@ type_reduce (QDPLLDepManGeneric * dmg,
     }
   else
     {
+      /* Must not use dependency scheme other than trivial one (i.e. linear
+         ordering) when using incremental mode. */
+      assert (!qdpll->options.incremental_use);
       type_reduce_by_std_deps_adv (qdpll, lit_stack, lit_stack_tmp,
                                    other_type ==
                                    QDPLL_QTYPE_EXISTS ? QDPLL_QTYPE_FORALL
@@ -5184,8 +5139,6 @@ qdpll_dep_man_init (QDPLLDepManGeneric * dmg)
   const char *type_string =
     (dm->dmg.type == QDPLL_DEPMAN_TYPE_SIMPLE) ? "simple" : "qdag";
 
-  /* NOTE: incrementally adding/deleting clauses etc. not yet supported. 
-     We require init-function to be called exactly once. */
   assert (!dm->state.init);
   QDPLL_ABORT_DEPMAN (dm->state.init,
                       "dependency manager already initialized.");
@@ -5425,12 +5378,6 @@ qdpll_dep_man_get_candidate (QDPLLDepManGeneric * dmg)
   return result;
 }
 
-
-/* TODO / NOTE / UNCLEAR: can we take advantage of situations where
-   forest classes are all propagated and hence inactive -> do
-   connections break? */
-/* NOTE: functions return number of
-   (un)collected candidates. This is mainly used for debugging. */
 static void
 qdpll_dep_man_notify_inactive (QDPLLDepManGeneric * dmg, VarID id)
 {
@@ -5929,10 +5876,7 @@ qdpll_dep_man_get_candidates (QDPLLDepManGeneric * dmg)
   QDPLL_ABORT_DEPMAN (!(dm->state.init),
 		      "dependency manager not initialized.");
 
-  /* Count candidates. 
-
-     TODO: we could also maintain a counter directly in the candidate list
-     to avoid that traversal. */
+  /* Count candidates. */
   unsigned int cnt = 0;
   Var *vars = dm->pcnf->vars;
   Var *c;

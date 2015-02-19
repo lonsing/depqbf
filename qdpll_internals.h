@@ -3,8 +3,8 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
- Johannes Kepler University, Linz, Austria and 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 
  Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
@@ -27,6 +27,7 @@
 #define QDPLL_INTERNALS_H_INCLUDED
 
 #include "qdpll_dep_man_generic.h"
+#include "qdpll_pqueue.h"
 #include "qdpll_pcnf.h"
 #include "qdpll_config.h"
 #include "qdpll.h"
@@ -62,6 +63,8 @@ struct QDPLL
   QDPLLMemMan *mm;              /* Memory manager. */
   QDPLLDepManGeneric *dm;       /* Dependency manager. */
   LitIDStack add_stack;
+  /* For parsing only: maximal variable ID on stack 'add_stack'. */
+  VarID max_var_id_on_add_stack;
   LitIDStack add_stack_tmp;
   QDPLLPCNF pcnf;
   unsigned int cur_constraint_id;
@@ -70,13 +73,23 @@ struct QDPLL
 
   LitIDStack internal_cover_lits;
 
+  /* Assumptions given by the user through 'qdpll_assume' are collected on a
+     stack and assigned before the actual solving starts. */
+  LitIDStack user_given_assumptions;
+
   /* Stacks used for traversing implication graph in QPUP. */
-  VarPtrStack qpup_nodes;
+  PriorityQueue *qpup_nodes;
   VarPtrStack qpup_vars;
   VarPtrStack qpup_units;
   LitIDStack qpup_kept_lits;
   LitIDStack qpup_weak_predict_lits;
   Var *qpup_uip;
+
+  Var * qpup_var_at_max_dec_level;
+  unsigned int qpup_cnt_at_max_dec_level;
+  unsigned int qpup_recompute_var_at_max_dec_level:1;
+
+
 
   QDPLLResult result;
 
@@ -138,15 +151,24 @@ struct QDPLL
   struct
   {
     unsigned int scope_opened:1;
+    unsigned int push_pop_api_called:1;
+    unsigned int clause_group_api_called:1;
     Scope *scope_opened_ptr;
     unsigned int decision_level;
-    /* Frame index: i.e. the number of times function 'qdpll_push' was called
-       without a corresponding 'qdpll_pop'. The frame index is zero initially,
-       it increases by one if push is called and decreases by one if pop is
-       called. Each frame index has a single internal variable associated
-       to. This variable "selects" the clauses attached to the frame. Selector
-       variables are always assigned. */
-    unsigned int cur_frame_index;
+    /* The counter 'cnt_active_clause_groups' replaces the previous
+       'cur_frame_index' to generalize the push/pop API to clause groups. For
+       the use of the push/pop API, 'cnt_active_clause_groups' is in fact the
+       current frame index: i.e. the number of times function 'qdpll_push' was
+       called without a corresponding 'qdpll_pop'. The frame index is zero
+       initially, it increases by one if push is called and decreases by one
+       if pop is called. Each frame index has a single internal variable
+       associated to. This variable "selects" the clauses attached to the
+       frame. Selector variables are always assigned. */
+    unsigned int cnt_created_clause_groups;
+    /* For incremental solving with clause groups: ID of currently open clause
+       group. This is relevant to add selector literals to clauses added by the
+       user. */
+    unsigned int cur_open_group_id;
     /* ID of a fresh internal variable to be associated to a frame. */
     unsigned int next_free_internal_var_id;
     /* Stack of internal variable IDs which were associated to a frame before
@@ -220,8 +242,6 @@ struct QDPLL
     unsigned int max_dec;
     /* Max. seconds wallclock time. */
     unsigned int max_secs;
-    /* Max. assignments. */
-    // temporarily disabled: unsigned int max_assigned;
     /* Max. backtracks. */
     unsigned int max_btracks;
     /* Max. space (soft limit). */

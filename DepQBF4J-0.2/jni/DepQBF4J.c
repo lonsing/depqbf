@@ -3,7 +3,7 @@
 
  DepQBF4J, a tool that enables Java applications to use DepQBF as a library.
 
- Copyright 2014 Martin Kronegger and Andreas Pfandler
+ Copyright 2014, 2015 Martin Kronegger and Andreas Pfandler
  Vienna University of Technology, Vienna, Austria.
 
  DepQBF4J is free software: you can redistribute it and/or modify
@@ -76,7 +76,7 @@ JNIEXPORT void JNICALL Java_depqbf4j_DepQBF4J_addVarToScope (JNIEnv * env, jclas
 	qdpll_add_var_to_scope (solver,id,nesting);
 }
 
-JNIEXPORT jint JNICALL Java_depqbf4j_DepQBF4J_hasVarActiveOccs (JNIEnv * env, jclass cls, jint varID) {
+JNIEXPORT jboolean JNICALL Java_depqbf4j_DepQBF4J_hasVarActiveOccs (JNIEnv * env, jclass cls, jint varID) {
 	return qdpll_has_var_active_occs (solver, varID);
 }
 
@@ -123,7 +123,7 @@ JNIEXPORT void JNICALL Java_depqbf4j_DepQBF4J_resetDeps (JNIEnv * env, jclass cl
 	qdpll_reset_deps (solver);
 }
 
-JNIEXPORT jint JNICALL Java_depqbf4j_DepQBF4J_varDepends (JNIEnv * env, jclass cls, jint varID1, jint varID2) {
+JNIEXPORT jboolean JNICALL Java_depqbf4j_DepQBF4J_varDepends (JNIEnv * env, jclass cls, jint varID1, jint varID2) {
 	return qdpll_var_depends(solver, varID1, varID2);
 }
 
@@ -135,7 +135,7 @@ JNIEXPORT jint JNICALL Java_depqbf4j_DepQBF4J_getMaxDeclaredVarId (JNIEnv * env,
 	return qdpll_get_max_declared_var_id (solver);
 }
 
-JNIEXPORT jint JNICALL Java_depqbf4j_DepQBF4J_isVarDeclared (JNIEnv * env, jclass cls, jint varID) {
+JNIEXPORT jboolean JNICALL Java_depqbf4j_DepQBF4J_isVarDeclared (JNIEnv * env, jclass cls, jint varID) {
 	return qdpll_is_var_declared (solver, varID);
 }
 
@@ -202,3 +202,55 @@ JNIEXPORT jintArray JNICALL Java_depqbf4j_DepQBF4J_getRelevantAssumptions (JNIEn
 	free(ra);
 	return result;
 }
+
+/* ------------ START: API functions for clause groups ------------ */
+
+JNIEXPORT jint JNICALL Java_depqbf4j_DepQBF4J_newClauseGroup (JNIEnv * env, jclass cls) {
+	return qdpll_new_clause_group (solver);
+}
+
+JNIEXPORT void JNICALL Java_depqbf4j_DepQBF4J_deleteClauseGroup (JNIEnv * env, jclass cls, jint cgid) {
+	qdpll_delete_clause_group (solver, cgid);
+}
+
+JNIEXPORT void JNICALL Java_depqbf4j_DepQBF4J_openClauseGroup (JNIEnv * env, jclass cls, jint cgid) {
+	qdpll_open_clause_group (solver, cgid);
+}
+
+JNIEXPORT jint JNICALL Java_depqbf4j_DepQBF4J_getOpenClauseGroup (JNIEnv * env, jclass cls) {
+	return qdpll_get_open_clause_group (solver);
+}
+
+JNIEXPORT jboolean JNICALL Java_depqbf4j_DepQBF4J_existsClauseGroup (JNIEnv * env, jclass cls, jint cgid) {
+	return qdpll_exists_clause_group (solver, cgid);
+}
+
+JNIEXPORT void JNICALL Java_depqbf4j_DepQBF4J_closeClauseGroup (JNIEnv * env, jclass cls, jint cgid) {
+	qdpll_close_clause_group (solver, cgid);
+}
+
+JNIEXPORT jintArray JNICALL Java_depqbf4j_DepQBF4J_getRelevantClauseGroups (JNIEnv * env, jclass cls) {
+	jintArray result;
+        ClauseGroupID * ra = qdpll_get_relevant_clause_groups(solver);
+	int numElem = sizeof(ra) / sizeof(ClauseGroupID);
+	
+	result = (*env)->NewIntArray(env, numElem);
+	if (result == NULL) {
+		return NULL; /* out of memory */
+	}
+	
+	(*env)->SetIntArrayRegion(env,result,0,numElem,(const jint *)ra); 
+	
+	free(ra);
+	return result;
+}
+
+JNIEXPORT void JNICALL Java_depqbf4j_DepQBF4J_activateClauseGroup (JNIEnv * env, jclass cls, jint cgid) {
+	qdpll_activate_clause_group (solver, cgid);
+}
+
+JNIEXPORT void JNICALL Java_depqbf4j_DepQBF4J_deactivateClauseGroup (JNIEnv * env, jclass cls, jint cgid) {
+	qdpll_deactivate_clause_group (solver, cgid);
+}
+
+/* ------------ END: API functions for clause groups ------------ */

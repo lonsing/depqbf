@@ -55,11 +55,11 @@ public class Example_basic_api_example3 {
 		/* Close open scope. */
 		DepQBF4J.add(0);
 		
-		assert DepQBF4J.isVarDeclared(1) != 0;
-		assert DepQBF4J.isVarDeclared(99) != 0;
-		assert DepQBF4J.isVarDeclared(50) == 0;
-		assert DepQBF4J.isVarDeclared(51) == 0;
-		assert DepQBF4J.isVarDeclared(52) == 0;
+		assert DepQBF4J.isVarDeclared(1);
+		assert DepQBF4J.isVarDeclared(99);
+		assert !DepQBF4J.isVarDeclared(50);
+		assert !DepQBF4J.isVarDeclared(51);
+		assert !DepQBF4J.isVarDeclared(52);
 		
 		/* Add a new existential block at nesting level 2. */
 		DepQBF4J.newScopeAtNesting(DepQBF4J.QTYPE_EXISTS, 2);
@@ -98,11 +98,11 @@ public class Example_basic_api_example3 {
 		DepQBF4J.reset();
 		
 		/* Var 99 still is declared although no clauses were added containing literals of 99 before. */
-		assert DepQBF4J.isVarDeclared(1) != 0;
-		assert DepQBF4J.isVarDeclared(99) != 0;
-		assert DepQBF4J.isVarDeclared(50) == 0;
-		assert DepQBF4J.isVarDeclared(51) == 0;
-		assert DepQBF4J.isVarDeclared(52) == 0;
+		assert DepQBF4J.isVarDeclared(1);
+		assert DepQBF4J.isVarDeclared(99);
+		assert !DepQBF4J.isVarDeclared(50);
+		assert !DepQBF4J.isVarDeclared(51);
+		assert !DepQBF4J.isVarDeclared(52);
 		
 		/* Open a new frame of clauses. Clauses added after the 'push' can be
 		   removed later by calling 'pop'. */

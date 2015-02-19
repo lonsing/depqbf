@@ -1,5 +1,5 @@
 
-May 2014
+February 2015
 
 -------------------
 GENERAL INFORMATION
@@ -22,10 +22,10 @@ in C/C++ but also in Java can benefit from the advantages of DepQBF such as:
 
  - QBF solving under assumptions (for advanced users)
 
-This version of DepQBF4J builds upon DepQBF 3.03. It is compatible with later,
+This version of DepQBF4J builds upon DepQBF 4.0. It is compatible with later,
 modified versions of DepQBF provided that the signature of the functions in
 DepQBF's API (see the header file 'qdpll.h' in the source distribution of
-DepQBF) do not change compared to DepQBF 3.03. It is possible to add new
+DepQBF) do not change compared to DepQBF 4.0. It is possible to add new
 functions to DepQBF's API without the need to change the current version of
 DepQBF4J.
 
@@ -73,6 +73,7 @@ COMPILING DepQBF4J AND RUNNING ITS EXAMPLES
    java -ea -Djava.library.path=jni -cp src/ depqbf4j.Example_basic_api_example2
    java -ea -Djava.library.path=jni -cp src/ depqbf4j.Example_basic_api_example3
    java -ea -Djava.library.path=jni -cp src/ depqbf4j.Example_basic_manual_selectors
+   java -ea -Djava.library.path=jni -cp src/ depqbf4j.Example_basic_clause_groups_api_example
 
    NOTE: add the option -ea only if you want to enable assertions.
 

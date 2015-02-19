@@ -3,8 +3,8 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
- Johannes Kepler University, Linz, Austria and 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 
  Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
@@ -39,8 +39,8 @@
 
 
 #define VERSION                                                         \
-  "DepQBF 3.04\n"                                                        \
-  "Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing,\n"           \
+  "DepQBF 4.0\n"                                                        \
+  "Copyright 2010, 2011, 2012, 2013, 2014, 2015 Florian Lonsing,\n"     \
   "  Johannes Kepler University, Linz, Austria and\n"                   \
   "  Vienna University of Technology, Vienna, Austria.\n"               \
   "Copyright 2012 Aina Niemetz, "                                       \
@@ -75,7 +75,7 @@
 "                                    if that block is universally quantified).\n"\
 "  --traditional-qcdcl             apply a traditional variant of clause and cube learning (QCDCL),\n"\
 "                                    which was applied in previous versions of DepQBF.\n"\
-"                                    In this version 3.0, by default lazy QPUP-based QCDCL is applied.\n"\
+"                                    In this version, by default lazy QPUP-based QCDCL is applied.\n"\
 "  --long-dist-res                 Apply long-distance resolution in constraint learning. \n"\
 "                                    Must be combined with '--traditional-qcdcl' and '--dep-man=simple'.\n"\
 "  --no-lazy-qpup                  disable lazy QPUP-based QCDCL and carry out all resolution steps.\n"\
@@ -191,9 +191,6 @@ print_abort_err (QDPLLApp * app, char *msg, ...)
   while (isspace (c))                                \
     c = getc (in);
 
-
-/* TODO: there should not be any tracing in this module. Instead, read the
-   input formula, clean it up and then write any trace information. */
 static void
 parse (QDPLLApp * app, QDPLL * qdpll, FILE * in, int trace)
 {
@@ -236,10 +233,9 @@ parse (QDPLLApp * app, QDPLL * qdpll, FILE * in, int trace)
           /* read number of variables */
           PARSER_READ_NUM (num, c);
           if (trace == TRACE_QRP)
-//          fprintf (stdout, "p %s %u", trace == TRACE_QRP ? "qrp" : "bqrp", num);
-            fprintf (stdout, "p qrp %u", num);  //TODO
+            fprintf (stdout, "p qrp %u", num);  
           else if (trace == TRACE_BQRP)
-            fprintf (stdout, "p bqrp %u", num); //TODO
+            fprintf (stdout, "p bqrp %u", num); 
 
           PARSER_SKIP_SPACE_WHILE (c);
           if (!isdigit (c))

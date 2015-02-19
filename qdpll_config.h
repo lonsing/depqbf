@@ -3,8 +3,8 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
- Johannes Kepler University, Linz, Austria and 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 
  Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
@@ -80,15 +80,9 @@
 #define COMPUTE_STATS 0
 #define COMPUTE_TIMES 0
 
-/* When generating initial cubes, make sure that first we collect an
-assignment which satisfies all the clauses WITHOUT reducing innermost
-existential literals on the fly. */
-#define COLLECT_FULL_COVER_SETS 1
-
 /* Allow to collect as many cover sets as 'COLLECT_FULL_COVER_SETS_MULT_LIMIT'
    times the current maximal number of learned cubes. */
 #define COLLECT_FULL_COVER_SETS_MULT_LIMIT (1)
-
 
 /* Type of default dependency manager. 'QDPLL_DEPMAN_TYPE_SIMPLE' is the
    original quantifier prefix and 'QDPLL_DEPMAN_TYPE_QDAG' causes the solver to

@@ -3,8 +3,8 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014 Florian Lonsing, 
- Johannes Kepler University, Linz, Austria and 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 
  Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
@@ -432,7 +432,6 @@ assert_full_prefix_integrity_scopes (QDPLL * qdpll, Scope *s, Scope *n)
       assert (var->id || s == qdpll->pcnf.scopes.first);
       if (!var->id)
         continue;
-      /* NOTE: marks need not be cleared since they are used for empty-formula watcher */
       assert (var->scope == s);
       assert (var->id == v);
       assert (!QDPLL_VAR_ASSIGNED (var) || var->mode == QDPLL_VARMODE_UNIT
@@ -536,20 +535,23 @@ assert_full_prefix_integrity (QDPLL * qdpll)
       assert (p < qdpll->pcnf.vars + qdpll->pcnf.size_user_vars || p->is_internal);
       if (p->is_internal)
         {
-          assert (p->frame_index > 0);
+          assert (!p->is_cur_inactive_group_selector || p->is_cur_used_internal_var);
+          assert (p->clause_group_id > 0);
           assert (p->scope);
           assert (!p->user_scope);
           /* A declared (i.e. non-zero ID) internal var must appear on either
              stack 'qdpll->state.cur_used_internal_vars' or stack
              'qdpll->state.popped_off_internal_vars'. */
           assert (p->id);
-          assert (assert_full_prefix_integrity_find_var (p->id, qdpll->state.cur_used_internal_vars.start, 
-                                                         qdpll->state.cur_used_internal_vars.top) || 
+          assert (!p->is_cur_used_internal_var || 
+                  assert_full_prefix_integrity_find_var (p->id, qdpll->state.cur_used_internal_vars.start, 
+                                                         qdpll->state.cur_used_internal_vars.top));
+          assert (p->is_cur_used_internal_var ||
                   assert_full_prefix_integrity_find_var (p->id, qdpll->state.popped_off_internal_vars.start, 
                                                          qdpll->state.popped_off_internal_vars.top));
         }
       else
-        assert (p->frame_index == 0);
+        assert (p->clause_group_id == 0);
     }
   assert (cnt_used == qdpll->pcnf.used_vars);
 }
@@ -594,7 +596,7 @@ assert_full_cnf_integrity_for_clauses (QDPLL * qdpll,
   for (c = clause_list->first; c; c = n)
     {
       n = c->link.next;
-      if (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) != 0 || 
+      if (qdpll->state.cnt_created_clause_groups > 0 || 
           QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0)
         {
           /* In incremental mode: original clauses have exactly one selector
@@ -603,7 +605,7 @@ assert_full_cnf_integrity_for_clauses (QDPLL * qdpll,
              chronological ordering of frame indices. */
           assert (clause_list != &qdpll->pcnf.clauses || count_selector_literals (qdpll, c) <= 1);
           assert (clause_list != &qdpll->pcnf.learnt_clauses || 
-                  count_selector_literals (qdpll, c) <= 1);
+                  (qdpll->state.clause_group_api_called || count_selector_literals (qdpll, c) <= 1));
         }
       assert (!c->is_cube);
       LitID *p1, *p2, *e, lit1, lit2;
@@ -624,8 +626,6 @@ assert_full_cnf_integrity_for_clauses (QDPLL * qdpll,
           else
             assert (occs_have_constraint (lit1, &v1->pos_occ_clauses, c));
 
-          /* NOTE: the following assertion will fail if learnt
-             clauses contain two complementary universals. */
           for (p2 = p1 + 1; p2 < e; p2++)
             {
               lit2 = *p2;
@@ -719,8 +719,10 @@ assert_incremental_selector_vars (QDPLL *qdpll)
       /* Unused internal vars must be set to TRUE so that the clauses are NOT
          active in the formula. */
       VarID id = *p;
+      assert (id);
       Var *var = VARID2VARPTR(qdpll->pcnf.vars, id);
       assert (!var->is_cur_used_internal_var);
+      assert (!var->is_cur_inactive_group_selector);
       /* Stack may contain former internal variables which might have been
          cleaned up because they did not have occurrences. */
       assert (!var->id || QDPLL_VAR_ASSIGNED_TRUE (var));
@@ -728,14 +730,22 @@ assert_incremental_selector_vars (QDPLL *qdpll)
   for (p = qdpll->state.cur_used_internal_vars.start, 
          e = qdpll->state.cur_used_internal_vars.top; p < e; p++)
     {
-      /* Used internal vars must be set to FALSE so that the clauses are
-         active in the formula. */
+      /* Used internal vars which are selectors of activated (deactivated)
+         groups must be set to FALSE (TRUE) so that the clauses are active in
+         the formula. */
       VarID id = *p;
-      Var *var = VARID2VARPTR(qdpll->pcnf.vars, id);
-      assert (var->is_cur_used_internal_var);
-      /* Stack may contain former internal variables which might have been
-         cleaned up because they did not have occurrences. */
-      assert (!var->id || QDPLL_VAR_ASSIGNED_FALSE (var));
+      if (id)
+        {
+          Var *var = VARID2VARPTR(qdpll->pcnf.vars, id);
+          assert (var->is_cur_used_internal_var);
+          /* Stack may contain former internal variables which might have been
+             cleaned up because they did not have occurrences. */
+          if (var->id)
+            {
+              assert (var->is_cur_inactive_group_selector || QDPLL_VAR_ASSIGNED_FALSE (var));
+              assert (!var->is_cur_inactive_group_selector || QDPLL_VAR_ASSIGNED_TRUE (var));
+            }
+        }
     }
 }
 
@@ -793,7 +803,6 @@ assert_all_pure_literals_and_clause_watchers_integrity (QDPLL * qdpll)
               /* Variable must have been pushed, but not necessarily propagated already. */
               assert (find_in_assigned_vars (qdpll, var->id));
               assert (QDPLL_VAR_ASSIGNED (var));
-              /* NOTE: this could fail if also units are done */
               assert (!QDPLL_VAR_EXISTS (var)
                       || QDPLL_VAR_ASSIGNED_FALSE (var));
               assert (!QDPLL_VAR_FORALL (var)
@@ -821,7 +830,6 @@ assert_all_pure_literals_and_clause_watchers_integrity (QDPLL * qdpll)
               /* Variable must have been pushed, but not necessarily propagated already. */
               assert (find_in_assigned_vars (qdpll, var->id));
               assert (QDPLL_VAR_ASSIGNED (var));
-              /* NOTE: this could fail if also units are done */
               assert (!QDPLL_VAR_EXISTS (var)
                       || QDPLL_VAR_ASSIGNED_TRUE (var));
               assert (!QDPLL_VAR_FORALL (var)
@@ -1287,7 +1295,15 @@ assert_lits_sorted (QDPLL * qdpll, LitID * lit_start, LitID * lit_end)
       assert (prev_var->user_scope || prev_var->scope);
       prev_var_nesting = prev_var->user_scope ? 
         prev_var->user_scope->nesting : prev_var->scope->nesting;
-      assert (prev_var_nesting <= pvar_nesting);
+      /* Fix: input formula might have adjacent user scopes of same type:
+         internally, variables from these scopes are merged into a single scope,
+         but will be ordered by their user scope ordering. However, they appear
+         in the same internal scope then. */
+      assert (prev_var_nesting <= pvar_nesting || 
+              (pvar->user_scope && prev_var->user_scope && 
+               pvar->user_scope->type == prev_var->user_scope->type && 
+               pvar->scope && prev_var->scope && 
+               pvar->scope == prev_var->scope));
       /* Internal variables must appear to the left of non-internals. */
       assert (prev_var->is_internal || !pvar->is_internal);
       prev = p;
@@ -1307,16 +1323,6 @@ assert_lits_unassigned (QDPLL * qdpll, LitID * lit_start, LitID * lit_end)
       assert (!QDPLL_VAR_ASSIGNED (pvar));
       assert (pvar->decision_level == QDPLL_INVALID_DECISION_LEVEL);
     }
-}
-
-
-static void
-assert_lits_no_holes (QDPLL * qdpll, LitID * lit_start, LitID * lit_end)
-{
-  Var *vars = qdpll->pcnf.vars;
-  LitID *p, *e;
-  for (p = lit_start, e = lit_end; p < e; p++)
-    assert (*p);
 }
 
 
@@ -1910,7 +1916,6 @@ var_pqueue_increase_key (QDPLL * qdpll, VarID id)
 }
 
 
-/* NOTE: could also set priority outside. */
 static void
 var_pqueue_insert (QDPLL * qdpll, VarID id, double priority)
 {
@@ -1941,8 +1946,7 @@ var_pqueue_insert (QDPLL * qdpll, VarID id, double priority)
 
 
 /* Remove first element in constant time, e.g. for clearing queue.
-   NOTE: destroys heap condition! 
-*/
+   NOTE: destroys heap condition! */
 static VarID
 var_pqueue_remove_first (QDPLL * qdpll)
 {
@@ -2760,8 +2764,6 @@ all_clauses_satisfied (QDPLL * qdpll)
       if (!is_clause_satisfied (qdpll, c))
         return 0;
     }
-  /* NOTE: checking learnt clauses is actually not needed since they
-     are all implied by original clauses. We only check that here. */
   for (c = qdpll->pcnf.learnt_clauses.first; c; c = c->link.next)
     {
       if (!is_clause_satisfied (qdpll, c)
@@ -3772,10 +3774,6 @@ update_literal_watchers (QDPLL * qdpll, Var * propagated_var,
         }
     }
 
-  /* NOTE: for update of left watcher: could also update right watcher by default... 
-     implementation could be simpler then but what about performance? 
-     Update of right watcher is often redundant in these situations! */
-
   assert (is_cube || QDPLL_VAR_EXISTS (rwvar));
   assert (!is_cube || QDPLL_VAR_FORALL (rwvar));
   assert (QDPLL_VAR_ASSIGNED (lwvar) || QDPLL_VAR_ASSIGNED (rwvar));
@@ -4105,9 +4103,6 @@ init_literal_watcher (QDPLL * qdpll, Constraint * c, unsigned int left_offset,
           || count_in_notify_literal_watcher_list (notify_list, c) == 1);
 }
 
-
-
-/* NOTE: almost same code as for updating watchers, could we re-use? */
 /* Find watched lit only wrt. deps but not wrt. assignment. */
 static unsigned int
 find_init_watcher_pos (QDPLL * qdpll, const int is_cube, Var * vars,
@@ -4259,11 +4254,7 @@ init_literal_watchers_aux (QDPLL * qdpll, ConstraintList * clist)
 }
 
 
-/* Initialize literal watchers to two rightmost literals in clause.
-   NOTE: because we interpret enqueued units/pure literals as active
-   immediately, the watchers can be false as well. These situations are
-   handled during watcher update then.  
-*/
+/* Initialize literal watchers to two rightmost literals in clause. */
 static QDPLLSolverState
 init_literal_watchers (QDPLL * qdpll)
 {
@@ -4773,18 +4764,20 @@ import_user_scopes_internal_vars_aux (QDPLL *qdpll, VarIDStack *internal_ids)
   for (p = internal_ids->start, e = internal_ids->top; p < e; p++)
     {
       VarID id = *p;
-      assert (id);
-      assert (id < qdpll->pcnf.size_vars);
-      assert (id >= qdpll->pcnf.size_user_vars);
-      Var *var = VARID2VARPTR(qdpll->pcnf.vars, id);
-      /* Bug fix: do not insert IDs of cleaned up no-occ internal vars into
-         default scope. We keep such IDs on the stacks of current and popped off
-         frames, just to maintain the relation between internal IDs and
-         frames. */
-      if (var->id)
+      if (id)
         {
-          assert (var->is_internal);
-          QDPLL_PUSH_STACK(qdpll->mm, *stack, *p);
+          assert (id < qdpll->pcnf.size_vars);
+          assert (id >= qdpll->pcnf.size_user_vars);
+          Var *var = VARID2VARPTR(qdpll->pcnf.vars, id);
+          /* Bug fix: do not insert IDs of cleaned up no-occ internal vars into
+             default scope. We keep such IDs on the stacks of current and popped off
+             frames, just to maintain the relation between internal IDs and
+             frames. */
+          if (var->id)
+            {
+              assert (var->is_internal);
+              QDPLL_PUSH_STACK(qdpll->mm, *stack, *p);
+            }
         }
     }
 }
@@ -5066,8 +5059,9 @@ top_level_reduce_constraint_simple (QDPLL * qdpll, Constraint * c,
       Var *v = LIT2VARPTR (vars, lit);
       assert (!(v->scope && v->user_scope) || 
               v->scope->type == v->user_scope->type);
-      if ((v->user_scope && v->user_scope->type != type) || 
-          (v->scope && v->scope->type != type))
+      if (!v->is_internal && 
+          ((v->user_scope && v->user_scope->type != type) || 
+          (v->scope && v->scope->type != type)))
         c->num_lits--;
       else
         break;
@@ -5259,6 +5253,14 @@ import_added_ids (QDPLL * qdpll)
   LitID id;
   LitID *sp = add_stack->start, *se = add_stack->top;
 
+  /* Fix: call 'adjust_vars' once before starting to add parsed literals to
+     new constraint or scope. Before, we adjusted the variables on demand
+     while adding the literals to the constraint. This can cause problems in
+     incremental mode as the renaming of internal variables is not done for
+     the constraint that is currently being imported. Also, we avoid
+     unnecessary resizing operations. */
+  qdpll_adjust_vars (qdpll, qdpll->max_var_id_on_add_stack);
+
   if (qdpll->state.scope_opened)
     { 
       /* Schedule the import of user prefix next time 'import_user_scopes' is
@@ -5294,20 +5296,28 @@ import_added_ids (QDPLL * qdpll)
       /* Import clause's or cube's literals */
       unsigned int num_lits = QDPLL_COUNT_STACK (*add_stack);
       /* For incremental solving: add space to add selector variable. */
-      if (qdpll->state.cur_frame_index > 0)
+      if (qdpll->state.cur_open_group_id > 0)
         num_lits++;
       Constraint *constr = create_constraint (qdpll, num_lits, 0);
       LitID *p = constr->lits;
 
       /* For incremental solving: add literal of selector variable. */
-      if (qdpll->state.cur_frame_index > 0)
+      if (qdpll->state.cur_open_group_id > 0)
         {
-          assert (qdpll->state.cur_frame_index == 
+          assert (qdpll->state.cnt_created_clause_groups > 0);
+          assert (qdpll->state.cur_open_group_id <= 
+                  QDPLL_COUNT_STACK (qdpll->state.cur_used_internal_vars));
+          assert (qdpll->state.cnt_created_clause_groups <= 
                   QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars));
-          assert (qdpll->state.cur_used_internal_vars.start < qdpll->state.cur_used_internal_vars.top);
-          VarID internal_id = *(qdpll->state.cur_used_internal_vars.top - 1);
+          assert (qdpll->state.cur_used_internal_vars.start < 
+                  qdpll->state.cur_used_internal_vars.top);
+          VarID internal_id = *(qdpll->state.cur_used_internal_vars.start + 
+                                (qdpll->state.cur_open_group_id - 1));
+          assert (internal_id);
           Var *internal_var = VARID2VARPTR(qdpll->pcnf.vars, internal_id);
-          assert (internal_var->is_internal && internal_var >= qdpll->pcnf.vars + qdpll->pcnf.size_user_vars);
+          assert (internal_var->is_internal && internal_var >= 
+                  qdpll->pcnf.vars + qdpll->pcnf.size_user_vars);
+          assert (internal_var->clause_group_id == qdpll->state.cur_open_group_id);
           /* Always add positive literal of selector variable. */
           *p++ = internal_id;
         }
@@ -5319,7 +5329,6 @@ import_added_ids (QDPLL * qdpll)
           id = *sp++;
           assert (id != 0);
           VarID var_id = LIT2VARID (id);
-          qdpll_adjust_vars (qdpll, var_id);
           Var *var = qdpll->pcnf.vars + var_id;
 
           if (var->id == 0)
@@ -5352,6 +5361,7 @@ import_added_ids (QDPLL * qdpll)
         delete_constraint (qdpll, constr);
     }
 
+  qdpll->max_var_id_on_add_stack = 0;
   QDPLL_RESET_STACK (*add_stack);
   return 0;
 }
@@ -5830,8 +5840,6 @@ cover_by_clauses_collect_lit (QDPLL * qdpll, QDPLLMemMan * mm,
   assert (var);
   assert (lit);
   assert (LIT2VARPTR(qdpll->pcnf.vars, lit) == var);
-  assert (COLLECT_FULL_COVER_SETS || qdpll->pcnf.user_scopes.last != var->user_scope);
-  assert (COLLECT_FULL_COVER_SETS || qdpll->pcnf.scopes.last != var->scope);
   assert ((QDPLL_LIT_NEG (lit) && QDPLL_VAR_ASSIGNED_FALSE (var)) ||
           (QDPLL_LIT_POS (lit) && QDPLL_VAR_ASSIGNED_TRUE (var)));
   assert (!LEARN_VAR_MARKED (var));
@@ -5899,25 +5907,6 @@ cover_by_clauses_collect_lits_sorted (QDPLL * qdpll, QDPLLMemMan * mm,
   /* Then collect variables added to the default scope. */
   cover_by_clauses_collect_lits_sorted_aux (qdpll, mm,
                                             lit_stack, &qdpll->pcnf.scopes.first->cover_lits);
-#ifndef NDEBUG
-#if !COLLECT_FULL_COVER_SETS
-  /* No literal is marked in innermost scope, since that
-     literals would be immediately removed by type-reduce. */
-  assert (QDPLL_SCOPE_EXISTS (qdpll->pcnf.scopes.last));
-  assert (QDPLL_EMPTY_STACK (qdpll->pcnf.scopes.last->cover_lits));
-  do
-    {
-      VarID *p, *e;
-      for (p = qdpll->pcnf.scopes.last->vars.start, 
-             e = qdpll->pcnf.scopes.last->vars.top; p < e; p++)
-        {
-          Var *v = VARID2VARPTR (vars, *p);
-          assert (!LEARN_VAR_MARKED (v));
-        }
-    }
-  while (0);
-#endif
-#endif
 
   /* Re-collect all marked literals by traversing all scopes from
      outer- to innermost. Marked literals can then be collected in scope
@@ -5958,9 +5947,9 @@ cover_by_clauses (QDPLL * qdpll, LitIDStack * lit_stack,
   /* Abusing stack for stats-computation. */
   assert (QDPLL_COUNT_STACK (qdpll->wreason_a) == 0);
 #endif
-  const int collect_full_cover_set = COLLECT_FULL_COVER_SETS && 
+  const int collect_full_cover_set =  
     qdpll->options.incremental_use && 
-    (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) != 0 || 
+    (qdpll->state.cnt_created_clause_groups > 0 || 
      QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0);
   const Scope *last_scope = qdpll->pcnf.scopes.last;
   assert (QDPLL_SCOPE_EXISTS (last_scope));
@@ -6220,13 +6209,9 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
 
       nlits = QDPLL_COUNT_STACK (**lit_stack);
 
-#if COLLECT_FULL_COVER_SETS
-      if  (qdpll->options.incremental_use && (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) != 0 || 
+      if  (qdpll->options.incremental_use && (qdpll->state.cnt_created_clause_groups > 0 || 
                                               QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0))
         store_cover_set (qdpll, *lit_stack);
-#else
-        assert (qdpll->cover_sets.cnt == 0);
-#endif
 
       qdpll->dm->reduce_lits (qdpll->dm, lit_stack, lit_stack_tmp, type, 1);
 
@@ -6409,7 +6394,6 @@ resolve_and_reduce (QDPLL * qdpll, ConstraintID ant1_id,
                     LitIDStack ** lit_stack, LitIDStack ** lit_stack_tmp,
                     Var * var, const QDPLLQuantifierType type)
 {
-
   LitID *other_lits_start = var->antecedent->lits;
   LitID *other_lits_end = other_lits_start + var->antecedent->num_lits;
   ConstraintID res_id = ++(qdpll->cur_constraint_id);
@@ -6431,7 +6415,6 @@ resolve_and_reduce (QDPLL * qdpll, ConstraintID ant1_id,
 #endif
 #ifndef NDEBUG
   assert_lits_sorted (qdpll, (*lit_stack)->start, (*lit_stack)->top);
-  assert_lits_no_holes (qdpll, (*lit_stack)->start, (*lit_stack)->top);
   assert_stop_crit_data (qdpll, *lit_stack, type);
 #endif
   if (qdpll->options.verbosity > 1)
@@ -6565,7 +6548,6 @@ resolve_and_reduce (QDPLL * qdpll, ConstraintID ant1_id,
 
 #ifndef NDEBUG
   assert_lits_sorted (qdpll, (*lit_stack)->start, (*lit_stack)->top);
-  assert_lits_no_holes (qdpll, (*lit_stack)->start, (*lit_stack)->top);
 #endif
 
   qdpll->dm->reduce_lits (qdpll->dm, lit_stack, lit_stack_tmp, type, 1);
@@ -6768,10 +6750,7 @@ generate_reason (QDPLL * qdpll, ConstraintID cid, LitIDStack ** lit_stack,
 AGAIN:
 
   /* Handle solving under assumptions: if the current constraint contains only
-     assumptions then we are done. This is similar to an empty constraint.
-     NOTE: we test the flag 'assumptions_given' not to add overhead for
-     checking the current resolvent's literals when solving without
-     assumptions. */
+     assumptions then we are done. This is similar to an empty constraint. */
 
   if (QDPLL_EMPTY_STACK (**lit_stack) || 
       (qdpll->state.assumptions_given && 
@@ -7047,7 +7026,16 @@ qpup_res_unmark_var (Var *var)
 static void
 qpup_collect_qpup_node (QDPLL *qdpll, Var *var)
 {
-  QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_nodes, var);
+  pqueue_insert (qdpll->mm, qdpll->qpup_nodes, var, var->trail_pos);
+  assert (var->decision_level != QDPLL_INVALID_DECISION_LEVEL);
+  if (!qdpll->qpup_var_at_max_dec_level || qdpll->qpup_var_at_max_dec_level->decision_level < var->decision_level)
+    {
+      /* Found new maximum decision level. */
+      qdpll->qpup_var_at_max_dec_level = var;
+      qdpll->qpup_cnt_at_max_dec_level = 1;
+    }
+  else if (qdpll->qpup_var_at_max_dec_level->decision_level == var->decision_level)
+    qdpll->qpup_cnt_at_max_dec_level++;
 }
 
 /* Variable 'implied_var' is the implied variable and literal 'lit' occurs in
@@ -7134,81 +7122,85 @@ qpup_traverse_implication_graph_push_nodes (QDPLL * qdpll, LitID *lits_start, Li
 static Var *
 qpup_select_next_node (QDPLL *qdpll)
 {
-  unsigned int result_offset = UINT_MAX;
-  Var *result = 0;
-  Var **p, **e;
+  Var *result;
 
   if (qdpll->options.verbosity >= 2)
     {
       fprintf (stderr, "\nQPUP selecting next node from set (format (id,trailpos)): ");
-      for (p = qdpll->qpup_nodes.start, e = qdpll->qpup_nodes.top; p < e; p++)
+      PriorityQueueElem *p, *e;
+      for (p = qdpll->qpup_nodes->queue, e = p + qdpll->qpup_nodes->cnt; p < e; p++)
         {
-          Var *var = *p;
+          Var *var = p->data;
           fprintf (stderr, "(%d,%d) ", var->id, var->trail_pos);
         }
       fprintf (stderr, "\n");
     }
 
-  for (p = qdpll->qpup_nodes.start, e = qdpll->qpup_nodes.top; p < e; p++)
+
+  result = pqueue_remove_min (qdpll->qpup_nodes);
+
+  if (!qdpll->qpup_uip)
     {
-      Var *var = *p;
-      if (!result || result->trail_pos < var->trail_pos)
-        {
-          result = var;
-          result_offset = p - qdpll->qpup_nodes.start;
-        }
+      if (qdpll->qpup_cnt_at_max_dec_level > 0)
+        qdpll->qpup_cnt_at_max_dec_level--;
+      if (qdpll->qpup_cnt_at_max_dec_level == 1)
+        qdpll->qpup_var_at_max_dec_level = pqueue_access_min (qdpll->qpup_nodes);     
     }
 
-  if (result)
-    {
-      assert (result_offset < QDPLL_COUNT_STACK(qdpll->qpup_nodes));
-      assert (qdpll->qpup_nodes.start[result_offset] == result);
-      /* Remove 'result' from stack by replacing it with last element on
-         stack. */
-      Var *tmp = QDPLL_POP_STACK(qdpll->qpup_nodes);
-      qdpll->qpup_nodes.start[result_offset] = tmp;
-    }
-
-  return result;
+ return result;
 }
 
-/* Returns the *unique* variable, if any, on stack 'qdpll->qpup_nodes'
-   assigned at the maximum decision level of all nodes on that stack. If there is
-   no such unique variable, then null is returned. */
+
 static Var *
 qpup_find_unique_var_at_max_dec_level (QDPLL *qdpll)
 {
-  Var *var_at_max_dec_level = 0;
-  unsigned int cnt_at_max_dec_level = 0;
+  assert (!qdpll->qpup_uip);
 
-  Var **p, **e;
-  for (p = qdpll->qpup_nodes.start, e = qdpll->qpup_nodes.top; p < e; p++)
+  if (qdpll->qpup_recompute_var_at_max_dec_level)
     {
-      Var *var = *p;
-      assert (var->decision_level != QDPLL_INVALID_DECISION_LEVEL);
-      if (!var_at_max_dec_level || var_at_max_dec_level->decision_level < var->decision_level)
+      qdpll->qpup_recompute_var_at_max_dec_level = 0;
+      Var *var_at_max_dec_level = 0;
+      unsigned int cnt_at_max_dec_level = 0;
+      PriorityQueueElem *p, *e;
+      for (p = qdpll->qpup_nodes->queue, e = p + qdpll->qpup_nodes->cnt; p < e; p++)
         {
-          /* Found new maximum decision level. */
-          var_at_max_dec_level = var;
-          cnt_at_max_dec_level = 1;
+          Var *var = p->data;
+          assert (var->decision_level != QDPLL_INVALID_DECISION_LEVEL);
+          if (!var_at_max_dec_level || var_at_max_dec_level->decision_level < var->decision_level)
+            {
+              /* Found new maximum decision level. */
+              var_at_max_dec_level = var;
+              cnt_at_max_dec_level = 1;
+            }
+          else if (var_at_max_dec_level->decision_level == var->decision_level)
+            cnt_at_max_dec_level++;
         }
-      else if (var_at_max_dec_level->decision_level == var->decision_level)
-        cnt_at_max_dec_level++;
+      qdpll->qpup_var_at_max_dec_level = var_at_max_dec_level;
+      qdpll->qpup_cnt_at_max_dec_level = cnt_at_max_dec_level;
     }
 
   /* Explicitly handle decision level 0: if the maximum decision level is 0
      then we want to continue anyway to derive the empty
      constraint. This is relevant only if a trace is printed out. */
-  if (!var_at_max_dec_level || var_at_max_dec_level->decision_level == 0)
+  if (!qdpll->qpup_var_at_max_dec_level || qdpll->qpup_var_at_max_dec_level->decision_level == 0)
     return 0;
   else
     {
-      assert (var_at_max_dec_level);
-      assert (var_at_max_dec_level->decision_level != QDPLL_INVALID_DECISION_LEVEL);
-      assert (cnt_at_max_dec_level > 0);
-      return cnt_at_max_dec_level == 1 ? var_at_max_dec_level : 0;
+      assert (qdpll->qpup_var_at_max_dec_level);
+      assert (qdpll->qpup_var_at_max_dec_level->decision_level != QDPLL_INVALID_DECISION_LEVEL);
+      assert (qdpll->qpup_cnt_at_max_dec_level > 0);
+      if (qdpll->qpup_cnt_at_max_dec_level == 1)
+        {
+          /* Must reset computed maximum var if we are at UIP which is not suitable. */
+          assert (!qdpll->qpup_recompute_var_at_max_dec_level);
+          qdpll->qpup_recompute_var_at_max_dec_level = 1;
+          return qdpll->qpup_var_at_max_dec_level;
+        }
+      else 
+        return 0;
     }
 }
+
 
 /* Check if there is a variable 'u' on stack 'qdpll->qpup_vars' where variable
    'var' depends on. For example, this check is carried out on UIP
@@ -7288,6 +7280,7 @@ qpup_find_and_check_uip_candidate(QDPLL *qdpll, const QDPLLQuantifierType type)
   /* Check whether the relevant 1-UIP node was found, which is similar
      to the stop-criteria in classical CDCL. */
   Var *uip_candidate = qpup_find_unique_var_at_max_dec_level (qdpll);
+
   if (uip_candidate)
     {
       if (qdpll->options.verbosity >= 2)
@@ -7501,6 +7494,7 @@ qpup_collect_weak_predict_lits_aux_collect (QDPLL *qdpll, LitIDStack *cover_lits
 {
   LitID kept_selector_lit = 0;
   Var *kept_selector_var = 0;
+  const unsigned int clause_group_api_called = qdpll->state.clause_group_api_called;
 
   LitID *p, *e;
   for (p = cover_lits->start, e = cover_lits->top; p < e; p++)
@@ -7511,40 +7505,50 @@ qpup_collect_weak_predict_lits_aux_collect (QDPLL *qdpll, LitIDStack *cover_lits
       assert (cover_lits != &qdpll->internal_cover_lits || var->is_internal);
       assert (var->qpup_predict_mark);
       var->qpup_predict_mark = 0;
-      if (var->is_internal && type == QDPLL_QTYPE_EXISTS)
-        {
-          assert (!var->is_internal || 
-                  (QDPLL_LIT_NEG(lit) && QDPLL_VAR_ASSIGNED_TRUE(var)) || 
-                  (QDPLL_LIT_POS(lit) && QDPLL_VAR_ASSIGNED_FALSE(var)));
-          assert (var->scope == qdpll->pcnf.scopes.first);
-          assert (var->frame_index > 0);
-          assert (qdpll->state.cur_used_internal_vars.start[var->frame_index - 1] == var->id);
-          if (!kept_selector_var || kept_selector_var->frame_index < var->frame_index)
-            {
-              kept_selector_var = var;
-              kept_selector_lit = lit;
-            }
-        }
-      else
+      if (clause_group_api_called)
         {
           QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_weak_predict_lits, lit);
           if (!qdpll->options.bump_vars_once)
             increase_var_activity (qdpll, var, var->scope);
         }
+      else
+        {
+          if (var->is_internal && type == QDPLL_QTYPE_EXISTS)
+            {
+              assert (!var->is_internal || 
+                      (QDPLL_LIT_NEG(lit) && QDPLL_VAR_ASSIGNED_TRUE(var)) || 
+                      (QDPLL_LIT_POS(lit) && QDPLL_VAR_ASSIGNED_FALSE(var)));
+              assert (var->scope == qdpll->pcnf.scopes.first);
+              assert (var->clause_group_id > 0);
+              assert (qdpll->state.cur_used_internal_vars.start[var->clause_group_id - 1] == var->id);
+              if (!kept_selector_var || kept_selector_var->clause_group_id < var->clause_group_id)
+                {
+                  kept_selector_var = var;
+                  kept_selector_lit = lit;
+                }
+            }
+          else
+            {
+              /* Same code as in branch 'if (clause_group_api_called)' above. */
+              QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_weak_predict_lits, lit);
+              if (!qdpll->options.bump_vars_once)
+                increase_var_activity (qdpll, var, var->scope);
+            }
+        }
     }
-
-  if (kept_selector_var)
+  if (!clause_group_api_called)
     {
-      assert (type == QDPLL_QTYPE_EXISTS);
-      assert (cover_lits == &qdpll->internal_cover_lits);
-      assert (kept_selector_lit);
-      QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_weak_predict_lits, kept_selector_lit);
-      if (!qdpll->options.bump_vars_once)
-        increase_var_activity (qdpll, kept_selector_var, kept_selector_var->scope);
-      kept_selector_var = 0;
-      kept_selector_lit = 0;
+      if (kept_selector_var)
+        {
+          assert (type == QDPLL_QTYPE_EXISTS);
+          assert (cover_lits == &qdpll->internal_cover_lits);
+          assert (kept_selector_lit);
+          /* Same code as in branch 'if (clause_group_api_called)' above. */
+          QDPLL_PUSH_STACK(qdpll->mm, qdpll->qpup_weak_predict_lits, kept_selector_lit);
+          if (!qdpll->options.bump_vars_once)
+            increase_var_activity (qdpll, kept_selector_var, kept_selector_var->scope);
+        }
     }
-
   QDPLL_RESET_STACK(*cover_lits);
 }
 
@@ -7655,7 +7659,7 @@ qpup_check_remaining_nodes (QDPLL *qdpll, const QDPLLQuantifierType type)
 
   if (qdpll->options.verbosity >= 2)
     fprintf (stderr, "\nQPUP: node checking started on %u remaining nodes.\n", 
-             (unsigned int)QDPLL_COUNT_STACK(qdpll->qpup_nodes));
+             (unsigned int)qdpll->qpup_nodes->cnt);
 
   /* Second phase: check remaining nodes on stack. */
 
@@ -8038,7 +8042,7 @@ qpup_res_reduce (QDPLL *qdpll, LitIDStack *stack, const ConstraintID trace_id,
   while (QDPLL_COUNT_STACK(*stack))
     {
       Var *v = LIT2VARPTR(qdpll->pcnf.vars, *(stack->top - 1));
-      if (v->scope->type != type)
+      if (!v->is_internal && v->scope->type != type)
         {
           QDPLL_POP_STACK(*stack);
           assert (!LEARN_VAR_MARKED (v));
@@ -8350,7 +8354,7 @@ qpup_resolve_and_reduce (QDPLL *qdpll, Var *pivot, LitIDStack *resolvent_lits,
 static Constraint *
 qpup_do_forward_resolutions (QDPLL *qdpll, LitIDStack *empty_constraint_lits, const QDPLLQuantifierType type)
 {
-  assert (QDPLL_EMPTY_STACK(qdpll->qpup_nodes));
+  assert (qdpll->qpup_nodes->cnt == 0);
 
   if (qdpll->options.verbosity >= 2)
     fprintf (stderr, "\nQPUP: forward resolutions started.\n");
@@ -8487,7 +8491,7 @@ assert_qpup_data_cleared (QDPLL *qdpll)
       assert (!p->scope || QDPLL_EMPTY_STACK(p->scope->cover_lits));
     }
   assert (!qdpll->qpup_uip);
-  assert (QDPLL_EMPTY_STACK(qdpll->qpup_nodes));
+  assert (qdpll->qpup_nodes->cnt == 0);
   assert (QDPLL_EMPTY_STACK(qdpll->qpup_vars));
   assert (QDPLL_EMPTY_STACK(qdpll->qpup_units));
   assert (QDPLL_EMPTY_STACK(qdpll->qpup_kept_lits));
@@ -8678,9 +8682,12 @@ qpup_compute_learnt_constraint (QDPLL *qdpll, LitIDStack *empty_constraint_lits,
 #endif
 
   assert (!qdpll->qpup_uip);
-  assert (QDPLL_EMPTY_STACK(qdpll->qpup_nodes));
+  assert (qdpll->qpup_nodes->cnt == 0);
   assert (QDPLL_EMPTY_STACK(qdpll->qpup_vars));
   assert (QDPLL_EMPTY_STACK(qdpll->qpup_units));
+  assert (qdpll->qpup_var_at_max_dec_level == 0);
+  assert (qdpll->qpup_cnt_at_max_dec_level == 0);
+
 
   if (qdpll->options.verbosity >= 2)
     fprintf (stderr, "QPUP: started.\n");
@@ -8688,6 +8695,11 @@ qpup_compute_learnt_constraint (QDPLL *qdpll, LitIDStack *empty_constraint_lits,
   assert (QDPLL_EMPTY_STACK(qdpll->internal_cover_lits));
 
   qpup_traverse_implication_graph (qdpll, empty_constraint_lits, type);
+
+  /* Reset incrementally maintained data. */
+  qdpll->qpup_var_at_max_dec_level = 0;
+  qdpll->qpup_cnt_at_max_dec_level = 0;
+
 
   Constraint *qpup_learnt_constraint;
 
@@ -8749,9 +8761,9 @@ qpup_compute_learnt_constraint (QDPLL *qdpll, LitIDStack *empty_constraint_lits,
 
   assert (!qdpll->assumption_lits_constraint || (!qdpll->qpup_uip && qdpll->state.assumptions_given));
   assert (qdpll->assumption_lits_constraint || (qdpll->qpup_uip || !qdpll->state.assumptions_given));
+  QDPLL_ABORT_QDPLL (qdpll->qpup_nodes->cnt != 0, "Unexpected QPUP nodes remaining.");
 
   QDPLL_RESET_STACK(qdpll->qpup_vars);
-  QDPLL_RESET_STACK(qdpll->qpup_nodes);
   QDPLL_RESET_STACK(qdpll->qpup_units);
   QDPLL_RESET_STACK(qdpll->qpup_kept_lits);
   QDPLL_RESET_STACK(qdpll->qpup_weak_predict_lits);
@@ -8798,8 +8810,9 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
           QDPLL_COUNT_STACK (*lit_stack) != 0);
 
 #ifndef NDEBUG
-  if (QDPLL_COUNT_STACK (*lit_stack) > 0)
-    assert_stop_crit_data (qdpll, lit_stack, type);
+  if (QDPLL_COUNT_STACK (*lit_stack) > 0 &&  
+      !constraint_has_only_assumption_lits (qdpll, (lit_stack)->start, (lit_stack)->top))
+      assert_stop_crit_data (qdpll, lit_stack, type);
 #endif
 
   if (qdpll->options.verbosity > 1)
@@ -9355,9 +9368,6 @@ select_decision_variable (QDPLL * qdpll)
   Var *decision_var, *candidate_var, *vars = qdpll->pcnf.vars;
   VarID candidate, decision_var_id;
 
-  /* NOTE: can happen that variable has no active occs left
-     -> assigning is possible but does not change solver state and wastes work... */
-
   /* Get candidates from dependency manager. */
   while ((candidate = dm->get_candidate (dm)))
     {
@@ -9376,8 +9386,6 @@ select_decision_variable (QDPLL * qdpll)
   assert_candidates_on_pqueue (qdpll);
 #endif
 #endif
-
-  /* NOTE: try to keep priority queue clean: no non-candidates, no assigned_variables,... */
 
   do
     {
@@ -9581,8 +9589,6 @@ check_disabling_blocking_lit (QDPLL * qdpll, BLitsOcc blit_occ,
   else
     qdpll->stats.blits_tested++;
 #endif
-  /* NOTE: do NOT deref constraint pointer here, since this is exactly
-     what we want to avoid by blocking literals. */
   assert (blit_occ.blit);
   assert (blit_occ.constraint);
   Constraint *constraint = blit_occ.constraint;
@@ -10635,29 +10641,42 @@ assume_aux (QDPLL *qdpll, LitID id)
 }
 
 
+static int
+clause_has_popped_off_var (QDPLL *qdpll, Constraint *c);
+
+
 static void
 assign_frame_selector_vars_aux (QDPLL *qdpll, VarIDStack *stack, 
                                 const int cur_used_internal_vars)
 {
+  assert (stack == &qdpll->state.cur_used_internal_vars || 
+          stack == &qdpll->state.popped_off_internal_vars);
+  assert (!cur_used_internal_vars || stack == &qdpll->state.cur_used_internal_vars);
+  assert (cur_used_internal_vars || stack != &qdpll->state.cur_used_internal_vars);
   VarID *p, *e;
   for (p = stack->start, e = stack->top; p < e; p++)
     {
       VarID id = *p;
-      assert (id);
-      assert (id >= qdpll->pcnf.size_user_vars);
-      assert (id < qdpll->pcnf.size_vars);
-      Var *var = VARID2VARPTR(qdpll->pcnf.vars, id);
-      if (var->id)
+      if (id)
         {
-          assert (var->is_internal);
-          assert (!cur_used_internal_vars || var->frame_index == 
-                  (unsigned int)(p - qdpll->state.cur_used_internal_vars.start + 1));
-          /* Set internal variable to 'false' to enable clauses where that
-             variable occurs. */
-          if (cur_used_internal_vars)
-            assume_aux (qdpll, -id);
-          else
-            assume_aux (qdpll, id);
+          assert (id >= qdpll->pcnf.size_user_vars);
+          assert (id < qdpll->pcnf.size_vars);
+          Var *var = VARID2VARPTR(qdpll->pcnf.vars, id);
+          if (var->id)
+            {
+              assert (var->is_internal);
+              /* Stack 'qdpll->state.popped_off_internal_vars' must not
+                 contain selector variables of deactivated groups. */
+              assert (cur_used_internal_vars || !var->is_cur_inactive_group_selector);
+              assert (!cur_used_internal_vars || var->clause_group_id == 
+                      (unsigned int)(p - qdpll->state.cur_used_internal_vars.start + 1));
+              /* Set internal variable to 'false' ('true') to enable (disable)
+                 clauses where that variable occurs. */
+              if (cur_used_internal_vars && !var->is_cur_inactive_group_selector)
+                assume_aux (qdpll, -id);
+              else
+                assume_aux (qdpll, id);
+            }
         }
     }
 }
@@ -10672,6 +10691,23 @@ assign_frame_selector_variables (QDPLL *qdpll)
 {
   assign_frame_selector_vars_aux (qdpll, &qdpll->state.cur_used_internal_vars, 1);
   assign_frame_selector_vars_aux (qdpll, &qdpll->state.popped_off_internal_vars, 0);
+#if COMPUTE_STATS
+#if 0
+  /* Count how many learned clauses are currently disabled. This includes
+     deactivated clause group by 'qdpll_deactivate_clause_group. */
+  unsigned int disabled_learned_clauses = 0;
+  Constraint *c;
+  for (c = qdpll->pcnf.learnt_clauses.first; c; c = c->link.next)
+    {
+      if (clause_has_popped_off_var (qdpll, c) || clause_has_inactive_var (qdpll, c))
+        disabled_learned_clauses++;
+    }
+  if (qdpll->options.verbosity >= 1)
+    fprintf (stderr, "%d of total %d ( %f ) learned clauses are disabled by selector variable\n", 
+             disabled_learned_clauses, qdpll->pcnf.learnt_clauses.cnt, qdpll->pcnf.learnt_clauses.cnt ? 
+             (disabled_learned_clauses / (float) qdpll->pcnf.learnt_clauses.cnt) : 0);
+#endif
+#endif
 }
 
 
@@ -10704,7 +10740,6 @@ check_and_import_cover_sets (QDPLL *qdpll)
           print_constraint (qdpll, c);
         }
 
-      /* NOTE: memset can be costly! */
       memset (assignment_by_cover_set, 0, table_size * sizeof(char));
 
       LitID *p, *e;
@@ -10852,9 +10887,7 @@ check_and_delete_cubes_incremental (QDPLL *qdpll)
   QDPLL_ABORT_QDPLL (qdpll->state.clauses_added_since_cube_check == 0, 
                      "Unexpected call of cube checking.");
 
-#if COLLECT_FULL_COVER_SETS
   check_and_import_cover_sets (qdpll);
-#endif
 
   /* The flag 'qdpll->state.pending_cubes_check' is set to true 
      each time a new clause is added. */
@@ -11015,13 +11048,18 @@ cleanup_popped_off_cubes_aux (QDPLL *qdpll, Constraint *cube,
     {
       LitID lit = *p;
       Var *var = LIT2VARPTR(qdpll->pcnf.vars, lit);
-      /* If a cube contains a literal of an internal variable, then that
-         variable was popped off (because active selector variables always
-         falsify clauses and hence are not part of cover sets). */
+      /* If a cube was learned under deactivation of clause groups: a cube may
+         contain internal literals which either have been popped off or which are
+         still on stack 'qdpll->state.cur_used_internal_vars'. However, only
+         variables which were popped off must be deleted from cubes since these
+         variables are actually deleted. Variables on stack
+         'qdpll->state.cur_used_internal_vars' must be kept in the cube.  */
       assert (!var->mark0 || var->is_internal);
-      assert (var->mark0 || !var->is_internal);
-      /* Collect the literals which remain in the cube after cleanup. */
-      if (!var->is_internal && QDPLL_VAR_HAS_OCCS(var))
+      assert (!var->mark0 || !var->is_cur_used_internal_var);
+      assert ((var->mark0 || !var->is_internal) || var->is_cur_used_internal_var);
+      /* Collect the literals which remain in the cube after cleanup,
+         i.e. literals of variables which have not been marked to be deleted. */
+      if (!var->mark0 && QDPLL_VAR_HAS_OCCS(var))
         QDPLL_PUSH_STACK(qdpll->mm, *remaining_lits_sorted, lit);
     }
 
@@ -11116,6 +11154,8 @@ cleanup_popped_off_vars (QDPLL *qdpll)
       /* NOTE: we also mark no-occ variables with 'var->id == 0' (can be due
          to empty frames added by the user.) */
       assert (!var->id || var->is_internal);
+      assert (!var->id || !var->is_cur_used_internal_var);
+      assert (!var->id || !var->is_cur_inactive_group_selector);
       assert (!var->mark0);
       var->mark0 = 1;
     }
@@ -11179,6 +11219,14 @@ qdpll_gc_aux (QDPLL *qdpll, const int called_by_user)
     fprintf (stderr, "Cleanup %d popped off clauses, %d original clauses.\n", 
              qdpll->state.popped_off_orig_clause_cnt, qdpll->pcnf.clauses.cnt);
   cleanup_popped_off_vars (qdpll);
+
+  /* Fix: must import user-given variables (if necessary), because otherwise
+     they will not be deleted. The deletion function for no-occ-vars in
+     'clean_up_formula' goes over INTERNAL scopes only. Hence variables will not
+     be deleted if they do not appear on internal scope. */
+  if (called_by_user)
+    import_user_scopes (qdpll);
+
   /* Deleting popped variables and clauses. Further, cleanup user variables
      which have NO occurrences and remove empty user scopes. */
   clean_up_formula (qdpll, called_by_user);
@@ -11186,6 +11234,24 @@ qdpll_gc_aux (QDPLL *qdpll, const int called_by_user)
   assert (QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) == 0);
 }
 
+static void
+assign_user_given_assumptions (QDPLL *qdpll)
+{
+  LitID *p, *e;
+  for (p = qdpll->user_given_assumptions.start, 
+         e = qdpll->user_given_assumptions.top;
+       p < e; p++)
+    {
+      LitID assumption = *p;
+      Var *var = LIT2VARPTR(qdpll->pcnf.vars, assumption);
+      QDPLL_ABORT_QDPLL(QDPLL_VAR_ASSIGNED(var), "must not assume variable multiple times!");
+      /* Assign a variable as assumption only if it does occur in clauses. */
+      if (QDPLL_VAR_HAS_OCCS (var))
+        assume_aux (qdpll, assumption);
+    }
+
+  QDPLL_RESET_STACK(qdpll->user_given_assumptions); 
+}
 
 /* Solver's core loop. */
 static QDPLLResult
@@ -11274,7 +11340,7 @@ solve (QDPLL * qdpll)
       qdpll->state.clauses_added_since_cube_check = 0;
     }
 
-  if (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) != 0 || 
+  if (qdpll->state.cnt_created_clause_groups > 0 || 
       QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0)
     {
       if (qdpll->state.popped_off_orig_clause_cnt > (qdpll->pcnf.clauses.cnt >> 2))
@@ -11283,6 +11349,14 @@ solve (QDPLL * qdpll)
          clauses associated to currently and previously used frames. */
       assign_frame_selector_variables (qdpll);
     }
+
+  /* Assign user-given assumptions after possible cleanup of deleted clauses
+     and resulting no-occ-vars by calling 'qdpll_gc_aux ()' above. No-occ vars
+     will not be assigned as assumptions. This is necessary to handle
+     situations where the user adds assumptions of variables which actually
+     have no occurrences left after this INTERNAL cleanup step. The user does
+     not know when the solver triggers that cleanup step. */
+  assign_user_given_assumptions (qdpll);
 
   if (!qdpll->dm->is_init (qdpll->dm))
     {
@@ -11578,8 +11652,8 @@ add_aux (QDPLL * qdpll, LitID id)
 {
   if (id == 0)
     {
-      QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
-                         "Unexpected assignments of variables; " \
+      QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                         "Unexpected assignments of variables; "        \
                          "solver must be in reset state when adding clauses or variable!");
       /* Make sure that user prefix is properly imported. This is necessary if
          the user has added a variable but no clauses containing it. The
@@ -11592,14 +11666,19 @@ add_aux (QDPLL * qdpll, LitID id)
       if (!qdpll->state.scope_opened)
         import_user_scopes (qdpll);
 
-      /* '0' closes a scope, clause, or cube. */
+      /* '0' closes a scope or clause. */
       const char *err_msg = import_added_ids (qdpll);
       QDPLL_ABORT_QDPLL (err_msg, err_msg);
       assert (!qdpll->state.scope_opened);
       assert (QDPLL_COUNT_STACK(qdpll->add_stack) == 0);
     }
   else
-    QDPLL_PUSH_STACK (qdpll->mm, qdpll->add_stack, id);
+    {
+      VarID var_id = LIT2VARID(id);
+      if (var_id > qdpll->max_var_id_on_add_stack)
+        qdpll->max_var_id_on_add_stack = var_id;
+      QDPLL_PUSH_STACK (qdpll->mm, qdpll->add_stack, id);
+    }
 }
 
 
@@ -11647,9 +11726,9 @@ rename_internal_variable_ids_in_constraints (QDPLL *qdpll, ConstraintList *clist
 
 /* Rename internal variable IDs on stacks
    'qdpll->state.cur_used_internal_vars' and
-   'qdpll->state.popped_off_internal_vars'.  
-   NOTE: assumes that the variable table has been enlarged before and internal
-   variables have been moved accordingly. */
+   'qdpll->state.popped_off_internal_vars'.  NOTE: assumes that the variable
+   table has been enlarged before and internal variables have been moved
+   accordingly. */
 static void
 rename_internal_variable_ids_on_stack (QDPLL *qdpll, VarID *start, VarID *end, 
                                        const unsigned int add_to_offset)
@@ -11658,13 +11737,15 @@ rename_internal_variable_ids_on_stack (QDPLL *qdpll, VarID *start, VarID *end,
   VarID *p, *e;
   for (p = start, e = end; p < e; p++)
     {
-      assert (*p > 0);
-      Var *var = VARID2VARPTR (qdpll->pcnf.vars, *p);
-      if (var->id == 0)
+      if (*p)
         {
-          /* Assumes that internal IDs have been moved to a new index and
-             entry at old index has been cleared. */
-          rename_internal_variable_ids_aux (qdpll, p, add_to_offset);
+          Var *var = VARID2VARPTR (qdpll->pcnf.vars, *p);
+          if (var->id == 0)
+            {
+              /* Assumes that internal IDs have been moved to a new index and
+                 entry at old index has been cleared. */
+              rename_internal_variable_ids_aux (qdpll, p, add_to_offset);
+            }
         }
     }
 }
@@ -11831,11 +11912,15 @@ qdo_has_outer_scope_unassigned_vars (QDPLL *qdpll, Scope *outer, QDPLLResult res
 }
 
 static void
-qdo_fix_outer_scope_unassigned_vars_aux (QDPLL *qdpll, VarIDStack *stack, Constraint *c, 
+qdo_fix_outer_scope_unassigned_vars_aux (QDPLL *qdpll, Scope *outer, VarIDStack *stack, Constraint *c, 
                                          char *mark_table, char *assignment_table)
 {
+  /* FIX: if the input formula is unsatisfiable due to an input clause with
+     only universal literals, which were forall-reduced to get the empty clause,
+     then we must consider also these reduced literals to compute a partial
+     countermodel. I.e. go until 'c->size_lits', not 'c->num_lits'. */
   LitID *p, *e;
-  for (p = c->lits, e = p + c->num_lits; p < e; p++)
+  for (p = c->lits, e = p + c->size_lits; p < e; p++)
     {
       LitID lit = *p;
       Var *var = LIT2VARPTR(qdpll->pcnf.vars, lit);
@@ -11858,8 +11943,9 @@ qdo_fix_outer_scope_unassigned_vars_aux (QDPLL *qdpll, VarIDStack *stack, Constr
           if (!QDPLL_VAR_ASSIGNED (var))
             {
               /* Set the value of required unassigned variables. */
-              if ((!c->is_cube && var->scope->type == QDPLL_QTYPE_FORALL) || 
-                  (c->is_cube && var->scope->type == QDPLL_QTYPE_EXISTS))
+              if (var->scope == outer || var->user_scope == outer 
+                  /*(!c->is_cube && var->scope->type == QDPLL_QTYPE_FORALL) || 
+                    (c->is_cube && var->scope->type == QDPLL_QTYPE_EXISTS)*/)
                 {
                   assert (assignment_table[var->id] == QDPLL_ASSIGNMENT_UNDEF);
                   if (QDPLL_LIT_NEG (lit))
@@ -11905,7 +11991,7 @@ qdo_fix_outer_scope_unassigned_vars (QDPLL *qdpll, Scope *outer, QDPLLResult res
   assert (qdpll->result_constraint);
   assert (qdpll->result_constraint->is_cube || result == QDPLL_RESULT_UNSAT);
   assert (!qdpll->result_constraint->is_cube || result == QDPLL_RESULT_SAT);
-  qdo_fix_outer_scope_unassigned_vars_aux (qdpll, &stack, qdpll->result_constraint, 
+  qdo_fix_outer_scope_unassigned_vars_aux (qdpll, outer, &stack, qdpll->result_constraint, 
                                            mark_table, assignment_table);
 
   while (!QDPLL_EMPTY_STACK(stack))
@@ -11919,7 +12005,7 @@ qdo_fix_outer_scope_unassigned_vars (QDPLL *qdpll, Scope *outer, QDPLLResult res
       assert (var->antecedent);
       assert (var->antecedent->is_cube || result == QDPLL_RESULT_UNSAT);
       assert (!var->antecedent->is_cube || result == QDPLL_RESULT_SAT);
-      qdo_fix_outer_scope_unassigned_vars_aux (qdpll, &stack, var->antecedent, 
+      qdo_fix_outer_scope_unassigned_vars_aux (qdpll, outer, &stack, var->antecedent, 
                                                mark_table, assignment_table);
     }
 
@@ -11956,6 +12042,36 @@ clause_has_popped_off_var (QDPLL *qdpll, Constraint *c)
 }
 
 
+/* Returns non-zero if 'c' contains a selector variable of a group which has
+   been deactivated by 'qdpll_deactivate_clause_group'. In this case the
+   clause has been effectively deleted from the formula although it is
+   physically present in the clause list. */
+static int
+clause_has_inactive_var (QDPLL *qdpll, Constraint *c)
+{
+  assert (!c->is_cube);
+  LitID *p, *e;
+  for (p = c->lits, e = p + c->num_lits; p < e; p++)
+    {
+      LitID lit = *p;
+      Var *var = LIT2VARPTR(qdpll->pcnf.vars, lit);
+      if (var->is_internal)
+        {
+          assert (!var->is_cur_inactive_group_selector || var->is_cur_used_internal_var);
+          /* 'var' is a selector variable of a deactivated clause group. */
+          if (var->is_cur_inactive_group_selector)
+            return 1;
+        }
+      else
+        return 0;
+      /* Can immediately return if we see a user variable because internal
+         ones appear at the left end of the list */
+    }
+
+  return 0;
+}
+
+
 static void
 qdpll_print_aux_scope (QDPLL *qdpll, Scope *s, FILE *out)
 {
@@ -11979,8 +12095,145 @@ qdpll_print_aux_scope (QDPLL *qdpll, Scope *s, FILE *out)
 }
 
 
-/* -------------------- START: PUBLIC FUNCTIONS --------------------*/
+static ClauseGroupID
+new_clause_group_aux (QDPLL *qdpll)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "'qdpll' is null!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->state.next_free_internal_var_id > qdpll->pcnf.size_vars, 
+                     "Next free internal ID must be smaller than or equal to size of vars!");
+  QDPLL_ABORT_QDPLL (qdpll->state.next_free_internal_var_id < qdpll->pcnf.size_user_vars, 
+                     "Next free internal ID must be greater than or equal to size of user vars!");
 
+  const VarID cur_size_vars = qdpll->pcnf.size_vars;
+  if (qdpll->state.next_free_internal_var_id == cur_size_vars)
+    {
+      /* Enlarge variable table to store additional internal variable IDs. */
+      assert ((cur_size_vars - qdpll->pcnf.size_user_vars) <= cur_size_vars);
+      const unsigned int new_size_vars = cur_size_vars + DEFAULT_INTERNAL_VARS_INCREASE; 
+      qdpll->pcnf.vars = (Var *) qdpll_realloc (qdpll->mm, qdpll->pcnf.vars,
+                                                cur_size_vars * sizeof (Var),
+                                                new_size_vars * sizeof (Var));
+      qdpll->pcnf.size_vars = new_size_vars;
+      assert (qdpll->pcnf.size_user_vars <= qdpll->pcnf.size_vars);
+      assert_internal_vars_integrity (qdpll);
+      if (qdpll->options.verbosity >= 2)
+        fprintf (stderr, "Push: enlarging internal variables, new internal size %d.\n", 
+                 qdpll->pcnf.size_vars - qdpll->pcnf.size_user_vars);
+    }
+  assert (qdpll->state.next_free_internal_var_id < qdpll->pcnf.size_vars);
+  assert (qdpll->state.next_free_internal_var_id >= qdpll->pcnf.size_user_vars);
+
+  /* We could also recycle internal IDs which are not used currently. However,
+     the implementation would be more complex. Now, we always allocate group
+     IDs in an incremental way. The user will never see ID multiple times when
+     calling 'qdpll_new_clause_group' and 'delete_clause_group'. However, if
+     push/pop API is used then frame indices are returned to the user, which
+     can occur mutliple times. */
+
+  VarID internal_id = qdpll->state.next_free_internal_var_id++;
+  QDPLL_PUSH_STACK(qdpll->mm, qdpll->state.cur_used_internal_vars, internal_id);
+  /* ID 'clause_group_id' will be made public to the user via the API. */
+  unsigned int clause_group_id = QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars);
+  qdpll->state.cnt_created_clause_groups++;
+  assert (clause_group_id >= qdpll->state.cnt_created_clause_groups);
+
+  /* NOTE: always keep default scope as internal scope to store internal variables. */
+  assert (qdpll->pcnf.scopes.first->is_internal);
+  declare_and_init_variable (qdpll, qdpll->pcnf.scopes.first, internal_id, 1, 1);
+
+  /* Set group index of internal variable. */
+  assert (qdpll->pcnf.vars[internal_id].clause_group_id == 0);
+  qdpll->pcnf.vars[internal_id].clause_group_id = clause_group_id;
+  assert (qdpll->pcnf.vars[internal_id].clause_group_id > 0);
+
+  /* Set flag to indicate that internal variable appears on the stack
+     'qdpll->state.cur_used_internal_vars'. */
+  assert (!qdpll->pcnf.vars[internal_id].is_cur_used_internal_var);
+  qdpll->pcnf.vars[internal_id].is_cur_used_internal_var = 1;
+
+  return clause_group_id;
+}
+
+
+static int
+exists_clause_group_aux (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  /* Check if there is a valid entry (i.e. selector variable of group) in
+     table 'qdpll->state.cur_used_internal_vars' at position 'clause_group'. */
+  if (clause_group == 0 || 
+      clause_group > QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) || 
+      !qdpll->state.cur_used_internal_vars.start[clause_group - 1])
+    return 0;
+  else
+    return 1;
+}
+
+
+static void
+delete_clause_group_aux (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  QDPLL_ABORT_QDPLL (!exists_clause_group_aux (qdpll, clause_group), 
+                     "Invalid clause group ID!");
+
+  /* Get selector variable ID of clause group from table. */
+  unsigned int deleted_group_selector_var_id = 
+    qdpll->state.cur_used_internal_vars.start[clause_group - 1];
+  assert (deleted_group_selector_var_id);
+  Var *deleted_group_selector_var = 
+    VARID2VARPTR(qdpll->pcnf.vars, deleted_group_selector_var_id);
+
+  /* Decrease number of active clause groups. */
+  qdpll->state.cnt_created_clause_groups--;
+  assert (qdpll->state.cnt_created_clause_groups < 
+          QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars));
+
+  /* Store selector variable on other stack of deleted variables. */
+  QDPLL_PUSH_STACK(qdpll->mm, qdpll->state.popped_off_internal_vars, 
+                   deleted_group_selector_var_id);
+
+  /* Count the number of deleted original clauses to trigger cleanup
+     later. Deleted learned clauses are not counted since they are deleted
+     anyway according to the usual deletion schedule of learned clauses.
+     NOTE: this count is exact since we never cound clauses multiple times;
+     original clauses contain exactly one selector variable. */
+  assert (deleted_group_selector_var->id);
+  assert (deleted_group_selector_var->is_internal);
+  /* Reset flag of group selector variable. */
+  assert (deleted_group_selector_var->is_cur_used_internal_var);
+  deleted_group_selector_var->is_cur_used_internal_var = 0;
+
+  /* Reset entry of selector variable on stack of active variables. NOTE: in
+     qdpll_pop, we in fact remove this entry from the stack by a pop
+     operation. For clause groups in general, we just reset it to zero. */
+  qdpll->state.cur_used_internal_vars.start[clause_group - 1] = 0;
+
+  qdpll->state.popped_off_orig_clause_cnt += 
+    QDPLL_COUNT_STACK(deleted_group_selector_var->pos_occ_clauses);
+  QDPLL_ABORT_QDPLL(QDPLL_COUNT_STACK(deleted_group_selector_var->neg_occ_clauses) > 0, 
+                    "Unexpected neg. occurrences of internal variable!");
+}
+
+/* Returns a pointer to the selector variable of the given clause group. */
+static Var *
+clause_group_to_var_ptr (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  assert (qdpll_exists_clause_group (qdpll, clause_group));
+  VarID vid = qdpll->state.cur_used_internal_vars.start[clause_group - 1];
+  assert (vid);
+  return VARID2VARPTR(qdpll->pcnf.vars, vid);
+}
+
+static ClauseGroupID
+get_open_clause_group_aux (QDPLL *qdpll)
+{
+  return qdpll->state.cur_open_group_id;
+}
+
+/* -------------------- START: PUBLIC FUNCTIONS --------------------*/
 
 QDPLL *
 qdpll_create ()
@@ -12003,13 +12256,14 @@ qdpll_create ()
                     "Expecting user-vars-size smaller than or equal to vars-size!");
   QDPLL_ABORT_QDPLL(DEFAULT_INTERNAL_VARS_INCREASE <= 0, 
                     "Default increase value of internal vars must be greater than zero!");
-  QDPLL_ABORT_QDPLL (!COLLECT_FULL_COVER_SETS, 
-                     "Expecting 'COLLECT_FULL_COVER_SETS == 1' in 'qdpll_config.h'.");
   qdpll->pcnf.size_vars = DEFAULT_VARS_SIZE;
   qdpll->pcnf.size_user_vars = DEFAULT_USER_VARS_SIZE;
   qdpll->pcnf.vars =
     (Var *) qdpll_malloc (mm, DEFAULT_VARS_SIZE * sizeof (Var));
   qdpll->state.next_free_internal_var_id = qdpll->pcnf.size_user_vars;
+
+  PriorityQueue *pqueue = pqueue_create (mm, 1);
+  qdpll->qpup_nodes = pqueue;
 
   /* Set default options. */
 
@@ -12082,7 +12336,7 @@ qdpll_create ()
 void
 qdpll_delete (QDPLL * qdpll)
 {
-  QDPLL_ABORT_QDPLL (!qdpll, "'qdpll' is null!");
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLLMemMan *mm = qdpll->mm;
 
   QDPLL_DELETE_STACK (mm, qdpll->add_stack);
@@ -12091,7 +12345,7 @@ qdpll_delete (QDPLL * qdpll)
   QDPLL_DELETE_STACK (mm, qdpll->wreason_e);
   QDPLL_DELETE_STACK (mm, qdpll->dec_vars);
   QDPLL_DELETE_STACK (mm, qdpll->smaller_type_lits);
-  QDPLL_DELETE_STACK (mm, qdpll->qpup_nodes);
+  pqueue_delete (mm, qdpll->qpup_nodes);
   QDPLL_DELETE_STACK (mm, qdpll->qpup_vars);
   QDPLL_DELETE_STACK (mm, qdpll->qpup_units);
   QDPLL_DELETE_STACK (mm, qdpll->qpup_kept_lits);
@@ -12100,6 +12354,7 @@ qdpll_delete (QDPLL * qdpll)
   QDPLL_DELETE_STACK (mm, qdpll->state.cur_used_internal_vars);
   QDPLL_DELETE_STACK (mm, qdpll->pcnf.user_scope_ptrs);
   QDPLL_DELETE_STACK (mm, qdpll->internal_cover_lits);
+  QDPLL_DELETE_STACK (mm, qdpll->user_given_assumptions);
 
   if (qdpll->qdo_assignment_table)
     {
@@ -12132,10 +12387,8 @@ qdpll_delete (QDPLL * qdpll)
   qdpll_delete_constraint_list (qdpll, &(qdpll->pcnf.learnt_clauses));
   /* Delete learnt cubes. */
   qdpll_delete_constraint_list (qdpll, &(qdpll->pcnf.learnt_cubes));
-#if COLLECT_FULL_COVER_SETS
   /* Delete cover sets, if any. */
   qdpll_delete_constraint_list (qdpll, &(qdpll->cover_sets));
-#endif
 
   qdpll_free (mm, qdpll->var_pqueue, qdpll->size_var_pqueue * sizeof (VarID));
   qdpll_free (mm, qdpll->assigned_vars,
@@ -12146,7 +12399,8 @@ qdpll_delete (QDPLL * qdpll)
           || (!qdpll->options.depman_simple && qdpll->options.depman_qdag)
           || (!qdpll->options.depman_simple && !qdpll->options.depman_qdag));
   /* Delete dependency manager. 
-     IMPORTANT NOTE: all heap-memory managed by DepMan must already have been deleted before! */
+     IMPORTANT NOTE: all heap-memory managed by DepMan must already have been
+     deleted before! */
   qdpll_qdag_dep_man_delete ((QDPLLDepManQDAG *) qdpll->dm);
 
   qdpll_free (mm, qdpll, sizeof (QDPLL));
@@ -12159,6 +12413,7 @@ qdpll_delete (QDPLL * qdpll)
 char *
 qdpll_configure (QDPLL * qdpll, char *configure_str)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   char *result = 0;
 
   if (!strncmp (configure_str, "--trace", strlen ("--trace")))
@@ -12679,38 +12934,35 @@ qdpll_configure (QDPLL * qdpll, char *configure_str)
 unsigned int
 qdpll_pop (QDPLL *qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
-                     "Must configure by '--incremental-use' to enable incremental use!");
+                     "Must configure by '--incremental-use' to enable push/pop API!");
   QDPLL_ABORT_QDPLL (!qdpll, "'qdpll' is null!");
   QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
                      "Unexpected decision level != 0; solver must be in reset state!");
   QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
                      "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->state.clause_group_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  qdpll->state.push_pop_api_called = 1;
 
-  if (qdpll->state.cur_frame_index == 0)
+  if (qdpll->state.cnt_created_clause_groups == 0)
     return 0;
 
-  unsigned int popped_off_index = qdpll->state.cur_frame_index--;
+  unsigned int popped_off_index = qdpll->state.cnt_created_clause_groups;
 
-  unsigned int used_id = QDPLL_POP_STACK(qdpll->state.cur_used_internal_vars);
-  QDPLL_PUSH_STACK(qdpll->mm, qdpll->state.popped_off_internal_vars, used_id);
-  assert (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) == 
-          qdpll->state.cur_frame_index);
+  assert (qdpll->state.cnt_created_clause_groups == 
+          QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars));
+  delete_clause_group_aux (qdpll, popped_off_index);
+  QDPLL_POP_STACK(qdpll->state.cur_used_internal_vars);
+  assert (qdpll->state.cnt_created_clause_groups == 
+          QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars));
 
-  /* Count the number of popped off original clauses to trigger cleanup
-     later. Popped off learned clauses are not counted since they are deleted
-     anyway according to the usual deletion schedule of learned clauses.
-     NOTE: this count is exact since we never cound clauses multiple times;
-     original clauses contain exactly one selector variable. */
-  Var *popped_off_var = VARID2VARPTR(qdpll->pcnf.vars, used_id);
-  assert (popped_off_var->id);
-  assert (popped_off_var->is_internal);
-  /* Reset flag of popped off variable. */
-  assert (popped_off_var->is_cur_used_internal_var);
-  popped_off_var->is_cur_used_internal_var = 0;
-  qdpll->state.popped_off_orig_clause_cnt += QDPLL_COUNT_STACK(popped_off_var->pos_occ_clauses);
-  QDPLL_ABORT_QDPLL(QDPLL_COUNT_STACK(popped_off_var->neg_occ_clauses) > 0, 
-                    "Unexpected neg. occurrences of internal variable!");
+  /* Declare next frame open. */
+  assert (qdpll->state.cur_open_group_id == qdpll->state.cnt_created_clause_groups + 1);
+  qdpll->state.cur_open_group_id = qdpll->state.cnt_created_clause_groups; 
 
   return popped_off_index;
 }
@@ -12729,6 +12981,9 @@ qdpll_pop (QDPLL *qdpll)
    carried out. */
 void qdpll_gc (QDPLL *qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
   qdpll_gc_aux (qdpll, 1);
 }
 
@@ -12741,55 +12996,347 @@ void qdpll_gc (QDPLL *qdpll)
 unsigned int
 qdpll_push (QDPLL *qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
-                     "Must configure by '--incremental-use' to enable incremental use!");
-  QDPLL_ABORT_QDPLL (!qdpll, "'qdpll' is null!");
+                     "Must configure by '--incremental-use' to enable push/pop API!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->state.clause_group_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  qdpll->state.push_pop_api_called = 1;
+
+  unsigned int frame_index = new_clause_group_aux (qdpll);
+  assert (frame_index == QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars));
+  assert (frame_index == qdpll->state.cnt_created_clause_groups);
+
+  /* Declare new frame open. */
+  qdpll->state.cur_open_group_id = frame_index; 
+
+  return frame_index;
+}
+
+
+/* ------------ START: API functions for clause groups ------------ */
+
+/* Creates a new clause group and returns its ID. The returned ID is a handle
+   of the created clause group and should be passed to API functions to
+   manipulate clause groups. Initially, the newly created clause group is
+   empty (i.e. it does not contain any clauses) and it is closed. To add
+   clauses to a group, the group must be opened by 'open_clause_group'. Only
+   one clause group can be open at a time. Clauses can be added to the
+   currently open group as usual by calling 'qdpll_add'. To add clauses to a
+   different group, the currently open group must be closed again by
+   'close_clause_group' and the other group must be opened. */
+ClauseGroupID 
+qdpll_new_clause_group (QDPLL *qdpll)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
   QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
                      "Unexpected decision level != 0; solver must be in reset state!");
   QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
                      "Unexpected assignments of variables; solver must be in reset state!");
-  QDPLL_ABORT_QDPLL (qdpll->state.next_free_internal_var_id > qdpll->pcnf.size_vars, 
-                     "Next free internal ID must be smaller than or equal to size of vars!");
-  QDPLL_ABORT_QDPLL (qdpll->state.next_free_internal_var_id < qdpll->pcnf.size_user_vars, 
-                     "Next free internal ID must be greater than or equal to size of user vars!");
+  QDPLL_ABORT_QDPLL (qdpll_get_open_clause_group (qdpll), 
+                     "Must close currently open clause group before creating a new one!");
+  QDPLL_ABORT_QDPLL (qdpll->state.scope_opened,
+                     "Must close currently open scope before creating new clause group!");
 
-  const VarID cur_size_vars = qdpll->pcnf.size_vars;
-  if (qdpll->state.next_free_internal_var_id == cur_size_vars)
-    {
-      /* Enlarge variable table to store additional internal variable IDs. */
-      assert ((cur_size_vars - qdpll->pcnf.size_user_vars) <= cur_size_vars);
-      const unsigned int new_size_vars = cur_size_vars + DEFAULT_INTERNAL_VARS_INCREASE; 
-      qdpll->pcnf.vars = (Var *) qdpll_realloc (qdpll->mm, qdpll->pcnf.vars,
-                                                cur_size_vars * sizeof (Var),
-                                                new_size_vars * sizeof (Var));
-      qdpll->pcnf.size_vars = new_size_vars;
-      assert (qdpll->pcnf.size_user_vars <= qdpll->pcnf.size_vars);
-      assert_internal_vars_integrity (qdpll);
-      if (qdpll->options.verbosity >= 2)
-        fprintf (stderr, "Push: enlarging internal variables, new internal size %d.\n", 
-                 qdpll->pcnf.size_vars - qdpll->pcnf.size_user_vars);
-    }
-  assert (qdpll->state.next_free_internal_var_id < qdpll->pcnf.size_vars);
-  assert (qdpll->state.next_free_internal_var_id >= qdpll->pcnf.size_user_vars);
+  /* Allocate a new clause group with ID 'group_id'. New groups are closed and
+     have to be opened by calling 'qdpll_open_clause_group'. */
+  unsigned int group_id = new_clause_group_aux (qdpll);
+  assert (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) > 0);
+  assert (group_id == QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars));
+  assert (qdpll->state.cnt_created_clause_groups <= group_id);
 
-  VarID internal_id = qdpll->state.next_free_internal_var_id++;
-  qdpll->state.cur_frame_index++;
-  QDPLL_PUSH_STACK(qdpll->mm, qdpll->state.cur_used_internal_vars, internal_id);
-  assert (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) == 
-          qdpll->state.cur_frame_index);
-  /* NOTE: always keep default scope as internal scope to store internal variables. */
-  assert (qdpll->pcnf.scopes.first->is_internal);
-  declare_and_init_variable (qdpll, qdpll->pcnf.scopes.first, internal_id, 1, 1);
-  /* Set frame index of internal variable. */
-  qdpll->pcnf.vars[internal_id].frame_index = qdpll->state.cur_frame_index;
-  assert (qdpll->pcnf.vars[internal_id].frame_index > 0);
-  /* Set flag to indicate that internal variable appears on the stack
-     'qdpll->state.cur_used_internal_vars'. */
-  assert (!qdpll->pcnf.vars[internal_id].is_cur_used_internal_var);
-  qdpll->pcnf.vars[internal_id].is_cur_used_internal_var = 1;
-
-  return qdpll->state.cur_frame_index;
+  return group_id;
 }
+
+/* Delete the clause group with ID 'clause_group'. The ID of the deleted group
+   becomes invalid and must not be passed to the API functions anymore. All
+   clauses in the deleted group are deleted from the formula. */
+void 
+qdpll_delete_clause_group (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  QDPLL_ABORT_QDPLL (!qdpll_exists_clause_group(qdpll, clause_group), "Invalid clause group ID!");
+  QDPLL_ABORT_QDPLL (qdpll_get_open_clause_group (qdpll) == clause_group, 
+                     "Clause group to be deleted must not be open!");
+  QDPLL_ABORT_QDPLL (clause_group_to_var_ptr (qdpll, clause_group)->is_cur_inactive_group_selector,
+                     "Clause group to be deleted must not be deactivated!");
+
+  delete_clause_group_aux (qdpll, clause_group);
+}
+
+/* Open the clause group with ID 'clause_group'. That group must not be open
+   already. Only one group can be open at a time. Clauses can be added to the
+   currently open group as usual by calling 'qdpll_add'. An open group will
+   stay open across calls of e.g. 'qdpll_sat'. However, to add clauses to a
+   another group, the currently open group must be closed again by
+   'close_clause_group' and the other group must be opened. */
+void 
+qdpll_open_clause_group (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (!qdpll_exists_clause_group(qdpll, clause_group), "Invalid clause group ID!");
+  QDPLL_ABORT_QDPLL (qdpll_get_open_clause_group (qdpll), 
+                     "There is already an open clause group!");
+  QDPLL_ABORT_QDPLL (clause_group_to_var_ptr (qdpll, clause_group)->is_cur_inactive_group_selector,
+                     "Clause group to be opened must not be deactivated!");
+  QDPLL_ABORT_QDPLL (qdpll->state.scope_opened,
+                     "Must close currently open scope before opening a clause group!");
+
+  qdpll->state.cur_open_group_id = clause_group;
+}
+
+/* Returns the ID of the currently open clause group, or NULL if no group is
+   currently open. If there is currently no open group, then all clauses added
+   via 'qdpll_add' will be permanently added to the formula and cannot be
+   removed. */
+ClauseGroupID 
+qdpll_get_open_clause_group (QDPLL *qdpll)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  QDPLL_ABORT_QDPLL (qdpll->state.cur_open_group_id && 
+                     !qdpll_exists_clause_group 
+                     (qdpll, qdpll->state.cur_open_group_id), 
+                     "Internal error: invalid clause group ID.");
+  QDPLL_ABORT_QDPLL (qdpll->state.cur_open_group_id && 
+                     clause_group_to_var_ptr 
+                     (qdpll, qdpll->state.cur_open_group_id)->is_cur_inactive_group_selector,
+                     "Internal error: current open group is deactivated!");
+
+  return get_open_clause_group_aux (qdpll);
+}
+
+/* Returns non-zero if and only if (1) a clause group with ID 'clause_group'
+   has been created before and (2) the ID 'clause_group' was returned by
+   'qdpll_new_clause_group' and (3) that clause group was not deleted by 
+   calling 'qdpll_delete_clause_group'. */
+int 
+qdpll_exists_clause_group (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+
+  return exists_clause_group_aux (qdpll, clause_group);
+}
+
+/* Close the clause group with ID 'clause_group'. That group must have been
+   opened by a previous call of 'open_clause_group'. */
+void 
+qdpll_close_clause_group (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (!qdpll_exists_clause_group(qdpll, clause_group), "Invalid clause group ID!");
+  QDPLL_ABORT_QDPLL (qdpll_get_open_clause_group (qdpll) != clause_group, 
+                     "Clause group to be closed is currently not open!");
+  QDPLL_ABORT_QDPLL (clause_group_to_var_ptr (qdpll, clause_group)->is_cur_inactive_group_selector,
+                     "Clause group to be closed must not be deactivated!");
+
+  qdpll->state.cur_open_group_id = 0;
+}
+
+/* Returns a zero-terminated array of clause group IDs representing those
+   clause groups which contain clauses used by the solver to determine
+   UNSATISFIABILITY by the most recent call of 'qdpll_sat'. That is, this
+   function returns a subset of those clause groups which participiate in the
+   resolution refutation of the current formula. This function can be called
+   only if the most recent call of 'qdpll_sat' returned QDPLL_RESULT_UNSAT.
+
+   NOTE: the caller is responsible to release the memory of the array returned
+   by this function. */
+ClauseGroupID * 
+qdpll_get_relevant_clause_groups (QDPLL * qdpll)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  QDPLL_ABORT_QDPLL (qdpll->result == QDPLL_RESULT_UNKNOWN, 
+                     "Formula must be solved before calling this function!");
+  QDPLL_ABORT_QDPLL (qdpll->result != QDPLL_RESULT_UNSAT, 
+                     "Formula must be unsatisfiable when calling this function!");
+  QDPLL_ABORT_QDPLL(!qdpll->assumption_lits_constraint, 
+                    "Unexpected error: no assumption subset computed!");
+  QDPLL_ABORT_QDPLL(!(qdpll->assumption_lits_constraint && qdpll->state.assumptions_given), 
+                    "Unexpected error: cannot retrieve relevant assumptions.");
+  QDPLL_ABORT_QDPLL(qdpll->assumption_lits_constraint->is_cube, 
+                    "Unexpected error: assumption-lits constraint is a cube.");
+
+  ClauseGroupIDStack clause_group_ids;
+  QDPLL_INIT_STACK(clause_group_ids);
+
+  LitID *p, *e;
+  for (p = qdpll->assumption_lits_constraint->lits, 
+         e = p + qdpll->assumption_lits_constraint->num_lits; 
+       p < e; p++)
+    {
+      LitID a_lit = *p;
+      Var *a_var = LIT2VARPTR(qdpll->pcnf.vars, a_lit);
+      if (a_var->is_internal)
+        {
+          /* Watch out for literals of clause group selector variables. Here,
+             we will only find variables assigned to FALSE since the formula is
+             unsatisfiable and 'qdpll->assumption_lits_constraint' is a clause
+             containing literals of the relevant internal assumptions. */
+          assert (a_var->is_cur_used_internal_var);
+          assert (!a_var->is_cur_inactive_group_selector);
+          assert (a_var->assignment == QDPLL_ASSIGNMENT_FALSE);
+          ClauseGroupID group_id = a_var->clause_group_id;
+          assert (qdpll_exists_clause_group (qdpll, group_id));
+          assert (!clause_group_to_var_ptr 
+                  (qdpll, group_id)->is_cur_inactive_group_selector);
+          assert (qdpll->state.cur_used_internal_vars.start[group_id - 1] == a_var->id);
+          QDPLL_PUSH_STACK(qdpll->mm, clause_group_ids, group_id);
+        }
+    }
+
+  unsigned int size = 
+    (QDPLL_COUNT_STACK(clause_group_ids) + 1) * sizeof (ClauseGroupID);
+  /* Do not use internal memory manager here because the user has to free the
+     memory. */
+  ClauseGroupID *relevant_clause_groups = malloc (size);
+  memset (relevant_clause_groups, 0, size);
+
+  /* Copy collected clause group ID to newly allocated array. */
+  ClauseGroupID *gp, *ge, *dest = relevant_clause_groups;
+  for (gp = clause_group_ids.start, ge = clause_group_ids.top; 
+       gp < ge; gp++, dest++)
+    *dest = *gp;
+  assert (dest == 
+          relevant_clause_groups + QDPLL_COUNT_STACK(clause_group_ids));
+  assert (!*dest);
+
+  QDPLL_DELETE_STACK(qdpll->mm, clause_group_ids);
+
+  return relevant_clause_groups;
+}
+
+/* Activates all clauses in the group 'clause_group', which has been
+   deactivated before by 'qdpll_deactivate_clause_group'. Clause groups are
+   activated at the time they are created and can be deactivated by calling
+   'qdpll_deactivate_clause_group'. */
+void 
+qdpll_activate_clause_group (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (!qdpll_exists_clause_group(qdpll, clause_group), "Invalid clause group ID!");
+  QDPLL_ABORT_QDPLL (qdpll_get_open_clause_group (qdpll) == clause_group, 
+                     "Internal error: deactivated clause group to be activated must not be open!");
+
+  Var *var = clause_group_to_var_ptr (qdpll, clause_group);
+  assert(var->is_cur_used_internal_var);
+  QDPLL_ABORT_QDPLL (!var->is_cur_inactive_group_selector,
+                     "Clause group to be activated is already activated!");
+  /* Set flag to indicate that the group with selector variable 'var' is
+     activated. */
+  var->is_cur_inactive_group_selector = 0;
+}
+
+/* Deactivates all clauses in the group 'clause_group'. The ID of a
+   deactivated group cannot be passed to any API functions except
+   'qdpll_activate_clause_group' and 'qdpll_exists_clause_group'. Clause
+   groups are activated at the time they are created. When calling
+   'qdpll_sat', clauses in deactivated groups are ignored. Thus deactivating a
+   clause group amounts to temporarily deleting these groups from the
+   formula. However, unlike 'qdpll_delete_clause_group' which permanently
+   deletes the clauses in a group, deactivated groups can be activated again
+   by calling 'qdpll_activate_clause_group'. This adds the formerly
+   deactivated clauses back to the formula. */
+void 
+qdpll_deactivate_clause_group (QDPLL *qdpll, ClauseGroupID clause_group)
+{
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (!qdpll->options.incremental_use, 
+                     "Must configure by '--incremental-use' to enable clause groups API!");
+  qdpll->state.clause_group_api_called = 1;
+  QDPLL_ABORT_QDPLL (qdpll->state.push_pop_api_called, 
+                     "Must not mix calls of push/pop API and clause groups API!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (!qdpll_exists_clause_group(qdpll, clause_group), "Invalid clause group ID!");
+  QDPLL_ABORT_QDPLL (qdpll_get_open_clause_group (qdpll) == clause_group, 
+                     "Clause group to be deactivated must not be open!");
+  QDPLL_ABORT_QDPLL (qdpll->state.scope_opened,
+                     "Must close currently open scope before deactivating a clause group!");
+
+  Var *var = clause_group_to_var_ptr (qdpll, clause_group);
+  assert(var->is_cur_used_internal_var);
+  QDPLL_ABORT_QDPLL (var->is_cur_inactive_group_selector,
+                     "Clause group to be deactivated is already deactivated!");
+  /* Set flag to indicate that the group with selector variable 'var' is
+     deactivated. */
+  var->is_cur_inactive_group_selector = 1;
+}
+
+/* ------------ END: API functions for clause groups ------------ */
 
 
 /* Make sure that at least a user-given variable with ID 'num' is
@@ -12798,8 +13345,7 @@ qdpll_push (QDPLL *qdpll)
 void
 qdpll_adjust_vars (QDPLL * qdpll, VarID num)
 {
-  QDPLL_ABORT_QDPLL (!qdpll, "'qdpll' is null!");
-  QDPLL_ABORT_QDPLL (num == 0, "'num' must not be zero!");
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   const VarID cur_size_vars = qdpll->pcnf.size_vars;
   const VarID cur_size_user_vars = qdpll->pcnf.size_user_vars;
   QDPLL_ABORT_QDPLL (cur_size_user_vars > cur_size_vars, 
@@ -12835,10 +13381,10 @@ qdpll_adjust_vars (QDPLL * qdpll, VarID num)
       /* Rename internal IDs by adding additional offset. Rename only if
          current frame index is greater than zero: this indicates that 'push' was
          called before and that there are in fact USED internal variables. */
-      if (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) > 0 || 
+      if (qdpll->state.cnt_created_clause_groups > 0 || 
           QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) > 0)
         {
-          assert (cur_size_internal_vars >= qdpll->state.cur_frame_index);
+          assert (cur_size_internal_vars >= qdpll->state.cnt_created_clause_groups);
 
           if (qdpll->options.verbosity >= 2)
             fprintf (stderr, "Adjust user vars: moving and renaming internal variables, new internal size %d.\n", 
@@ -12870,6 +13416,7 @@ qdpll_adjust_vars (QDPLL * qdpll, VarID num)
 void 
 qdpll_add_var_to_scope (QDPLL *qdpll, VarID id, Nesting nesting)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (nesting == 0, "Parameter 'nesting' must be greater than zero!");
   QDPLL_ABORT_QDPLL (qdpll_get_max_scope_nesting (qdpll) == 0, 
                      "Empty scope list; must add scopes first by 'qdpll_new_scope' or 'qdpll_new_scope_at_nesting'!");
@@ -12879,9 +13426,12 @@ qdpll_add_var_to_scope (QDPLL *qdpll, VarID id, Nesting nesting)
                      "'nesting' must be smaller than or equal to the return value of 'qdpll_get_max_scope_nesting'");
   QDPLL_ABORT_QDPLL (QDPLL_COUNT_STACK(qdpll->add_stack) != 0, 
                      "Started adding a variable to a scope while adding a clause!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
   QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
-                     "Unexpected assignments of variables; "            \
-                     "solver must be in reset state when adding clauses or variable!");
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
 
   /* The scope used in the previous call of this function is cached in
      'qdpll->state.scope_opened_ptr'. If possible, then re-use that cached
@@ -12911,6 +13461,7 @@ qdpll_add_var_to_scope (QDPLL *qdpll, VarID id, Nesting nesting)
 Nesting 
 qdpll_get_max_scope_nesting (QDPLL *qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   assert (qdpll->pcnf.user_scopes.first || !qdpll->pcnf.user_scopes.last);
   assert (!qdpll->pcnf.user_scopes.first || qdpll->pcnf.user_scopes.last);
   return qdpll->pcnf.user_scopes.last ? qdpll->pcnf.user_scopes.last->nesting : 0;
@@ -12920,13 +13471,19 @@ qdpll_get_max_scope_nesting (QDPLL *qdpll)
 Nesting
 qdpll_new_scope (QDPLL * qdpll, QDPLLQuantifierType qtype)
 {
-  QDPLL_ABORT_QDPLL (!qdpll, "'qdpll' is null!");
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL ((qtype != QDPLL_QTYPE_EXISTS &&
                       qtype != QDPLL_QTYPE_FORALL), "invalid 'qtype'!");
   QDPLL_ABORT_QDPLL (qdpll->state.scope_opened,
                      "there is already a new, open scope (must be closed with 'qdpll_add(qdpll, 0)')!");
   QDPLL_ABORT_QDPLL (QDPLL_COUNT_STACK(qdpll->add_stack) != 0, 
                      "Started adding a scope while adding a clause!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
 
   qdpll->state.scope_opened = 1;
   /* Allocate a new rightmost scope. */
@@ -12964,6 +13521,7 @@ qdpll_new_scope (QDPLL * qdpll, QDPLLQuantifierType qtype)
 Nesting
 qdpll_new_scope_at_nesting (QDPLL * qdpll, QDPLLQuantifierType qtype, Nesting nesting)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (nesting == 0, "Parameter 'nesting' must be greater than zero!");
   QDPLL_ABORT_QDPLL (nesting > qdpll_get_max_scope_nesting (qdpll) + 1, 
                      "Parameter 'nesting' must be smaller than or equal to 'qdpll_get_max_scope_nesting () + 1'!");
@@ -12971,6 +13529,12 @@ qdpll_new_scope_at_nesting (QDPLL * qdpll, QDPLLQuantifierType qtype, Nesting ne
                      "there is already a new, open scope (must be closed with 'qdpll_add(qdpll, 0)')!");
   QDPLL_ABORT_QDPLL (QDPLL_COUNT_STACK(qdpll->add_stack) != 0, 
                      "Started adding a scope while adding a clause!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
 
   /* Check when to append new scope to list of existing scopes. */
   if (nesting > qdpll_get_max_scope_nesting (qdpll))
@@ -13023,14 +13587,12 @@ qdpll_new_scope_at_nesting (QDPLL * qdpll, QDPLLQuantifierType qtype, Nesting ne
     }
 }
 
-/* Returns non-zero if variable 'id' occurs in the formula with respect to the
-   current assignment. That is, if all clauses where 'id' occurs are satisfied
-   then 'id' has no active occurrences left. */
+/* This function is deprecated. */
 int 
 qdpll_has_var_active_occs (QDPLL *qdpll, VarID id)
 {
   QDPLL_ABORT_QDPLL(1,"function deprecated");
-
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL(!id || id > qdpll->pcnf.max_declared_user_var_id, 
                     "Invalid variable ID!");
   Var *var = VARID2VARPTR(qdpll->pcnf.vars, id);
@@ -13048,7 +13610,7 @@ qdpll_has_var_active_occs (QDPLL *qdpll, VarID id)
 void
 qdpll_add (QDPLL * qdpll, LitID id)
 {
-  QDPLL_ABORT_QDPLL (!qdpll, "'qdpll' is null!");
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   add_aux (qdpll, id);
 }
 
@@ -13056,10 +13618,13 @@ qdpll_add (QDPLL * qdpll, LitID id)
 QDPLLResult
 qdpll_sat (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL(qdpll->options.depman_qdag && qdpll->options.trace,
                     "Trace mode must be combined with '--dep-man=simple'!");
   QDPLL_ABORT_QDPLL (qdpll->state.scope_opened,
                      "there is an open scope (must be closed with 'qdpll_add(qdpll, 0)')!");
+  QDPLL_ABORT_QDPLL (QDPLL_COUNT_STACK(qdpll->add_stack) != 0, 
+                     "most recently added clause has not been closed!");
   /* Value of 'qdpll->state.num_sat_calls' is used to trigger cube checking later in 'solve'. */
   QDPLL_ABORT_QDPLL (qdpll->state.num_sat_calls == UINT_MAX, 
                      "Number of calls of 'qdpll_sat()' has reached UINT_MAX.");
@@ -13082,6 +13647,10 @@ qdpll_sat (QDPLL * qdpll)
   QDPLL_ABORT_QDPLL (qdpll->qdo_assignment_table || qdpll->qdo_table_bytes, 
                      "Unexpected computed assignment for QDIMACS output. "\
                      "Must call 'qdpll_reset()' before calling 'qdpll_sat ()'.");
+  QDPLL_ABORT_QDPLL ((!qdpll->state.assumptions_given && count_assigned_vars(qdpll) != 0) || 
+                     qdpll->assigned_vars != qdpll->bcp_ptr || qdpll->result_constraint || 
+                     qdpll->state.decision_level != 0 || qdpll->result != QDPLL_RESULT_UNKNOWN, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
 
 #if COMPUTE_TIMES
   qdpll->time_stats.sat_time_start = time_stamp ();
@@ -13126,6 +13695,10 @@ qdpll_sat (QDPLL * qdpll)
 QDPLLAssignment
 qdpll_get_value (QDPLL * qdpll, VarID id)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  /* Fix: see 'qdpll_print_qdimacs_output' for comment. */
+  import_user_scopes (qdpll);
+  const QDPLLResult result = qdpll->result;
   assert (id);
   assert (id < qdpll->pcnf.size_vars);
   Var *var = VARID2VARPTR (qdpll->pcnf.vars, id);
@@ -13136,29 +13709,47 @@ qdpll_get_value (QDPLL * qdpll, VarID id)
   if (!qdpll->qdo_assignment_table)
     {
       assert (qdpll->qdo_table_bytes == 0);
-
-      /* Must properly handle default scope. */
-      Scope *outer = qdpll->pcnf.scopes.first;
-      assert (outer);
-      assert (outer->is_internal);
-      assert (outer->type == QDPLL_QTYPE_EXISTS);
-      assert (qdpll->pcnf.user_scopes.first);
-      if (outer->type != qdpll->pcnf.user_scopes.first->type && 
-          outer->link.next)
+      Scope *outer = 0;
+      assert (qdpll->pcnf.scopes.first);
+      if (!qdpll->pcnf.user_scopes.first)
         {
-          outer = outer->link.next;
-          assert (outer);
-          assert (QDPLL_COUNT_STACK (outer->vars) != 0);
-          assert (outer->nesting != QDPLL_DEFAULT_SCOPE_NESTING);
+          /* Formula is propositional; can print model only if satisfiable. */
+          if (result == QDPLL_RESULT_SAT)
+            outer = qdpll->pcnf.scopes.first;
+        }
+      else
+        {
+          if (result == QDPLL_RESULT_UNSAT)
+            {
+              /* Formula is unsatisfiable; cannot print countermodel if the
+                 outermost scope is existential or if the formula contains free
+                 variables, which by default are quantified existentially and
+                 leftmost. */
+              if (qdpll->pcnf.user_scopes.first->type == QDPLL_QTYPE_FORALL && 
+                  !has_scope_free_user_var (qdpll, qdpll->pcnf.scopes.first))
+                outer = qdpll->pcnf.user_scopes.first;
+            }
+          else
+            {
+              assert (result == QDPLL_RESULT_SAT);
+              /* Formula is satisfiable; cannot print countermodel if the
+                 outermost scope is universal AND if the formula DOES NOT contain free
+                 variables. */
+              if (qdpll->pcnf.user_scopes.first->type == QDPLL_QTYPE_EXISTS || 
+                  has_scope_free_user_var (qdpll, qdpll->pcnf.scopes.first))
+                {
+                  outer = qdpll->pcnf.scopes.first;
+                  if (QDPLL_COUNT_STACK(qdpll->pcnf.scopes.first->vars) == 0)
+                    {
+                      assert (outer->link.next);
+                      assert (outer->link.next->type == outer->type);
+                      outer = outer->link.next;
+                    }
+                }
+            }
         }
 
-      /* Compute missing values of outer variables only if formula is
-         unsatisfiable and outer block is universal OR formula is satisfiable
-         and outer block is existential. If the requested variable 'id' is
-         from another block then its value does not have any particular
-         meaning. */
-      if ((qdpll->result == QDPLL_RESULT_SAT && outer->type == QDPLL_QTYPE_EXISTS) ||
-          (qdpll->result == QDPLL_RESULT_UNSAT && outer->type == QDPLL_QTYPE_FORALL))
+        if (outer)
         {
           /* Bug fix: must check if 'result_constraint' is set (set
              only if we have top-level conflict/solution). If it is not
@@ -13190,11 +13781,14 @@ qdpll_get_value (QDPLL * qdpll, VarID id)
 }
 
 
-/* NOTE: this function prints the list of internal scopes, i.e. the cleaned up
-   user-scopes. */
 void
 qdpll_print (QDPLL * qdpll, FILE * out)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
   set_up_formula (qdpll);
 #ifndef NDEBUG
 #if QDPLL_ASSERT_FULL_FORMULA_INTEGRITY
@@ -13230,9 +13824,9 @@ qdpll_print (QDPLL * qdpll, FILE * out)
     {
       assert (!c->is_cube);
 
-      /* New: do not print clauses which effectively have been popped from the
-         clause stack. */
-      if (clause_has_popped_off_var (qdpll, c))
+      /* New: do not print clauses which effectively have been deleted from the
+         clause stack by either deleting the group/frame or deactivating the group. */
+      if (clause_has_popped_off_var (qdpll, c) || clause_has_inactive_var (qdpll, c))
         continue;
 
       if (c->num_lits > 0)
@@ -13264,10 +13858,18 @@ qdpll_print (QDPLL * qdpll, FILE * out)
 void
 qdpll_print_qdimacs_output (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   /* NOTE: here we print the largest declared variable ID and the
      number of used original clauses. This might differ from the preamble
      of the original input file if that file was not strictly QDIMACS
-     compliant or if tautological clauses were removed. */
+     compliant or if clauses were removed. */
+
+  /* Fix: must properly add user variables which have been deleted before
+     because they had no occurrences left. This is necessary to handle corner
+     cases where the input formula contains clauses which were redcued by
+     universal reduction. */
+  import_user_scopes (qdpll);
+
   const QDPLLResult result = qdpll->result;
   char *res_string;
   if (result == QDPLL_RESULT_UNKNOWN)
@@ -13282,37 +13884,68 @@ qdpll_print_qdimacs_output (QDPLL * qdpll)
   fprintf (stdout, "s cnf %s %d %d\n", res_string,
            qdpll->pcnf.max_declared_user_var_id, qdpll->pcnf.clauses.cnt);
 
-  /* Must properly handle default scope. */
-  Scope *outer = qdpll->pcnf.scopes.first;
-  assert (outer);
-  assert (outer->is_internal);
-  assert (outer->type == QDPLL_QTYPE_EXISTS);
-  assert (qdpll->pcnf.user_scopes.first);
-  if (outer->type != qdpll->pcnf.user_scopes.first->type && 
-      outer->link.next)
+  Scope *outer;
+  assert (qdpll->pcnf.scopes.first);
+  if (!qdpll->pcnf.user_scopes.first)
     {
-      outer = outer->link.next;
-      assert (outer);
-      assert (QDPLL_COUNT_STACK (outer->vars) != 0);
-      assert (outer->nesting != QDPLL_DEFAULT_SCOPE_NESTING);
+      /* Formula is propositional; when unsatisfiable then cannot print
+         countermodel. */
+      if (result == QDPLL_RESULT_UNSAT)
+        return;
+      else
+        outer = qdpll->pcnf.scopes.first;
+    }
+  else
+    {
+      if (result == QDPLL_RESULT_UNSAT)
+        {
+          /* Formula is unsatisfiable; cannot print countermodel if the
+             outermost scope is existential or if the formula contains free
+             variables, which by default are quantified existentially and
+             leftmost. */
+          if (qdpll->pcnf.user_scopes.first->type == QDPLL_QTYPE_EXISTS || 
+              has_scope_free_user_var (qdpll, qdpll->pcnf.scopes.first))
+            return;
+          else
+            outer = qdpll->pcnf.user_scopes.first;
+        }
+      else
+        {
+          assert (result == QDPLL_RESULT_SAT);
+          /* Formula is satisfiable; cannot print countermodel if the
+             outermost scope is universal AND if the formula DOES NOT contain free
+             variables. */
+          if (qdpll->pcnf.user_scopes.first->type == QDPLL_QTYPE_FORALL && 
+              !has_scope_free_user_var (qdpll, qdpll->pcnf.scopes.first))
+            return;
+          else
+            {
+              outer = qdpll->pcnf.scopes.first;
+              if (QDPLL_COUNT_STACK(qdpll->pcnf.scopes.first->vars) == 0)
+                {
+                  assert (outer->link.next);
+                  assert (outer->link.next->type == outer->type);
+                  outer = outer->link.next;
+                }
+            }
+        }
     }
 
-  if ((result == QDPLL_RESULT_SAT && outer->type == QDPLL_QTYPE_EXISTS) ||
-      (result == QDPLL_RESULT_UNSAT && outer->type == QDPLL_QTYPE_FORALL))
+  Var *vars = qdpll->pcnf.vars;
+  VarID *p, *e;
+  for (p = outer->vars.start, e = outer->vars.top; p < e; p++)
     {
-      Var *vars = qdpll->pcnf.vars;
-      VarID *p, *e;
-      for (p = outer->vars.start, e = outer->vars.top; p < e; p++)
-        {
-          assert (*p);
-          Var *var = VARID2VARPTR (vars, *p);
-          assert (var->id);
-          QDPLLAssignment a;
-          /* Do not print assignments of internal variables. */
-          if (!var->is_internal && (a = qdpll_get_value (qdpll, var->id)) != QDPLL_ASSIGNMENT_UNDEF)
-            fprintf (stdout, "V %d 0\n", 
-                     a == QDPLL_ASSIGNMENT_FALSE ? -var->id : var->id);
-        }
+      assert (*p);
+      VarID id = *p;
+      Var *var = VARID2VARPTR (vars, id);
+      assert (!var->id || var->id == id);
+      QDPLLAssignment a;
+      /* FIX: Do not print assignments of internal variables, ignore also
+         reset internal variables. */
+      if ((!var->is_internal && id <= qdpll_get_max_declared_var_id (qdpll)) && 
+          (a = qdpll_get_value (qdpll, id)) != QDPLL_ASSIGNMENT_UNDEF)
+        fprintf (stdout, "V %d 0\n", 
+                 a == QDPLL_ASSIGNMENT_FALSE ? -id : id);
     }
 }
 
@@ -13320,6 +13953,7 @@ qdpll_print_qdimacs_output (QDPLL * qdpll)
 void
 qdpll_init_deps (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
                      "Unexpected decision level != 0; solver must be in reset state!");
   QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
@@ -13344,6 +13978,9 @@ qdpll_init_deps (QDPLL * qdpll)
 void
 qdpll_reset_deps (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  /* NOTE: at this point, we may have assigned assumptions which were provided
+     by the user. */
   QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
                      "Unexpected decision level != 0; solver must be in reset state!");
   QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
@@ -13361,6 +13998,13 @@ qdpll_reset_deps (QDPLL * qdpll)
 int 
 qdpll_var_depends (QDPLL * qdpll, VarID x, VarID y)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (qdpll->state.decision_level != 0, 
+                     "Unexpected decision level != 0; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (qdpll->assigned_vars != qdpll->bcp_ptr, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  QDPLL_ABORT_QDPLL (count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
   QDPLLDepManGeneric *dm = qdpll->dm;
   assert (dm);
   QDPLL_ABORT_QDPLL (!dm->is_init (dm),
@@ -13381,6 +14025,7 @@ qdpll_var_depends (QDPLL * qdpll, VarID x, VarID y)
 void
 qdpll_print_deps (QDPLL * qdpll, VarID id)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (qdpll->pcnf.max_declared_user_var_id >= qdpll->pcnf.size_vars,
                      "largest declared ID larger than size of variables!");
   QDPLL_ABORT_QDPLL (!qdpll_is_var_declared (qdpll, id), "variable is not declared!");
@@ -13396,6 +14041,7 @@ qdpll_print_deps (QDPLL * qdpll, VarID id)
 VarID
 qdpll_get_max_declared_var_id (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   assert (qdpll->pcnf.max_declared_user_var_id == 
           find_max_declared_user_var_id (qdpll, qdpll->pcnf.vars + qdpll->pcnf.size_vars - 1));
   return qdpll->pcnf.max_declared_user_var_id;
@@ -13416,7 +14062,8 @@ qdpll_get_max_declared_var_id (QDPLL * qdpll)
    and put in the leftmost scope. */
 int qdpll_is_var_declared (QDPLL * qdpll, VarID id)
 {
-  QDPLL_ABORT_QDPLL (id == 0, "Value of 'id' must be greater than zero.");
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL (id == 0, "Zero is not a valid variable ID!");
   if (id > qdpll->pcnf.max_declared_user_var_id)
     return 0;
   /* The solver has to ensure the following property. */
@@ -13446,6 +14093,7 @@ int qdpll_is_var_declared (QDPLL * qdpll, VarID id)
    'qdpll_is_var_declared()' before. */
 Nesting qdpll_get_nesting_of_var (QDPLL * qdpll, VarID id)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (id == 0, "Value of 'id' must be greater than zero.");
   QDPLL_ABORT_QDPLL (!qdpll_is_var_declared (qdpll, id), 
                      "Variable with 'id' is not declared!");
@@ -13475,6 +14123,7 @@ Nesting qdpll_get_nesting_of_var (QDPLL * qdpll, VarID id)
 QDPLLQuantifierType 
 qdpll_get_scope_type (QDPLL *qdpll, Nesting nesting)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (nesting == 0, "Parameter 'nesting' must be greater than zero!");
   if (nesting > qdpll_get_max_scope_nesting (qdpll))
     return QDPLL_QTYPE_UNDEF;
@@ -13490,6 +14139,7 @@ qdpll_get_scope_type (QDPLL *qdpll, Nesting nesting)
 void
 qdpll_dump_dep_graph (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLLDepManGeneric *dm = qdpll->dm;
   assert (dm);
   QDPLL_ABORT_QDPLL (!dm->is_init (dm),
@@ -13502,6 +14152,7 @@ qdpll_dump_dep_graph (QDPLL * qdpll)
 void
 qdpll_print_stats (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (!(COMPUTE_STATS || COMPUTE_TIMES),
                      "must enable statistics!");
 #if COMPUTE_TIMES
@@ -14019,14 +14670,7 @@ qdpll_print_stats (QDPLL * qdpll)
 void
 qdpll_reset (QDPLL * qdpll)
 {
-#if 0
-  /* Reset restart intervals. */
-  qdpll->state.irestart_dist = qdpll->options.irestart_dist_init;
-  qdpll->state.orestart_dist = qdpll->options.orestart_dist_init;
-
-  /* Reset delta of variable activity like at initialization time. */
-  qdpll->state.var_act_inc = qdpll->options.var_act_inc;
-#endif
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
 
   /* Reset limits. */
   qdpll->options.max_dec = 0;
@@ -14052,6 +14696,7 @@ qdpll_reset (QDPLL * qdpll)
     }
   reset_clean_up_assignments (qdpll);
 
+  QDPLL_RESET_STACK(qdpll->user_given_assumptions); 
   qdpll->state.assumptions_given = 0;
   assert(sizeof_top_level (qdpll) == 0);
   reset_watchers (qdpll);
@@ -14061,24 +14706,20 @@ qdpll_reset (QDPLL * qdpll)
 /* Assign a variable as assumption. A later call of 'qdpll_sat(...)' solves
    the formula under the assumptions specified before. If 'id' is negative
    then variable with ID '-id' will be assigned false, otherwise variable with
-   ID 'id' will be assigned true.
-
-   NOTE: added assumptions will be kept across calls of 'qdpll_sat' unless
-   'qdpll_reset' is called. */
+   ID 'id' will be assigned true. */
 void qdpll_assume (QDPLL * qdpll, LitID id)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
+  QDPLL_ABORT_QDPLL(qdpll->assumption_lits_constraint || 
+                    qdpll->state.assumptions_given || 
+                    count_assigned_vars(qdpll) != 0, 
+                    "Solver must be in reset state -- call 'qdpll_reset()' before 'qdpll_assume()'!");
   /* Make sure to properly import previosuly added user prefix. See also
      comments at function 'add_aux'. */
   import_user_scopes (qdpll);
-
   QDPLL_ABORT_QDPLL(!qdpll_is_var_declared (qdpll, LIT2VARID(id)), 
                     "Variable is not declared!");
-  Var *var = LIT2VARPTR(qdpll->pcnf.vars, id);
-  QDPLL_ABORT_QDPLL(QDPLL_VAR_ASSIGNED(var), "variable is already assigned!");
-
-  /* Assign a variable as assumption only if it does occur in clauses. */
-  if (QDPLL_VAR_HAS_OCCS (var))
-    assume_aux (qdpll, id);
+  QDPLL_PUSH_STACK(qdpll->mm, qdpll->user_given_assumptions, id);
 }
 
 
@@ -14106,7 +14747,7 @@ LitID * qdpll_get_assumption_candidates (QDPLL * qdpll)
   LitID *cands = dmg->get_candidates (dmg);
 
   /* In incremental mode: remove internal variables from candidate list. */
-  if (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) != 0 || 
+  if (qdpll->state.cnt_created_clause_groups > 0 || 
       QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0)
     remove_internals_from_lits (qdpll, cands);
 
@@ -14123,6 +14764,7 @@ LitID * qdpll_get_assumption_candidates (QDPLL * qdpll)
 LitID * 
 qdpll_get_relevant_assumptions (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (qdpll->result == QDPLL_RESULT_UNKNOWN, 
                      "Formula is undecided!");
   QDPLL_ABORT_QDPLL (!qdpll->state.assumptions_given, "No assumptions given!");
@@ -14154,7 +14796,7 @@ qdpll_get_relevant_assumptions (QDPLL * qdpll)
 
   /* In incremental mode: remove internal variables from relevant assumptions. */
   if (qdpll->assumption_lits_constraint->num_lits && 
-      (QDPLL_COUNT_STACK(qdpll->state.cur_used_internal_vars) != 0 || 
+      (qdpll->state.cnt_created_clause_groups > 0 || 
        QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0))
     remove_internals_from_lits (qdpll, rel_assumptions);
 
@@ -14165,6 +14807,7 @@ qdpll_get_relevant_assumptions (QDPLL * qdpll)
 /* Reset collected statistics. */
 void qdpll_reset_stats (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   qdpll->state.num_backtracks = qdpll->state.num_restarts = 
     qdpll->state.num_decisions = 0;
 #if COMPUTE_STATS
@@ -14181,6 +14824,7 @@ void qdpll_reset_stats (QDPLL * qdpll)
 /* Discard all learned constraints and cover sets. */
 void qdpll_reset_learned_constraints (QDPLL * qdpll)
 {
+  QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   /* Discard all learned cubes. */
   check_resize_learnt_constraints_aux (qdpll, &qdpll->pcnf.learnt_cubes, 
                                        UINT_MAX, QDPLL_QTYPE_FORALL);

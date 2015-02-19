@@ -1,50 +1,58 @@
 
-September 2014
+February 2015
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-This is version 3.04 of the search-based QBF solver DepQBF. Compared to
-version 3.0, the semantics of the API for incremental use of the solver has
-been adapted. Please see the header file 'qdpll.h' for comments and the code
-examples in the subdirectory "examples" of the release.
+This is version 4.0 of the search-based QBF solver DepQBF.  Compared to the
+previously released versions, DepQBF 4.0 includes a novel API to support
+incremental solving based on clause groups. A clause group is a set of clauses
+which is incrementally added to and removed from a formula. A description of
+the API can be found in the following technical report:
 
-The example './examples/basic-api-example2.c' is the most comprehensive one
-and demonstrates the use of the API and, in particular, the 'qdpll_gc'
-function.
+Florian Lonsing and Uwe Egly: 
+"DepQBF: An Incremental QBF Solver Based on Clause Groups". 
+Technical report, arXiv/CoRR, February 2015. http://arxiv.org/abs/1502.02484
 
-Version 3.04 fixes the return value of the API function
-'qdpll_new_scope_at_nesting', but otherwise is equivalent to version 3.03.
+This release of DepQBF comes with DepQBF4J, a Java interface to DepQBF which
+allows to call DepQBF as a library from Java programs. Please see the README
+file in the subdirectory './DepQBF4J-0.2' for further information and usage
+examples. DepQBF4J is based on the Java Native Interface (JNI) and was
+implemented by Martin Kronegger and Andreas Pfandler.
 
-Since version 3.03, DepQBF includes the first release of DepQBF4J, a Java interface to
-DepQBF which allows to call DepQBF as a library from Java programs. Please see
-the README file in the subdirectory './DepQBF4J-0.1' for further information
-and usage examples. DepQBF4J is based on the Java Native Interface (JNI) and
-was implemented by Martin Kronegger and Andreas Pfandler.
+PLEASE SEE the header file 'qdpll.h', the examples in the subdirectory
+'examples', and the command line documentation (call './depqbf -h') for
+further information on using DepQBF and its library.
 
-Version 3.03 fixes a wrong assertion in the file 'qdpll.c' but otherwise is
-equivalent to version 3.02.
+The example './examples/basic-api-example2.c' demonstrates the basic use of
+the API and, in particular, the 'qdpll_gc' function. The clause group API is
+illustrated by './examples/basic-clause-groups-api-example.c'
 
-Version 3.02 fixes a segmentation fault in the QDIMACS output generation by
-the API functions 'qdpll_get_value' and 'qdpll_print_qdimacs_output'. 
+Many thanks to Robert Koenighofer, Adria Gascon, Thomas Krennwallner, Martin
+Kronegger, Andreas Pfandler, and Simon Cruanes for valuable feedback.
 
-Version 3.02 supports shared library generation (contributed by Thomas
-Krennwallner).
+--------
+FEATURES
+--------
 
-Many thanks to Robert Koenighofer, Thomas Krennwallner, Martin Kronegger, and
-Andreas Pfandler for valuable feedback.
+General features of DepQBF:
 
-Compared to the previously released version 2.0, DepQBF 3.04 includes the
-following major changes:
+- The solver can be used as a library. The API is declared in file 'qdpll.h'
+  and the examples in the subdirectory 'examples' demonstrate its basic use.
 
-- Incremental solving: the API of the solver allows for incremental solving
-  based on a clause stack. Clauses can be added to and removed from the
-  current formula by push and pop operations. Incremental solving can be
-  beneficial in applications where a sequence of closely related formulae must
-  be solved. This way, the solver does not have to solve each formula from
-  scratch but tries to reuse information learned from previously solved
-  formulae.
+- Incremental solving: Incremental solving can be beneficial in applications
+  where a sequence of closely related formulae must be solved. This way, the
+  solver does not have to solve each formula from scratch but tries to reuse
+  information learned from previously solved formulae. DepQBF supports
+  incremental solving by a push/pop API and a clause group API. The push/pop
+  API allows to add and remove sets of clauses in a stack-based way. The
+  clause group API is more general and supports addition and deletion of
+  arbitrary sets of clauses.
+
+- Extraction of unsatisfiable cores: for unsatisfiable formulas, an
+  unsatisfiable core (i.e. subset of clauses) can be extracted via the clause
+  group API in a convenient way.
 
 - Solving under assumptions: assumptions are fixed variable assignments from
   the leftmost quantifier block of a QBF. Assumptions can be added through the
@@ -56,18 +64,6 @@ following major changes:
   resolvents. In contrast to that, long-distance resolution admits certain
   tautological resolvents. It was first implemented in the QBF solver
   'quaffle' and is now also available in DepQBF.
-
-- Some code maintenance and bug fixes: many thanks to Adria Gascon for
-  valuable feedback.
-
-PLEASE SEE the header file 'qdpll.h', the examples in the subdirectory
-'examples', and the command line documentation (call './depqbf -h') for
-further information on the use of the solver and its library.
-
-General features of DepQBF:
-
-- The solver can be used as a library. The API is declared in file 'qdpll.h'
-  and the examples in the subdirectory 'examples' demonstrate the basic use.
 
 - Advanced clause and cube learning based on QBF Pseudo Unit Propagation as
   presented in the following paper: "Florian Lonsing, Uwe Egly, Allen Van
@@ -101,9 +97,10 @@ General features of DepQBF:
   given formula using additional tools. See also the website
   'http://fmv.jku.at/qbfcert/' and the related tool paper published at SAT'12.
 
-  NOTE: tracing must be combined with the trivial dependency scheme (i.e. the
-  linear quantifier prefix ordering) by option '--dep-man=simple'. Further, to
-  enable tracing for QPUP-based QCDCL, '--no-lazy-qpup' must be specified.
+  NOTE: tracing is currently not supported in incremental solving and must be
+  combined with the trivial dependency scheme (i.e. the linear quantifier
+  prefix ordering) by option '--dep-man=simple'. Further, to enable tracing
+  for QPUP-based QCDCL, '--no-lazy-qpup' must be specified.
 
 DepQBF consists of a dependency manager (file 'qdpll_dep_man_qdag.c') and a
 core QDPLL solver (file 'qdpll.c'). During a run the solver queries the
@@ -199,24 +196,28 @@ functions.
 In applications which involve a very large number of incremental calls, the
 overhead of maintaining the internal data structures in this release of DepQBF
 might become non-negligible. In this case, please contact Florian Lonsing;
-this is the first version of DepQBF which supports incremental solving and
-hence your feedback is highly appreciated.
+your feedback is highly appreciated.
 
 Incremental solving must be enabled by calling the API function
 'qdpll_configure' with the parameters '--dep-man=simple' and
 '--incremental-use', respectively. Please see also the example programs in the
 subdirectory 'examples'.
 
-The push and pop operations provided by the API allow to add and remove
-clauses in a stack-based way. Therefore, clauses which are shared between many
-formulas to be solved should be pushed onto the stack first. Clauses which
-have to be removed soon should be added last so that they can be popped from
-the stack easily. 
+The push/pop API allows to add and remove clauses in a stack-based
+way. Therefore, clauses which are shared between many formulas to be solved
+should be pushed onto the stack first. Clauses which have to be removed soon
+should be added last so that they can be popped from the stack easily.
 
 In general, it is beneficial for the performance of the solver to avoid
 needless push operations. For example, if you know that certain clauses will
 never be removed from the formula then it is not necessary to call
 'qdpll_push' before adding these clauses.
+
+The clause group API generalizes the push/pop API in that it allows sets of
+clauses to be added and removed arbitrarily. It is recommended to use the
+push/pop API instead of the clause group API for applications which naturally
+can be encoded by push and pop operations, that is, where the formulas to be
+solved incrementally are modified in a rather uniform way.
 
 If assumptions are passed to the solver using 'qdpll_assume' AND clauses are
 added later to the formula, then the API function 'qdpll_configure' must be
@@ -224,29 +225,6 @@ called with the parameters '--dep-man=simple' and '--incremental-use' after
 the solver object has been created by 'qdpll_create'. Otherwise, if no clauses
 are added, then the aforementioned calls of the API function 'qdpll_configure'
 can be omitted.
-
-
-----------
-REFERENCES
-----------
-
-Florian Lonsing and Armin Biere. DepQBF: A Dependency-Aware QBF Solver. JSAT,
-2010.
-
-Aina Niemetz and Mathias Preiner and Florian Lonsing and Martina Seidl and
-Armin Biere. Resolution-Based Certificate Extraction for QBF - (Tool
-Presentation). In Proc. SAT 2012.
-
-Florian Lonsing and Uwe Egly and Allen Van Gelder. Efficient Clause Learning
-for Quantified Boolean Formulas via QBF Pseudo Unit Propagation. In Proc. SAT
-2013.
-
-Uwe Egly and Florian Lonsing and Magdalena Widl. Long-Distance Resolution:
-Proof Generation and Strategy Extraction in Search-Based QBF Solving. In
-Proc.LPAR 2013.
-
-Florian Lonsing and Uwe Egly. Incremental QBF Solving. Technical report
-submitted to arXiv Computing Research Repository (CoRR), February 2014.
 
 
 -------
