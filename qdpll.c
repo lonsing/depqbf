@@ -11920,11 +11920,12 @@ qdo_fix_outer_scope_unassigned_vars_aux (QDPLL *qdpll, Scope *outer, VarIDStack 
           if (!QDPLL_VAR_ASSIGNED (var))
             {
               /* Set the value of required unassigned variables. */
-              if (var->scope == outer || var->user_scope == outer 
+              if ((var->scope == outer || var->user_scope == outer) && 
+                  assignment_table[var->id] == QDPLL_ASSIGNMENT_UNDEF
                   /*(!c->is_cube && var->scope->type == QDPLL_QTYPE_FORALL) || 
                     (c->is_cube && var->scope->type == QDPLL_QTYPE_EXISTS)*/)
                 {
-                  assert (assignment_table[var->id] == QDPLL_ASSIGNMENT_UNDEF);
+                  //assert (assignment_table[var->id] == QDPLL_ASSIGNMENT_UNDEF);
                   if (QDPLL_LIT_NEG (lit))
                     {
                       if (!c->is_cube)
@@ -13673,14 +13674,15 @@ QDPLLAssignment
 qdpll_get_value (QDPLL * qdpll, VarID id)
 {
   QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
-  /* Fix: see 'qdpll_print_qdimacs_output' for comment. */
-  import_user_scopes (qdpll);
+  QDPLL_ABORT_QDPLL (!qdpll_is_var_declared (qdpll, id), 
+                     "Variable with given ID is not declared!");
+  /* Fix: we do NOT call 'import_user_scopes' here because this will copy
+     scopes and hence destroy the QDAG. see 'qdpll_print_qdimacs_output' for
+     comment. */
   const QDPLLResult result = qdpll->result;
   assert (id);
   assert (id < qdpll->pcnf.size_vars);
   Var *var = VARID2VARPTR (qdpll->pcnf.vars, id);
-  QDPLL_ABORT_QDPLL (!qdpll_is_var_declared (qdpll, id), 
-                     "Variable with 'id' is not declared!");
   QDPLL_ABORT_QDPLL (var->is_internal, "Unexpected internal variable ID.");
 
   if (!qdpll->qdo_assignment_table)
@@ -13806,8 +13808,6 @@ qdpll_print (QDPLL * qdpll, FILE * out)
       if (clause_has_popped_off_var (qdpll, c) || clause_has_inactive_var (qdpll, c))
         continue;
 
-      if (c->num_lits > 0)
-        {
           /* For incremental use: do not print literals of internal variables. */
           LitID *p, *e;
           for (p = c->lits, e = p + c->num_lits; p < e; p++)
@@ -13818,14 +13818,6 @@ qdpll_print (QDPLL * qdpll, FILE * out)
                 fprintf (out, "%d ", lit);
             }
           fprintf (out, "0\n");
-        }
-      else
-        {
-          /* For empty clause, print out two complementary unit clauses to be
-             QDIMACS-compliant. */
-          fprintf (out, "%d 0\n", qdpll->pcnf.max_declared_user_var_id);
-          fprintf (out, "%d 0\n", -qdpll->pcnf.max_declared_user_var_id);
-        }
     }
 }
 
@@ -13841,11 +13833,10 @@ qdpll_print_qdimacs_output (QDPLL * qdpll)
      of the original input file if that file was not strictly QDIMACS
      compliant or if clauses were removed. */
 
-  /* Fix: must properly add user variables which have been deleted before
-     because they had no occurrences left. This is necessary to handle corner
-     cases where the input formula contains clauses which were redcued by
-     universal reduction. */
-  import_user_scopes (qdpll);
+  /* Fix: we do NOT call 'import_user_scopes' here because this destroys QDAG
+     when scopes are copied. However, user variables are never removed even if
+     they have no occurrences left, unless the user deliberately wants to remove
+     then by calling qdpll-gc. */
 
   const QDPLLResult result = qdpll->result;
   char *res_string;
