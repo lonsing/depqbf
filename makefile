@@ -8,6 +8,15 @@ MAJOR=1
 MINOR=0
 VERSION=$(MAJOR).$(MINOR)
 
+UNAME:=$(shell uname)
+
+ifeq ($(UNAME), Darwin)
+# Mac OS X
+SONAME=-install_name
+else
+SONAME=-soname
+endif
+
 .SUFFIXES: .c .o .fpico
 
 .c.fpico:
@@ -54,7 +63,7 @@ libqdpll.a: qdpll.o qdpll_pqueue.o qdpll_mem.o qdpll_dep_man_qdag.o
 	ranlib $@
 
 libqdpll.so.$(VERSION): qdpll.fpico qdpll_pqueue.fpico qdpll_mem.fpico qdpll_dep_man_qdag.fpico
-	$(CC) -shared -Wl,-soname,libqdpll.so.$(MAJOR) $^ -o $@
+	$(CC) -shared -Wl,$(SONAME),libqdpll.so.$(MAJOR) $^ -o $@
 
 clean:
 	rm -f *.so.$(VERSION) *.fpico *.a *.o *.gcno *.gcda *.gcov *~ gmon.out depqbf

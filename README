@@ -147,11 +147,6 @@ will run *substantially* slower in this case. As usual, using the compiler
 flag 'DNDEBUG' removes all assertions from the code, regardless from the value
 of 'FULL_ASSERT'.
 
-Compilation on a Mac:
-
-Depending on your system, it might be necessary to replace "-soname"
-by "-install_name" in the makefile.
-
 
 -----------------------
 CONFIGURATION AND USAGE
