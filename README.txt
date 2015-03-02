@@ -25,13 +25,14 @@ PLEASE SEE the header file 'qdpll.h', the examples in the subdirectory
 'examples', and the command line documentation (call './depqbf -h') for
 further information on using DepQBF and its library.
 
+PLEASE SEE ALSO the guidelines on incremental solving and API usage below.
+
 The example './examples/basic-api-example2.c' demonstrates the basic use of
 the API and, in particular, the 'qdpll_gc' function. The clause group API is
 illustrated by './examples/basic-clause-groups-api-example.c'
 
 Many thanks to Robert Koenighofer, Adria Gascon, Thomas Krennwallner, Martin
 Kronegger, Andreas Pfandler, and Simon Cruanes for valuable feedback.
-
 
 --------
 FEATURES
@@ -201,12 +202,18 @@ http://fmv.jku.at/bloqqer/
 http://fmv.jku.at/qxbf/
 
 
---------------------------------------
-IMPORTANT NOTES ON INCREMENTAL SOLVING
---------------------------------------
+----------------------------------------------------
+IMPORTANT NOTES ON INCREMENTAL SOLVING AND API USAGE
+----------------------------------------------------
 
 Please see the header file 'qdpll.h' for some documentation of the API
 functions.
+
+When using the API of the solver (versions 3.0 up to 4.0), it is HIGHLY
+RECOMMENDED to first add all the variables to the quantifier prefix and then
+all the clauses of the formula rather than adding variables and clauses in
+interleaved fashion. In the latter case, runtime overhead will occur for large
+formulas. Many thanks to Mathias Preiner for pointing out this problem.
 
 In applications which involve a very large number of incremental calls, the
 overhead of maintaining the internal data structures in this release of DepQBF
