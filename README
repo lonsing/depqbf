@@ -1,19 +1,19 @@
 
-February 2015
+June 2015
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-This is version 4.0 of the search-based QBF solver DepQBF.  Compared to the
-previously released versions, DepQBF 4.0 includes a novel API to support
+This is version 4.01 of the search-based QBF solver DepQBF. Compared to the
+previously released versions, since version 4.0 DepQBF comes with a novel API for 
 incremental solving based on clause groups. A clause group is a set of clauses
 which is incrementally added to and removed from a formula. A description of
 the API can be found in the following technical report:
 
 Florian Lonsing and Uwe Egly: 
-"DepQBF: An Incremental QBF Solver Based on Clause Groups". 
-Technical report, arXiv/CoRR, February 2015. http://arxiv.org/abs/1502.02484
+"Incrementally Computing Minimal Unsatisfiable Cores of QBFs via a Clause Group Solver API". 
+Technical report, arXiv/CoRR, February/May 2015. http://arxiv.org/abs/1502.02484
 
 This release of DepQBF comes with DepQBF4J, a Java interface to DepQBF which
 allows to call DepQBF as a library from Java programs. Please see the README

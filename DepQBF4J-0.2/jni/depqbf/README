@@ -1,19 +1,19 @@
 
-February 2015
+June 2015
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-This is version 4.0 of the search-based QBF solver DepQBF.  Compared to the
-previously released versions, DepQBF 4.0 includes a novel API to support
+This is version 4.01 of the search-based QBF solver DepQBF. Compared to the
+previously released versions, since version 4.0 DepQBF comes with a novel API for 
 incremental solving based on clause groups. A clause group is a set of clauses
 which is incrementally added to and removed from a formula. A description of
 the API can be found in the following technical report:
 
 Florian Lonsing and Uwe Egly: 
-"DepQBF: An Incremental QBF Solver Based on Clause Groups". 
-Technical report, arXiv/CoRR, February 2015. http://arxiv.org/abs/1502.02484
+"Incrementally Computing Minimal Unsatisfiable Cores of QBFs via a Clause Group Solver API". 
+Technical report, arXiv/CoRR, February/May 2015. http://arxiv.org/abs/1502.02484
 
 This release of DepQBF comes with DepQBF4J, a Java interface to DepQBF which
 allows to call DepQBF as a library from Java programs. Please see the README
@@ -23,7 +23,9 @@ implemented by Martin Kronegger and Andreas Pfandler.
 
 PLEASE SEE the header file 'qdpll.h', the examples in the subdirectory
 'examples', and the command line documentation (call './depqbf -h') for
-further information on the use of the solver and its library.
+further information on using DepQBF and its library.
+
+PLEASE SEE ALSO the guidelines on incremental solving and API usage below.
 
 The example './examples/basic-api-example2.c' demonstrates the basic use of
 the API and, in particular, the 'qdpll_gc' function. The clause group API is
@@ -146,11 +148,6 @@ will run *substantially* slower in this case. As usual, using the compiler
 flag 'DNDEBUG' removes all assertions from the code, regardless from the value
 of 'FULL_ASSERT'.
 
-Compilation on a Mac:
-
-Depending on your system, it might be necessary to replace "-soname"
-by "-install_name" in the makefile.
-
 
 -----------------------
 CONFIGURATION AND USAGE
@@ -186,12 +183,32 @@ By default, statistical output is disabled. To enable statistics, set the flag
 statistics can be enabled by setting flag 'COMPUTE_STATS'.
 
 
---------------------------------------
-IMPORTANT NOTES ON INCREMENTAL SOLVING
---------------------------------------
+-------------------------------
+IMPORTANT NOTE ON PREPROCESSING
+-------------------------------
+
+DepQBF is a plain solver and does not have built-in preprocessing. However,
+preprocessing typically increases the performance considerably. It is highly
+recommended -- for non-incremental solving -- to combine DepQBF with
+preprocessors such as Bloqqer and/or QxBF, for example:
+
+http://fmv.jku.at/bloqqer/
+
+http://fmv.jku.at/qxbf/
+
+
+----------------------------------------------------
+IMPORTANT NOTES ON INCREMENTAL SOLVING AND API USAGE
+----------------------------------------------------
 
 Please see the header file 'qdpll.h' for some documentation of the API
 functions.
+
+When using the API of the solver (versions 3.0 up to 4.0), it is HIGHLY
+RECOMMENDED to first add all the variables to the quantifier prefix and then
+all the clauses of the formula rather than adding variables and clauses in
+interleaved fashion. In the latter case, runtime overhead will occur for large
+formulas. Many thanks to Mathias Preiner for pointing out this problem.
 
 In applications which involve a very large number of incremental calls, the
 overhead of maintaining the internal data structures in this release of DepQBF

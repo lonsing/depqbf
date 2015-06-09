@@ -11785,6 +11785,11 @@ move_internal_ids (QDPLL *qdpll, const unsigned int cur_size_user_vars,
           dest++;
           qdpll->state.next_free_internal_var_id++;
         }
+      else
+        {
+          dest++;
+          qdpll->state.next_free_internal_var_id++;
+        }
     }
 }
 
