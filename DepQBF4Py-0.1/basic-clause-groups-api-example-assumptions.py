@@ -117,7 +117,7 @@ qcdcl.add(0)
 qcdcl.print_dimacs()
 
 # Enable both groups by setting both selector variables to false.
-qcdcl.assume(-5)  
+qcdcl.assume(-5)
 qcdcl.assume(-6)
 
 # Formula is expected to be unsatisfiable.
@@ -127,11 +127,17 @@ logging.warn('result is %d'% res)
 # Get a list of those selector variables which appear in clauses used
 # by the solver to determine unsatisfiability.
 
-relevant_assumptions=list(qcdcl.get_relevant_assumptions_as_generator())
+relevant_assumptions=list(qcdcl.iter_relevant_assumptions())
+
+#check for memory leak
+#for i in xrange(1000000):
+#    relevant_clause_groups = list(qcdcl.iter_relevant_assumptions())
+#    assert (sum(1 for _ in relevant_clause_groups) == 1)
+
 qcdcl.reset()
 
 #BUG?
-#DOES NOT WORK IN PYTHON YIELDS
+#DOES NOT WORK IN PYTHON
 #[QDPLL] qdpll_get_relevant_assumptions at line 14742: Formula is undecided!
 #Abort trap: 6
 #assert (sum(1 for _ in qcdcl.get_relevant_assumptions()) == 1)

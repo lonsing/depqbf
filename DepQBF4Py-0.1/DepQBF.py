@@ -212,6 +212,9 @@ class QCDCL(object):
         """
         return self.__lib.qdpll_exists_clause_group(self.__depqbf,clause_group_id)
 
+    def _free(self,ptr):
+        self.__lib.qdpll_freeme(ptr)
+
     def get_assumption_candidates(self):
         """Returns a zero-terminated array of LitIDs of variables which can
         safely be assigned as assumptions by function
@@ -255,30 +258,38 @@ class QCDCL(object):
         return self.__lib.qdpll_get_open_clause_group(self.__depqbf)
 
     def get_relevant_assumptions(self):
-
         get_relevant_assumptions=self.__lib.qdpll_get_relevant_assumptions
         get_relevant_assumptions.restype = LitID_P
         return get_relevant_assumptions(self.__depqbf)
 
-    def get_relevant_assumptions_as_generator(self):
+    def iter_relevant_assumptions(self):
         res = self.get_relevant_assumptions()
         i = 0
         while res[i]:
             yield res[i]
             i+=1
+        # Free memory of array returned by
+        # 'qcdcl.get_relevant_clause_groups'.  This is the caller's
+        # responsibility.
+        self.__lib.qdpll_freeme(res)
 
     def get_relevant_clause_groups(self):
+        #needs to free the memory
         get_relevant_clause_groups=self.__lib.qdpll_get_relevant_clause_groups
         get_relevant_clause_groups.restype = ClauseGroupID_P
         return get_relevant_clause_groups(self.__depqbf)
 
-    def get_relevant_clause_groups_as_generator(self):
+    def iter_relevant_clause_groups(self):
         res=self.get_relevant_clause_groups()
         i=0
         while res[i]:
             yield res[i]
             i+=1
-        
+        # Free memory of array returned by
+        # 'qcdcl.get_relevant_clause_groups'.  This is the caller's
+        # responsibility.
+        self.__lib.qdpll_freeme(res)
+
     def get_scope_type(self,var_id):
         return self.__lib.qdpll_get_scope_type(self.__depqbf,var_id)
 

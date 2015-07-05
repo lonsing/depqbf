@@ -103,7 +103,12 @@ logging.warn('result is %d' % res)
 # Get a list of those clause groups which contain clauses used by
 # solver to determine unsatisfiability. This amounts to an
 # unsatisfiable core of the formula.
-relevant_clause_groups = list(qcdcl.get_relevant_clause_groups_as_generator())
+#check for memory leak
+#for i in xrange(100000000):
+#    relevant_clause_groups = list(qcdcl.iter_relevant_clause_groups())
+#    assert (sum(1 for _ in relevant_clause_groups) == 1)
+
+relevant_clause_groups = list(qcdcl.iter_relevant_clause_groups())
 
 # We must reset the solver AFTER retrieving the relevant groups.
 qcdcl.reset ()
@@ -136,12 +141,6 @@ qcdcl.reset()
 # Activate group 'id2' again, which makes the formula unsatisfiable.
 logging.warn('activating group 2 again')
 qcdcl.activate_clause_group(relevant_clause_groups[0])
-
-# Free memory of array returned by 'qcdcl.get_relevant_clause_groups'.
-# This is the caller's responsibility.
-
-#TODO:
-#free(relevant_clause_groups)
 
 # Permanently remove the group 'id1'. This operation cannot be undone
 # and is in contrast to deactivating a group.

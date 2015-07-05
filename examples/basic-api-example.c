@@ -121,3 +121,4 @@ int main (int argc, char** argv)
   /* Delete solver instance. */
   qdpll_delete (depqbf);
 }
+
