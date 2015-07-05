@@ -1,3 +1,4 @@
+
 from __future__ import print_function
 from DepQBF import *
 
@@ -113,7 +114,7 @@ qcdcl.add(0)
 #  assumptions through the solver API to enable/disable the desired
 #  groups. This must be done before solving the formula by calling
 #  'qcdcl.evaluate'.
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 # Enable both groups by setting both selector variables to false.
 qcdcl.assume(-5)  
@@ -156,7 +157,7 @@ logging.warn('deactivating group 2 with clauses 1 2 4 0 and 1 -4 0 by assumption
 qcdcl.assume(-5)  
 qcdcl.assume(6)
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 # The formula where the last two clauses are disabled is expected to
 # be satisfiable.
@@ -175,7 +176,7 @@ logging.warn('deactivating group 1 with clause -1 -3 0')
 qcdcl.assume(5)  
 qcdcl.assume(-6)
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)

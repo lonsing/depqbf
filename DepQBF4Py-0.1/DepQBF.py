@@ -1,67 +1,17 @@
-#TODO: logging default prefix
 #TODO: lazy parameter loading
 #TODO: documentation
 #TODO: fix example files
+#TODO: fix function naming in the docstrings
 
 from ctypes import *
+import sys
 import logging
 from logging.config import fileConfig
-import sys
-
 fileConfig("logging.conf")
 
-class QDPLL(Structure):
-    pass
+from file_helper import *
+from basic_types import *
 
-QDPLL_P=POINTER(QDPLL)
-
-(QDPLL_QTYPE_EXISTS, QDPLL_QTYPE_UNDEF, QDPLL_QTYPE_FORALL) = (-1,0,1)
-
-class QDPLLResult(Structure):
-    pass
-
-(QDPLL_RESULT_UNKNOWN,QDPLL_RESULT_SAT,QDPLL_RESULT_UNSAT) = (0,10,20)
-
-class QDPLLAssignment(Structure):
-    pass
-
-(QDPLL_ASSIGNMENT_FALSE,QDPLL_ASSIGNMENT_UNDEF,QDPLL_ASSIGNMENT_TRUE) = (-1,0,1)
-
-def assignment2str(a):
-    if QDPLL_ASSIGNMENT_UNDEF:
-        return 'undef'
-    elif QDPLL_ASSIGNMENT_FALSE:
-        return 'false'
-    elif QDPLL_ASSIGNMENT_TRUE:
-        return 'true'
-    else:
-        raise TypeError()
-
-class FILE(Structure):
-    pass
-
-FILE_P=POINTER(FILE)
-
-ClauseGroupID=c_int
-ClauseGroupID_P=POINTER(ClauseGroupID)
-
-LitID=c_int
-LitID_P=POINTER(LitID)
-
-#Helper Functions
-from contextlib import contextmanager
-
-@contextmanager
-def stdout_redirector(stream):
-    old_stdout = sys.stdout
-    sys.stdout = stream
-    try:
-        yield
-    finally:
-        sys.stdout = old_stdout
-
-
-#MAIN Thingie
 class QCDCL(object):
     __lib=None
     __LIB_NAME='../libqdpll.so.1.0'
@@ -71,9 +21,6 @@ class QCDCL(object):
             logging.debug('Shared Lib: Loading...')
             logging.debug('Shared Lib: %s' %self.__LIB_NAME)
             self.__lib = cdll.LoadLibrary(self.__LIB_NAME)
-            logging.debug('Shared Lib: libc')
-            self.__libc = CDLL(None)
-            logging.debug('Shared Lib: Loaded')
 
     def __init__(self):
         logging.debug('QCDCL: Initializing...')
@@ -127,70 +74,188 @@ class QCDCL(object):
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
         >>> qcdcl.add(1)
+        >>> qcdcl.add(0)
+
+        >>> qcdcl.new_scope_at_nesting (QDPLL_QTYPE_EXISTS, 2)
+        2
         >>> qcdcl.add(2)
         >>> qcdcl.add(0)
 
-        #TODO: yields segfault        
-        >>> qcdcl.qdpll_print()
-        s cnf -1 2 0
+        >>> qcdcl.add(1)
+        >>> qcdcl.add(-2)
+        >>> qcdcl.add(0)
+
+        >>> qcdcl.add(-1)
+        >>> qcdcl.add(2)
+        >>> qcdcl.add(0)
+        
+        >>> qcdcl.print_dimacs()
+        p cnf 2 2
+        a 1 0
+        e 2 0
+        1 -2 0
+        -1 2 0
         """
         logging.debug('QCDCL: add_variable=%i'%var_id)
         self.__lib.qdpll_add(self.__depqbf, var_id)
         
     def add_var_to_scope (self,var_id,nesting):
+        """Add a new variable with ID 'id' to the scope with nesting level
+        'nesting'. The scope must exist, i.e. it must have been added
+        by either 'qdpll_new_scope' or
+        'qdpll_new_scope_at_nesting'. The value of the parameter
+        'nesting' of this function should be a value returned by a
+        previous call of 'qdpll_new_scope' or
+        'qdpll_new_scope_at_nesting'. In any case, it must be smaller
+        than or equal to the return value of
+        'qdpll_get_max_scope_nesting'.
+
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')        
+        """
         self.__lib.qdpll_add_var_to_scope(self.__depqbf,var_id,nesting)
 
     def adjust_vars (self, var_id):
+        """Ensure var table size to be at least 'num'.
+        >>>
+        
+        """
         self.__lib.qdpll_adjust_vars(self.__depqbf,var_id)
 
     def assume(self,lit_id):
+        """Assign a variable as assumption. A later call of 'qdpll_sat(...)'
+        solves the formula under the assumptions specified before. If
+        'id' is negative then variable with ID '-id' will be assigned
+        false, otherwise variable with ID 'id' will be assigned
+        true.
+        """
         self.__lib.qdpll_assume(self.__depqbf,lit_id)
 
     def close_scope(self):
+        """Close open scope."""
         self.add(0)
     
     def close_clause_group(self,clause_group_id):
+        """Close the clause group with ID 'clause_group'. That group must have
+        been opened by a previous call of 'open_clause_group' and must
+        be activated.
+        """
         self.__lib.qdpll_close_clause_group(self.__depqbf,clause_group_id)
 
     def configure(self, *args):
+        """Configure solver instance via configuration list of strings.
+        Returns null pointer on success and error string otherwise.
+
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('-dep-man=simple','--incremental-use')
+        Traceback (most recent call last):
+        ...
+        ValueError: unknown option:-dep-man=simple
+
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=foo')
+        Traceback (most recent call last):
+        ...
+        ValueError: expecting 'simple' or 'qdag' after '--dep-man=':--dep-man=foo
+        """
         logging.debug('QCDCL: Configure Parameter')
         for e in args:
             logging.info('Parameter "%s"'%e)
-            self.__lib.qdpll_configure(self.__depqbf, e)
+            configure=self.__lib.qdpll_configure
+            configure.restype = c_char_p
+            ret=configure(self.__depqbf, e)
+            if ret:
+                raise ValueError,"%s:%s" % (ret,e)
+                
         
     def deactivate_clause_group(self,clause_group_id):
+        """Deactivates all clauses in the group 'clause_group'. The ID of a
+        deactivated group cannot be passed to any API functions except
+        'qdpll_activate_clause_group' and
+        'qdpll_exists_clause_group'. Clause groups are activated at
+        the time they are created. When calling 'qdpll_sat', clauses
+        in deactivated groups are ignored. Thus deactivating a clause
+        group amounts to temporarily deleting these groups from the
+        formula. However, unlike 'qdpll_delete_clause_group' which
+        permanently deletes the clauses in a group, deactivated groups
+        can be activated again by calling
+        'qdpll_activate_clause_group'. This adds the formerly
+        deactivated clauses back to the formula.
+        """
         self.__lib.qdpll_deactivate_clause_group(self.__depqbf,clause_group_id)
         
     def delete_clause_group(self,clause_group_id):
+        """Delete the clause group with ID 'clause_group'. The group must be
+        activated. The ID of the deleted group becomes invalid and
+        must not be passed to the API functions anymore. All clauses
+        in the deleted group are deleted from the formula.
+        """
         self.__lib.qdpll_delete_clause_group(self.__depqbf,clause_group_id)
         
     def dump_dep_graph(self):
+        """Dump dependency graph to 'stdout' in DOT format."""
         self.__lib.qdpll_dump_dep_graph(self.__depqbf)
 
     def evaluate(self):
+        """Solve the formula."""
         return self.__lib.qdpll_sat(self.__depqbf)
 
     def exists_clause_group(self,clause_group_id):
+        """Returns non-zero if and only if (1) a clause group with ID
+        'clause_group' has been created before and (2) the ID
+        'clause_group' was returned by 'qdpll_new_clause_group' and
+        (3) that clause group was not deleted by calling
+        'qdpll_delete_clause_group'.
+        """
         return self.__lib.qdpll_exists_clause_group(self.__depqbf,clause_group_id)
 
     def get_assumption_candidates(self):
+        """Returns a zero-terminated array of LitIDs of variables which can
+        safely be assigned as assumptions by function
+        'qdpll_assume'. The array may contain both existential
+        (positive LitIDs) and universal variables (negative LitIDs)
+        which are not necessarily from the leftmost quantifier set in
+        the prefix.
+
+        NOTE: the caller is responsible to release the memory of the
+        array returned by this function.
+        """
         get_assumption_candidates=self.__lib.qdpll_get_assumption_candidates
         get_assumption_candidates.restype = LitID_P
         return get_assumption_candidates(self.__depqbf)
 
     def get_max_declared_var_id(self):
+        """Return largest declared variable ID."""
         return self.__lib.qdpll_get_max_declared_var_id(self.__depqbf)
 
     def get_max_scope_nesting(self):
+        """Returns the nesting level of the current rightmost scope."""
         return self.__lib.qdpll_get_max_scope_nesting(self.__depqbf)
 
     def get_nesting_of_var(self,var_id):
+        """Returns the nesting level 'level' in the range '1 <= level <=
+        qdpll_get_max_scope_nesting()' of the previously declared
+        variable with ID 'id'. Returns 0 if the variable with ID 'id'
+        is free, i.e. not explicitly associated to a quantifier
+        block. Fails if 'id' does not correspond to a declared
+        variable, which should be checked with function
+        'qdpll_is_var_declared()' before.
+        """
         return self.__lib.qdpll_get_nesting_of_var(self.__depqbf,var_id)
 
     def get_open_clause_group(self):
+        """Returns the ID of the currently open clause group, or NULL if no
+        group is currently open. If there is currently no open group,
+        then all clauses added via 'qdpll_add' will be permanently
+        added to the formula and cannot be removed.
+        """
         return self.__lib.qdpll_get_open_clause_group(self.__depqbf)
 
     def get_relevant_assumptions(self):
+
         get_relevant_assumptions=self.__lib.qdpll_get_relevant_assumptions
         get_relevant_assumptions.restype = LitID_P
         return get_relevant_assumptions(self.__depqbf)
@@ -252,22 +317,58 @@ class QCDCL(object):
         logging.debug('QCDCL: increasing frame index by 1')
         return self.__lib.qdpll_push(self.__depqbf)
 
-    def qdpll_print(self):
-        PyFile_AsFile = pythonapi.PyFile_AsFile
-        PyFile_AsFile.argtypes = [py_object]
-        PyFile_AsFile.restype = FILE_P        
-        stdout_file=PyFile_AsFile(sys.stdout)
-        logging.debug('QCDCL: DIMCAS formula goes to stdout')
-        self.__lib.qdpll_print(self.__depqbf, stdout_file)
-
     def print_deps(self,var_id):
-        self.__lib.qdpll_print_deps(self.__depqbf,var_id)
+        self.__lib.print_dimacs_deps(self.__depqbf,var_id)
+
+    def print_dimacs(self,output=None):
+        """
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add(1)
+        >>> qcdcl.add(2)
+        >>> qcdcl.add(0)
+
+        >>> qcdcl.print_dimacs()
+        p cnf 2 0
+        a 1 2 0
+
+        >>> qcdcl.print_dimacs(sys.stdout)
+        p cnf 2 0
+        a 1 2 0
+
+        >>> qcdcl.print_dimacs('-')
+        p cnf 2 0
+        a 1 2 0
+
+        >>> from tempfile import TemporaryFile
+        >>> temp_f = TemporaryFile()
+        >>> qcdcl.print_dimacs(temp_f)
+        >>> temp_f.seek(0)
+        >>> for line in temp_f.readlines():print line,
+        p cnf 2 0
+        a 1 2 0
+
+        >>> qcdcl.print_dimacs('-')
+        p cnf 2 0
+        a 1 2 0
+        >>> temp_f.close()
+        """
+        with wopen(output) as f:
+             logging.debug('QCDCL: DIMACS formula goes to %s' %output)
+             sys.stdout.flush()
+             self.__lib.qdpll_print(self.__depqbf, c_file(f))
+             if is_stdout_redirected() and (not isinstance(output,str) or output=='-') and not isinstance(output,file):
+                 logging.debug('QCDCL: DIMCAS formula goes to stdout')
+                 f.seek(0)
+                 [sys.stdout.write(line) for line in f.readlines()]
 
     def print_qdimacs_output(self):
-        self.__lib.qdpll_print_qdimacs_output(self.__depqbf)
+        self.__lib.print_dimacs_qdimacs_output(self.__depqbf)
 
-    def qdpll_print_stats(self):
-        self.__lib.qdpll_print_stats (self.__depqbf)
+    def print_dimacs_stats(self):
+        self.__lib.print_dimacs_stats (self.__depqbf)
 
     def reset(self):
         logging.debug('QCDCL: reseting solver...')
@@ -290,3 +391,26 @@ class QCDCL(object):
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
+
+
+        #print sys.stdout, type(sys.stdout)
+        # PyFile_AsFile = pythonapi.PyFile_AsFile
+        # PyFile_AsFile.argtypes = [py_object]
+        # PyFile_AsFile.restype = FILE_P
+        # if is_stdout_redirected():
+        #     #Note: redirected output yields segfault hence use
+        #     #      temporary file here (important for doctest)
+        #     if not isinstance(output,str) or output=='-':
+        #         from tempfile import TemporaryFile
+        #         with TemporaryFile() as f:
+        #             stdout_file=PyFile_AsFile(f)
+        #             logging.debug('QCDCL: DIMACS formula goes to tempfile')
+        #             sys.stdout.flush()
+        #             self.__lib.print_dimacs(self.__depqbf, stdout_file)
+        #             logging.debug('QCDCL: DIMCAS formula goes to stdout')
+        #             f.seek(0)
+        #             [sys.stdout.write(line) for line in f.readlines()]
+        #         with open(output,'rw') as f:
+        #             stdout_file=PyFile_AsFile(f)
+        #             logging.debug('QCDCL: DIMACS formula goes to file %s' %f.name)
+        #             self.__lib.print_dimacs(self.__depqbf, stdout_file)

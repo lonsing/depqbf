@@ -55,7 +55,7 @@ qcdcl.add(0)
 #     -1 2 0
 
 # Print formula.
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 # Expecting that the formula is satisfiable.
@@ -93,7 +93,7 @@ logging.warn('added clause "1 2 0" to a new stack frame.')
 #     -1 2 0 
 #     1 2 0 
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 # Expecting that the formula is unsatisfiable due to the most recently

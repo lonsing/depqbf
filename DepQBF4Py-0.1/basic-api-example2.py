@@ -41,10 +41,10 @@ qcdcl.add(1)
 qcdcl.add(2)
 qcdcl.add(0)
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 # Internally, variable 2 has universal-reduced from the added clauses. See
-#   the output of the above 'qdpll_print'. However, the variable is still
+#   the output of the above 'print_dimacs'. However, the variable is still
 #   present in the prefix of the formula. We can check this by calling
 #   'qdpll_is_var_declared', passing the respective variable ID. 
 assert (qcdcl.is_var_declared (1))
@@ -159,7 +159,7 @@ qcdcl.add(-1)
 qcdcl.add(2)
 qcdcl.add(0)
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)

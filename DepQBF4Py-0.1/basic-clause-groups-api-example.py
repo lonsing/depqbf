@@ -93,7 +93,7 @@ qcdcl.add(0)
 qcdcl.close_clause_group(id2)
 assert (not qcdcl.get_open_clause_group())
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 # Solve the formula, which is unsatisfiable.
 res = qcdcl.evaluate()
@@ -125,7 +125,7 @@ qcdcl.deactivate_clause_group(relevant_clause_groups[0])
 # from the prefix. HOWEVER, in this case, we have deactivated -- not
 # deleted -- group 'id2' and hence calling 'qcdcl.gc()' has no effect.
 qcdcl.gc()
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 # The formula where group 'id2' has been deactivated is satisfiable.
 res = qcdcl.evaluate()
@@ -158,7 +158,7 @@ assert (not qcdcl.exists_clause_group(id1))
 # not occur any more in the formula.
 qcdcl.gc()
 assert (not qcdcl.is_var_declared(3))
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 # After deleting the group 'id1', the formula consisting only of the
 # clauses in group 'id2' is unsatisfiable.
