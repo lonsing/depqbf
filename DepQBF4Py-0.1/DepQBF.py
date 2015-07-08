@@ -1,6 +1,5 @@
 #TODO: lazy parameter loading
-#TODO: documentation
-#TODO: fix function naming in the docstrings
+#TODO: final todos
 
 from ctypes import *
 import sys
@@ -37,28 +36,28 @@ class QCDCL(object):
 
     def activate_clause_group(self,clause_group_id):
         """Activates all clauses in the group 'clause_group', which has been
-        deactivated before by 'qdpll_deactivate_clause_group'. Clause
-        groups are activated at the time they are created and can be
-        deactivated by calling 'qdpll_deactivate_clause_group'.
+        deactivated before by 'deactivate_clause_group'. Clause groups
+        are activated at the time they are created and can be
+        deactivated by calling 'deactivate_clause_group'.
         
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
         2
-        >>> qcdcl.add_cls([3,4])
+        >>> qcdcl.add_lst([3,4])
         
         >>> id1 = qcdcl.new_clause_group()
         >>> qcdcl.open_clause_group(id1)
-        >>> qcdcl.add_cls([-1,-3])
+        >>> qcdcl.add_lst([-1,-3])
         >>> qcdcl.close_clause_group(id1)
         >>> id2 = qcdcl.new_clause_group()
         >>> qcdcl.open_clause_group(id2)
-        >>> qcdcl.add_cls([1,2,4])
-        >>> qcdcl.add_cls([1,-4,0])
+        >>> qcdcl.add_lst([1,2,4])
+        >>> qcdcl.add_lst([1,-4,0])
         >>> qcdcl.close_clause_group(id2)
 
         >>> qcdcl.evaluate()
@@ -72,36 +71,37 @@ class QCDCL(object):
         >>> qcdcl.activate_clause_group(relevant_clause_groups[0])
         >>> qcdcl.evaluate()
         20
+
         """
         self.__lib.qdpll_activate_clause_group(self.__depqbf,clause_group_id)
         
     def add(self,var_id):
         """Add variables or literals to clause or opened scope. Scopes are
-        opened by either 'qdpll_new_scope' or
-        'qdpll_new_scope_at_nesting'. If scope is opened, then 'id' is
+        opened by either 'new_scope' or
+        'new_scope_at_nesting'. If scope is opened, then 'id' is
         interpreted as a variable ID, otherwise 'id' is interpreted as
         a literal. If 'id == 0' then the clause/scope is closed.
 
         IMPORTANT NOTE: added clauses are associated to the current
-        frame. If 'qdpll_push' has NOT been called before then the
+        frame. If 'push' has NOT been called before then the
         added clauses are permanently added to the formula. Otherwise,
         they are added to the current frame and can be remove from the
-        formula by calling 'qdpll_push'.
+        formula by calling 'push'.
 
         Similarly, added clauses are associated to the clause group
         which has been opened before by calling
-        'qdpll_open_clause_group', if any. If
-        'qdpll_open_clause_group' has NOT been called before then the
+        'open_clause_group', if any. If
+        'open_clause_group' has NOT been called before then the
         added clauses are permanently added to the formula.
 
         NOTE: function will fail if a scope is opened and 'id' is
         negative.
 
         NOTE: if a clause containing literals of undeclared variables
-        is added by 'qdpll_add' then these literals by default will be
+        is added by 'add' then these literals by default will be
         existentially quantified and put in the leftmost scope. That
         is, the variable of these literals is interpreted as a free
-        variable. See also function 'qdpll_is_var_declared' below.
+        variable. See also function 'is_var_declared' below.
         
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
@@ -134,43 +134,43 @@ class QCDCL(object):
         self.__lib.qdpll_add(self.__depqbf, var_id)
 
 
-    def add_cls(self,L):
+    def add_lst(self,L):
         """Add clause or opened scope. Scopes are opened by either
-        'qdpll_new_scope' or 'qdpll_new_scope_at_nesting'. If scope is
+        'new_scope' or 'new_scope_at_nesting'. If scope is
         opened, then 'id' is interpreted as a variable ID, otherwise
         'id' is interpreted as a literal.
 
         IMPORTANT NOTE: added clauses are associated to the current
-        frame. If 'qdpll_push' has NOT been called before then the
+        frame. If 'push' has NOT been called before then the
         added clauses are permanently added to the formula. Otherwise,
         they are added to the current frame and can be remove from the
-        formula by calling 'qdpll_push'.
+        formula by calling 'push'.
 
         Similarly, added clauses are associated to the clause group
         which has been opened before by calling
-        'qdpll_open_clause_group', if any. If
-        'qdpll_open_clause_group' has NOT been called before then the
+        'open_clause_group', if any. If
+        'open_clause_group' has NOT been called before then the
         added clauses are permanently added to the formula.
 
         NOTE: function will fail if a scope is opened and 'id' is
         negative.
 
         NOTE: if a clause containing literals of undeclared variables
-        is added by 'qdpll_add' then these literals by default will be
+        is added by 'add' then these literals by default will be
         existentially quantified and put in the leftmost scope. That
         is, the variable of these literals is interpreted as a free
-        variable. See also function 'qdpll_is_var_declared' below.
+        variable. See also function 'is_var_declared' below.
 
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-        >>> qcdcl.add_cls([1])
+        >>> qcdcl.add_lst([1])
         >>> qcdcl.new_scope_at_nesting (QDPLL_QTYPE_EXISTS, 2)
         2
-        >>> qcdcl.add_cls([2])
-        >>> qcdcl.add_cls([1,-2])
-        >>> qcdcl.add_cls([-1,2])
+        >>> qcdcl.add_lst([2])
+        >>> qcdcl.add_lst([1,-2])
+        >>> qcdcl.add_lst([-1,2])
         
         >>> qcdcl.print_dimacs()
         p cnf 2 2
@@ -187,19 +187,19 @@ class QCDCL(object):
     def add_var_to_scope (self,var_id,nesting):
         """Add a new variable with ID 'id' to the scope with nesting level
         'nesting'. The scope must exist, i.e. it must have been added
-        by either 'qdpll_new_scope' or
-        'qdpll_new_scope_at_nesting'. The value of the parameter
+        by either 'new_scope' or
+        'new_scope_at_nesting'. The value of the parameter
         'nesting' of this function should be a value returned by a
-        previous call of 'qdpll_new_scope' or
-        'qdpll_new_scope_at_nesting'. In any case, it must be smaller
+        previous call of 'new_scope' or
+        'new_scope_at_nesting'. In any case, it must be smaller
         than or equal to the return value of
-        'qdpll_get_max_scope_nesting'.
+        'get_max_scope_nesting'.
 
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([100,200])
+        >>> qcdcl.add_lst([100,200])
         >>> qcdcl.print_dimacs()
         p cnf 200 0
         e 100 200 0
@@ -218,18 +218,19 @@ class QCDCL(object):
         self.__lib.qdpll_adjust_vars(self.__depqbf,var_id)
 
     def assume(self,lit_id):
-        """Assign a variable as assumption. A later call of 'qdpll_sat(...)'
+        """Assign a variable as assumption. A later call of 'evaluate(...)'
         solves the formula under the assumptions specified before. If
         'id' is negative then variable with ID '-id' will be assigned
         false, otherwise variable with ID 'id' will be assigned
         true.
+
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([1])
-        >>> qcdcl.add_cls([1])
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.add_lst([1])
         >>> qcdcl.print_dimacs()
         p cnf 1 1
         e 1 0
@@ -262,7 +263,7 @@ class QCDCL(object):
         >>> qcdcl.open_clause_group(id1)
         >>> qcdcl.get_open_clause_group()
         1
-        >>> qcdcl.add_cls([-1,-3])
+        >>> qcdcl.add_lst([-1,-3])
         >>> qcdcl.close_clause_group(id1)
         >>> qcdcl.get_open_clause_group()
         0
@@ -301,15 +302,15 @@ class QCDCL(object):
     def deactivate_clause_group(self,clause_group_id):
         """Deactivates all clauses in the group 'clause_group'. The ID of a
         deactivated group cannot be passed to any API functions except
-        'qdpll_activate_clause_group' and
-        'qdpll_exists_clause_group'. Clause groups are activated at
-        the time they are created. When calling 'qdpll_sat', clauses
+        'activate_clause_group' and
+        'exists_clause_group'. Clause groups are activated at
+        the time they are created. When calling 'evaluate', clauses
         in deactivated groups are ignored. Thus deactivating a clause
         group amounts to temporarily deleting these groups from the
-        formula. However, unlike 'qdpll_delete_clause_group' which
+        formula. However, unlike 'delete_clause_group' which
         permanently deletes the clauses in a group, deactivated groups
         can be activated again by calling
-        'qdpll_activate_clause_group'. This adds the formerly
+        'activate_clause_group'. This adds the formerly
         deactivated clauses back to the formula.
 
         >>> qcdcl = QCDCL()
@@ -317,19 +318,19 @@ class QCDCL(object):
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
         2
-        >>> qcdcl.add_cls([3,4])
+        >>> qcdcl.add_lst([3,4])
         
         >>> id1 = qcdcl.new_clause_group()
         >>> qcdcl.open_clause_group(id1)
-        >>> qcdcl.add_cls([-1,-3])
+        >>> qcdcl.add_lst([-1,-3])
         >>> qcdcl.close_clause_group(id1)
         >>> id2 = qcdcl.new_clause_group()
         >>> qcdcl.open_clause_group(id2)
-        >>> qcdcl.add_cls([1,2,4])
-        >>> qcdcl.add_cls([1,-4,0])
+        >>> qcdcl.add_lst([1,2,4])
+        >>> qcdcl.add_lst([1,-4,0])
         >>> qcdcl.close_clause_group(id2)
 
         >>> qcdcl.evaluate()
@@ -372,12 +373,12 @@ class QCDCL(object):
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-        >>> qcdcl.add_cls([1,2,3])
+        >>> qcdcl.add_lst([1,2,3])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
         2
-        >>> qcdcl.add_cls([4,5])
-        >>> qcdcl.add_cls([1,4])
-        >>> qcdcl.add_cls([2,-5])
+        >>> qcdcl.add_lst([4,5])
+        >>> qcdcl.add_lst([1,4])
+        >>> qcdcl.add_lst([2,-5])
 
         >>> qcdcl.init_deps()
         >>> qcdcl.dump_dep_graph()
@@ -409,9 +410,9 @@ class QCDCL(object):
     def exists_clause_group(self,clause_group_id):
         """Returns non-zero if and only if (1) a clause group with ID
         'clause_group' has been created before and (2) the ID
-        'clause_group' was returned by 'qdpll_new_clause_group' and
+        'clause_group' was returned by 'new_clause_group' and
         (3) that clause group was not deleted by calling
-        'qdpll_delete_clause_group'.
+        'delete_clause_group'.
 
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
@@ -436,7 +437,7 @@ class QCDCL(object):
     def get_assumption_candidates(self):
         """Returns a zero-terminated array of LitIDs of variables which can
         safely be assigned as assumptions by function
-        'qdpll_assume'. The array may contain both existential
+        'assume'. The array may contain both existential
         (positive LitIDs) and universal variables (negative LitIDs)
         which are not necessarily from the leftmost quantifier set in
         the prefix.
@@ -452,9 +453,9 @@ class QCDCL(object):
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([1,2])
-        >>> qcdcl.add_cls([1])
-        >>> qcdcl.add_cls([2])
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.add_lst([2])
 
         >>> cand = qcdcl.get_assumption_candidates()
         >>> cand[0]
@@ -475,7 +476,7 @@ class QCDCL(object):
     def iter_assumption_candidates(self): 
         """Returns a zero-terminated array of LitIDs of variables which can
         safely be assigned as assumptions by function
-        'qdpll_assume'. The array may contain both existential
+        'assume'. The array may contain both existential
         (positive LitIDs) and universal variables (negative LitIDs)
         which are not necessarily from the leftmost quantifier set in
         the prefix.
@@ -485,9 +486,9 @@ class QCDCL(object):
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([1,2])
-        >>> qcdcl.add_cls([1])
-        >>> qcdcl.add_cls([2])
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.add_lst([2])
 
         >>> for i in qcdcl.iter_assumption_candidates():print(i)
         2
@@ -515,12 +516,12 @@ class QCDCL(object):
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([1,2])
-        >>> qcdcl.add_cls([1])
-        >>> qcdcl.add_cls([2])
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.add_lst([2])
         >>> qcdcl.get_max_declared_var_id()
         2
-        >>> qcdcl.add_cls([3,4,5,6,7,8,9])
+        >>> qcdcl.add_lst([3,4,5,6,7,8,9])
 
         >>> qcdcl.get_max_declared_var_id()
         9
@@ -537,13 +538,13 @@ class QCDCL(object):
 
         >>> qcdcl.get_max_scope_nesting()
         1
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 2)
         2
-        >>> qcdcl.add_cls([3,4])
+        >>> qcdcl.add_lst([3,4])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 3)
         3
-        >>> qcdcl.add_cls([5,6])
+        >>> qcdcl.add_lst([5,6])
         >>> qcdcl.get_max_scope_nesting()
         3
         """
@@ -551,24 +552,24 @@ class QCDCL(object):
 
     def get_nesting_of_var(self,var_id):
         """Returns the nesting level 'level' in the range '1 <= level <=
-        qdpll_get_max_scope_nesting()' of the previously declared
+        get_max_scope_nesting()' of the previously declared
         variable with ID 'id'. Returns 0 if the variable with ID 'id'
         is free, i.e. not explicitly associated to a quantifier
         block. Fails if 'id' does not correspond to a declared
         variable, which should be checked with function
-        'qdpll_is_var_declared()' before.
+        'is_var_declared()' before.
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 2)
         2
-        >>> qcdcl.add_cls([3,4])
+        >>> qcdcl.add_lst([3,4])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 3)
         3
-        >>> qcdcl.add_cls([5,6])
+        >>> qcdcl.add_lst([5,6])
         >>> qcdcl.get_nesting_of_var(1)
         1
         >>> qcdcl.get_nesting_of_var(3)
@@ -581,17 +582,17 @@ class QCDCL(object):
     def get_open_clause_group(self):
         """Returns the ID of the currently open clause group, or NULL if no
         group is currently open. If there is currently no open group,
-        then all clauses added via 'qdpll_add' will be permanently
+        then all clauses added via 'add' will be permanently
         added to the formula and cannot be removed.
         
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
         2
-        >>> qcdcl.add_cls([3,4])
+        >>> qcdcl.add_lst([3,4])
         >>> id1 = qcdcl.new_clause_group()
         >>> qcdcl.get_open_clause_group()
         0
@@ -603,9 +604,9 @@ class QCDCL(object):
 
     def get_relevant_assumptions(self):
         """Returns a zero-terminated array of LitIDs representing those
-        assumptions (passed to the solver using 'qdpll_assume()')
+        assumptions (passed to the solver using 'assume()')
         which were used by the solver to determine (un)satisfiability
-        by the most recent call of 'qdpll_sat'.
+        by the most recent call of 'evaluate'.
 
         NOTE: the caller is responsible to release the memory of the
         array returned by this function by means of _free(ptr.)  You
@@ -617,16 +618,16 @@ class QCDCL(object):
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([5,6])
+        >>> qcdcl.add_lst([5,6])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 2)
         2
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 3)
         3
-        >>> qcdcl.add_cls([3,4])
-        >>> qcdcl.add_cls([5,-1,-3])
-        >>> qcdcl.add_cls([6,1,2,4])
-        >>> qcdcl.add_cls([6,1,-4])
+        >>> qcdcl.add_lst([3,4])
+        >>> qcdcl.add_lst([5,-1,-3])
+        >>> qcdcl.add_lst([6,1,2,4])
+        >>> qcdcl.add_lst([6,1,-4])
         
         >>> qcdcl.print_dimacs()
         p cnf 6 3
@@ -655,25 +656,25 @@ class QCDCL(object):
 
     def iter_relevant_assumptions(self):
         """Returns a zero-terminated array of LitIDs representing those
-        assumptions (passed to the solver using 'qdpll_assume()')
+        assumptions (passed to the solver using 'assume()')
         which were used by the solver to determine (un)satisfiability
-        by the most recent call of 'qdpll_sat'.
+        by the most recent call of 'evaluate'.
 
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([5,6])
+        >>> qcdcl.add_lst([5,6])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 2)
         2
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 3)
         3
-        >>> qcdcl.add_cls([3,4])
-        >>> qcdcl.add_cls([5,-1,-3])
-        >>> qcdcl.add_cls([6,1,2,4])
-        >>> qcdcl.add_cls([6,1,-4])
+        >>> qcdcl.add_lst([3,4])
+        >>> qcdcl.add_lst([5,-1,-3])
+        >>> qcdcl.add_lst([6,1,2,4])
+        >>> qcdcl.add_lst([6,1,-4])
         
         >>> qcdcl.print_dimacs()
         p cnf 6 3
@@ -708,10 +709,10 @@ class QCDCL(object):
         """Returns a zero-terminated array of clause group IDs representing
         those clause groups which contain clauses used by the solver
         to determine UNSATISFIABILITY by the most recent call of
-        'qdpll_sat'. That is, this function returns a subset of those
+        'evaluate'. That is, this function returns a subset of those
         clause groups which participiate in the resolution refutation
         of the current formula. This function can be called only if
-        the most recent call of 'qdpll_sat' returned
+        the most recent call of 'evaluate' returned
         QDPLL_RESULT_UNSAT. The groups returned by this function are
         all activated.
 
@@ -724,18 +725,18 @@ class QCDCL(object):
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
         2
-        >>> qcdcl.add_cls([3,4])
+        >>> qcdcl.add_lst([3,4])
         >>> id1 = qcdcl.new_clause_group()
         >>> qcdcl.open_clause_group(id1)
-        >>> qcdcl.add_cls([-1,-3])
+        >>> qcdcl.add_lst([-1,-3])
         >>> qcdcl.close_clause_group(id1)
         >>> id2 = qcdcl.new_clause_group()
         >>> qcdcl.open_clause_group(id2)
-        >>> qcdcl.add_cls([1,2,4])
-        >>> qcdcl.add_cls([1,-4])
+        >>> qcdcl.add_lst([1,2,4])
+        >>> qcdcl.add_lst([1,-4])
         >>> qcdcl.close_clause_group(id2)
         >>> res = qcdcl.evaluate()
         >>> assert (res == QDPLL_RESULT_UNSAT)
@@ -755,10 +756,10 @@ class QCDCL(object):
         """Returns a zero-terminated array of clause group IDs representing
         those clause groups which contain clauses used by the solver
         to determine UNSATISFIABILITY by the most recent call of
-        'qdpll_sat'. That is, this function returns a subset of those
+        'evaluate'. That is, this function returns a subset of those
         clause groups which participiate in the resolution refutation
         of the current formula. This function can be called only if
-        the most recent call of 'qdpll_sat' returned
+        the most recent call of 'evaluate' returned
         QDPLL_RESULT_UNSAT. The groups returned by this function are
         all activated.
 
@@ -766,18 +767,18 @@ class QCDCL(object):
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
         2
-        >>> qcdcl.add_cls([3,4])
+        >>> qcdcl.add_lst([3,4])
         >>> id1 = qcdcl.new_clause_group()
         >>> qcdcl.open_clause_group(id1)
-        >>> qcdcl.add_cls([-1,-3])
+        >>> qcdcl.add_lst([-1,-3])
         >>> qcdcl.close_clause_group(id1)
         >>> id2 = qcdcl.new_clause_group()
         >>> qcdcl.open_clause_group(id2)
-        >>> qcdcl.add_cls([1,2,4])
-        >>> qcdcl.add_cls([1,-4])
+        >>> qcdcl.add_lst([1,2,4])
+        >>> qcdcl.add_lst([1,-4])
         >>> qcdcl.close_clause_group(id2)
         >>> res = qcdcl.evaluate()
         >>> assert (res == QDPLL_RESULT_UNSAT)
@@ -809,10 +810,10 @@ class QCDCL(object):
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([5,6])
+        >>> qcdcl.add_lst([5,6])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 2)
         2
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 3)
         3
         >>> qcdcl.get_scope_type(1)
@@ -834,12 +835,12 @@ class QCDCL(object):
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.get_value(1)
         0
         >>> qcdcl.get_value(2)
         0
-        >>> qcdcl.add_cls([1,2])
+        >>> qcdcl.add_lst([1,2])
         >>> qcdcl.assume(-1)
 
         >>> qcdcl.evaluate()
@@ -855,53 +856,122 @@ class QCDCL(object):
 
     def gc(self):
         """Enforce the deletion of variables which have no occurrences left,
-        and delete empty quantifier blocks. E.g. after 'qdpll_pop',
-        'qdpll_delete_clause_group', a variable might not have any
+        and delete empty quantifier blocks. E.g. after 'pop',
+        'delete_clause_group', a variable might not have any
         clauses left if all the clauses containing that variable were
         removed by the pop operation. However, the variable is still
         present in the prefix that was added by the user and
         'is_var_declared' returns non-zero for these variables. The
-        function 'qdpll_gc' cleans up the prefix and deletes variables
+        function 'gc' cleans up the prefix and deletes variables
         which do not occur in the current formula and removes empty
-        quantifier blocks. After 'qdpll_gc', is_var_declared' returns
+        quantifier blocks. After 'gc', is_var_declared' returns
         zero for variables which have been removed.  
 
-        NOTE: Calling 'qdpll_pop' or 'qdpll_delete_clause_group' does
+        NOTE: Calling 'pop' or 'delete_clause_group' does
         NOT delete variables and quantifier blocks, but only clauses.
 
-        IMPORTANT NOTE: do NOT call 'qdpll_gc' unless you want to
+        IMPORTANT NOTE: do NOT call 'gc' unless you want to
         remove variables and quantifier blocks which you have
         previously added to the formula.
 
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
+        2
+        >>> qcdcl.add_lst([3,4])
+        >>> id1 = qcdcl.new_clause_group()
+        >>> qcdcl.open_clause_group(id1)
+        >>> qcdcl.add_lst([-1,3])
+        >>> qcdcl.close_clause_group(id1)
+        >>> qcdcl.print_dimacs()
+        p cnf 4 1
+        a 1 2 0
+        e 3 4 0
+        -1 3 0
+        >>> qcdcl.delete_clause_group(id1)
+
+        >>> qcdcl.gc()
+        >>> qcdcl.is_var_declared(3)
+        False
+        >>> qcdcl.print_dimacs()
+        p cnf 0 0
         """
         self.__lib.qdpll_gc(self.__depqbf)
         
     def init_deps(self):
         """Initialize the current dependency manager. The dependency scheme is
-        computed with respect to the clauses added by 'qdpll_add'. If
+        computed with respect to the clauses added by 'add'. If
         the dependency scheme has been computed already then calling
         this function has no effect. The dependency manager can be
-        reset and re-initialized by calling 'qdpll_reset_deps' and
-        then 'qdpll_init_deps'
+        reset and re-initialized by calling 'reset_deps' and
+        then 'init_deps'
 
+
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1,2,3])
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
+        2
+        >>> qcdcl.add_lst([4,5])
+        >>> qcdcl.add_lst([1,4])
+        >>> qcdcl.add_lst([2,-5])
+
+        >>> qcdcl.init_deps()
+        >>> qcdcl.dump_dep_graph()
+        digraph qdag {
+          { rank=same;
+          }
+          { rank=same;
+            a1[shape=box];
+            a2[shape=box, peripheries=2];
+          }
+          { rank=same;
+            e4[shape=diamond];
+            e5[shape=diamond, peripheries=2];
+          }
+        a2 -> e5[style=invisible, arrowhead=none]
+          a2 -> e5[style=solid];
+          a2 -> a1[style=solid, color=blue, arrowhead=none];
+          e5 -> e4[style=solid, color=blue, arrowhead=none];
+        }
         """
         self.__lib.qdpll_init_deps (self.__depqbf)
 
     def is_var_declared(self,var_id):
         """Returns non-zero if and only if (1) a variable with ID 'id' has
-        been added to the solver by a previous call of 'qdpll_add' or
-        'qdpll_add_var_to_scope'. For example, the function can be
+        been added to the solver by a previous call of 'add' or
+        'add_var_to_scope'. For example, the function can be
         used to check if the variable of each literal in a clause to
         be added has been declared already. If not, then it can be
-        declared by 'qdpll_add_var_to_scope' and put in the right
+        declared by 'add_var_to_scope' and put in the right
         scope.  
 
         NOTE: if a clause containing literals of undeclared variables
-        is added by 'qdpll_add' then these literals by default will be
+        is added by 'add' then these literals by default will be
         existentially quantified and put in the leftmost scope.
 
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.is_var_declared(1)
+        True
+        >>> qcdcl.is_var_declared(2)
+        True
+        >>> qcdcl.is_var_declared(3)
+        False
         """
-        return self.__lib.qdpll_is_var_declared(self.__depqbf,var_id)
+        return bool(self.__lib.qdpll_is_var_declared(self.__depqbf,var_id))
 
     def new_clause_group (self):
         """Creates a new clause group and returns its ID. The returned ID is a
@@ -911,39 +981,61 @@ class QCDCL(object):
         clauses) and it is closed. To add clauses to a group, the
         group must be opened by 'open_clause_group'. Only one clause
         group can be open at a time. Clauses can be added to the
-        currently open group as usual by calling 'qdpll_add'. To add
+        currently open group as usual by calling 'add'. To add
         clauses to a different group, the currently open group must be
         closed again by 'close_clause_group' and the other group must
         be opened. Clause groups are activated at the time they are
         created and can be deactivated by calling
-        'qdpll_deactivate_clause_group'.
+        'deactivate_clause_group'.
+        
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
+        2
+        >>> qcdcl.add_lst([3,4])
+        >>> id1 = qcdcl.new_clause_group()
+        >>> qcdcl.open_clause_group(id1)
+        >>> qcdcl.add_lst([-1,3])
+        >>> qcdcl.close_clause_group(id1)
+        >>> qcdcl.exists_clause_group(id1)
+        True
         """
-
         return self.__lib.qdpll_new_clause_group (self.__depqbf)
 
     def new_scope(self,qtype):
         """Open a new scope at the right end of the quantifier prefix, where
-        variables can be added by 'qdpll_add'. The opened scope must
-        be closed by adding '0' via 'qdpll_add'. Returns the nesting
+        variables can be added by 'add'. The opened scope must
+        be closed by adding '0' via 'add'. Returns the nesting
         of the added scope, which should be used as a handle of this
         scope, and which can safely be passed to
-        'qdpll_add_var_to_scope'.
+        'add_var_to_scope'.
 
         NOTE: will fail if there is an opened scope already.
 
-        """
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
+        >>> qcdcl.new_scope(QDPLL_QTYPE_FORALL)
+        1
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.print_dimacs()
+        p cnf 2 0
+        a 1 2 0
+        """
         return self.__lib.qdpll_new_scope(self.__depqbf,qtype)
 
     def new_scope_at_nesting(self,quantifier_type,level):
         """Open a new scope at nesting level 'nesting >= 1' with quantifier
         type 'qtype'. Variables can be added to the scope opened by
-        the most recent call of this function by 'qdpll_add' (similar
-        to 'qdpll_new_scope'). The opened scope must be closed by
-        adding '0' via 'qdpll_add'. Returns the nesting of the added
+        the most recent call of this function by 'add' (similar
+        to 'new_scope'). The opened scope must be closed by
+        adding '0' via 'add'. Returns the nesting of the added
         scope, which should be used as a handle of this scope, and
-        which can safely be passed to 'qdpll_add_var_to_scope'.
+        which can safely be passed to 'add_var_to_scope'.
 
         NOTE: the run time of this function is linear in the length of
         quantifier prefix.
@@ -952,7 +1044,6 @@ class QCDCL(object):
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-
         """
         logging.debug('QCDCL: open new scope')
         logging.debug('quantifier=%i nesting_level=%i '%(quantifier_type,level))
@@ -964,12 +1055,22 @@ class QCDCL(object):
         """Open the clause group with ID 'clause_group'. That group must not
         be open already and must be activated. Only one group can be
         open at a time. Clauses can be added to the currently open
-        group as usual by calling 'qdpll_add'. An open group will stay
-        open across calls of e.g. 'qdpll_sat'. However, to add clauses
+        group as usual by calling 'add'. An open group will stay
+        open across calls of e.g. 'evaluate'. However, to add clauses
         to a another group, the currently open group must be closed
         again by 'close_clause_group' and the other group must be
         opened.
 
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1,2])
+        >>> id1 = qcdcl.new_clause_group()
+        >>> qcdcl.open_clause_group(id1)
+        >>> qcdcl.add_lst([-1,2])
+        >>> qcdcl.close_clause_group(id1)
         """
         self.__lib.qdpll_open_clause_group(self.__depqbf,clause_group_id)
 
@@ -983,6 +1084,58 @@ class QCDCL(object):
         call of the clause group API. The solver will abort if a
         function of the clause group API is called after a call of
         either 'push' or 'pop', or vice versa.
+
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.new_scope_at_nesting (QDPLL_QTYPE_EXISTS, 2)
+        2
+        >>> qcdcl.add_lst([2])
+        >>> qcdcl.add_lst([1,-2])
+        >>> qcdcl.add_lst([-1,2])
+        >>> qcdcl.print_dimacs()
+        p cnf 2 2
+        a 1 0
+        e 2 0
+        1 -2 0
+        -1 2 0
+        >>> qcdcl.evaluate()
+        10
+        >>> qcdcl.reset()
+        >>> qcdcl.push()
+        1
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.push()
+        2
+        >>> qcdcl.add_lst([1,3])
+        >>> qcdcl.print_dimacs()
+        p cnf 3 4
+        e 3 0
+        a 1 0
+        e 2 0
+        1 -2 0
+        -1 2 0
+        1 2 0
+        3 0
+        >>> qcdcl.evaluate()
+        20
+        >>> qcdcl.reset()
+        >>> qcdcl.pop()
+        2
+        >>> qcdcl.pop()
+        1
+        >>> qcdcl.print_dimacs()
+        p cnf 3 4
+        e 3 0
+        a 1 0
+        e 2 0
+        1 -2 0
+        -1 2 0
+        >>> qcdcl.evaluate()
+        10
         """
         logging.debug('QCDCL: decreasing frame index by 1')
         logging.debug(' and disable all clauses associated to the old')
@@ -990,9 +1143,9 @@ class QCDCL(object):
 
     def push(self):
         """Increase the current frame index by one. Every clause added by
-        'qdpll_add' is attached to the current frame. The clauses
+        'add' is attached to the current frame. The clauses
         attached to a frame will be discarded if the frame is popped
-        off by 'qdpll_pop'. Returns the current frame index resulting
+        off by 'pop'. Returns the current frame index resulting
         from the push operation.
 
         IMPORTANT NOTE: calls of the push/pop API cannot be mixed with
@@ -1000,6 +1153,57 @@ class QCDCL(object):
         function of the clause group API is called after a call of
         either 'push' or 'pop', or vice versa.
 
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.new_scope_at_nesting (QDPLL_QTYPE_EXISTS, 2)
+        2
+        >>> qcdcl.add_lst([2])
+        >>> qcdcl.add_lst([1,-2])
+        >>> qcdcl.add_lst([-1,2])
+        >>> qcdcl.print_dimacs()
+        p cnf 2 2
+        a 1 0
+        e 2 0
+        1 -2 0
+        -1 2 0
+        >>> qcdcl.evaluate()
+        10
+        >>> qcdcl.reset()
+        >>> qcdcl.push()
+        1
+        >>> qcdcl.add_lst([1,2])
+        >>> qcdcl.push()
+        2
+        >>> qcdcl.add_lst([1,3])
+        >>> qcdcl.print_dimacs()
+        p cnf 3 4
+        e 3 0
+        a 1 0
+        e 2 0
+        1 -2 0
+        -1 2 0
+        1 2 0
+        3 0
+        >>> qcdcl.evaluate()
+        20
+        >>> qcdcl.reset()
+        >>> qcdcl.pop()
+        2
+        >>> qcdcl.pop()
+        1
+        >>> qcdcl.print_dimacs()
+        p cnf 3 4
+        e 3 0
+        a 1 0
+        e 2 0
+        1 -2 0
+        -1 2 0
+        >>> qcdcl.evaluate()
+        10
         """
         logging.debug('QCDCL: increasing frame index by 1')
         return self.__lib.qdpll_push(self.__depqbf)
@@ -1007,8 +1211,25 @@ class QCDCL(object):
     def print_deps(self,var_id):
         """Print zero-terminated list of dependencies for 
         given variable to 'stdout'.
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1,2,3])
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
+        2
+        >>> qcdcl.add_lst([4,5])
+        >>> qcdcl.add_lst([1,4])
+        >>> qcdcl.add_lst([2,-5])
+        
+        >>> qcdcl.init_deps()
+        >>> qcdcl.print_deps(1)
+        4 5 0
         """
-        self.__lib.print_dimacs_deps(self.__depqbf,var_id)
+        #TODO:
+        with delayed_stdout():
+            self.__lib.qdpll_print_deps(self.__depqbf,var_id)
 
     def print_dimacs(self,output=None):
         """
@@ -1055,16 +1276,56 @@ class QCDCL(object):
                  [sys.stdout.write(line) for line in f.readlines()]
 
     def print_qdimacs_output(self):
-        """Print QDIMACS-compliant output."""
-        self.__lib.print_dimacs_qdimacs_output(self.__depqbf)
+        """Print QDIMACS-compliant output.
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add(1)
+        >>> qcdcl.add(2)
+        >>> qcdcl.add(0)
+
+        >>> qcdcl.print_qdimacs_output()
+        s cnf -1 2 0
+        """
+        with delayed_stdout():
+            self.__lib.qdpll_print_qdimacs_output(self.__depqbf)
 
     def print_stats(self):
-        """Print statistics to 'stderr'."""
+        """Print statistics to 'stderr'.
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add(1)
+        >>> qcdcl.add(2)
+        >>> qcdcl.add(0)
+
+        >>> qcdcl.evaluate()
+        10
+        """
+        #>>> qcdcl.print_stats()
+
+        #TODO: enable stat computation
         self.__lib.qdpll_print_stats (self.__depqbf)
 
     def reset(self):
         """Reset internal solver state, keep clauses and variables.
 
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+        
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
+        1
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.evaluate()
+        10
+        >>> qcdcl.reset()
+
+        >>> qcdcl.assume(-1)
+        >>> qcdcl.evaluate()
+        20
         """
         logging.debug('QCDCL: reseting solver...')
         self.__lib.qdpll_reset(self.__depqbf)
@@ -1072,68 +1333,69 @@ class QCDCL(object):
 
     def reset_deps(self):
         """Reset the current dependency manager. Dependencies can be
-        re-initialized by calling 'qdpll_deps_init' or 'qdpll_sat'.
+        re-initialized by calling 'deps_init' or 'evaluate'.
         """
         self.__lib.qdpll_reset_deps(self.__depqbf)
 
     def reset_stats(self):
-        """Reset collected statistics."""
+        """Reset collected statistics.
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add(1)
+        >>> qcdcl.add(2)
+        >>> qcdcl.add(0)
+
+        >>> qcdcl.evaluate()
+        10
+        """
+        #>>> qcdcl.print_stats()
+        #>>> qcdcl.reset_stats()
+        #>>> qcdcl.print_stats()
+        #TODO:
         self.__lib.qdpll_reset_stats(self.__depqbf)
         
     def reset_learned_constraints(self):
-        """Discard all learned constraints."""
+        """Discard all learned constraints.
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add(1)
+        >>> qcdcl.add(2)
+        >>> qcdcl.add(0)
+
+        >>> qcdcl.evaluate()
+        10
+        >>> qcdcl.reset_learned_constraints()
+        """
         self.__lib.qdpll_reset_learned_constraints(self.__depqbf)
 
     def var_depends(self,var_id1,var_id2):
         """Returns non-zero if variable 'id2' depends on variable 'id1',
         i.e. if id1 < id2, with respect to the current dependency
         scheme.
+        >>> qcdcl = QCDCL()
+        >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+        
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+        1
+        >>> qcdcl.add_lst([1])
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
+        2
+        >>> qcdcl.add_lst([2])
+        >>> qcdcl.add_lst([1,2])
+
+        >>> qcdcl.init_deps()
+        >>> qcdcl.var_depends(1,2)
+        True
+        >>> qcdcl.var_depends(2,1)
+        False
         """
-        return self.__lib. qdpll_var_depends(self.__depqbf, var_id1, var_id2)
+        return bool(self.__lib.qdpll_var_depends(self.__depqbf, var_id1, var_id2))
 
 
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
-
-
-# def test():
-#     qcdcl = QCDCL()
-#     qcdcl.configure('--dep-man=simple','--incremental-use')
-#     qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
-#     qcdcl.add_cls([1,2])
-#     qcdcl.add_cls([1,2])
-#     qcdcl.add_cls([-1])
-#     qcdcl.add_cls([-2])
-#     qcdcl.print_dimacs()
-#     print(assignment2str(qcdcl.get_value(1)))
-#     print(assignment2str(qcdcl.get_value(2)))
-#     #qcdcl.assume(-1)
-#     print(qcdcl.evaluate())
-#     print(assignment2str(qcdcl.get_value(1)))
-#     print(assignment2str(qcdcl.get_value(2)))
-
-#     qcdcl.reset()
-
-
-# print 'test'
-# sys.stdout.flush()
-
-# def test():
-#     qcdcl = QCDCL()
-#     qcdcl.configure('--dep-man=simple','--incremental-use')
-#     qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
-#     qcdcl.add_cls([1,2,3])
-#     qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
-#     qcdcl.add_cls([4,5])
-#     qcdcl.add_cls([1,4])
-#     qcdcl.add_cls([2,-5])
-
-
-#     qcdcl.init_deps()
-#     qcdcl.dump_dep_graph()
-
-
-    
-# test()
-
