@@ -3,16 +3,13 @@ from contextlib import contextmanager
 from tempfile import TemporaryFile
 from os import fdopen
 import sys
+from stdout_helper import is_stdout_redirected
+
 
 class FILE(Structure):
     pass
 
 FILE_P=POINTER(FILE)
-
-#doctest._SpoofOut
-def is_stdout_redirected(stdout=sys.stdout):
-    return stdout != sys.stdout
-
 
 def c_file(f):
     PyFile_AsFile = pythonapi.PyFile_AsFile
@@ -39,3 +36,5 @@ def wopen(output=None):
     finally:
         if f is not sys.stdout and isinstance(output,str):
             f.close()
+
+

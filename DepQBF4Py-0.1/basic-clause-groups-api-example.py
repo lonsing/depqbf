@@ -103,6 +103,7 @@ logging.warn('result is %d' % res)
 # Get a list of those clause groups which contain clauses used by
 # solver to determine unsatisfiability. This amounts to an
 # unsatisfiable core of the formula.
+
 #check for memory leak
 #for i in xrange(100000000):
 #    relevant_clause_groups = list(qcdcl.iter_relevant_clause_groups())

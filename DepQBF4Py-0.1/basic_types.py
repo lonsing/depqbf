@@ -16,11 +16,11 @@ LitID=c_int
 LitID_P=POINTER(LitID)
 
 def assignment2str(a):
-    if QDPLL_ASSIGNMENT_UNDEF:
+    if a==QDPLL_ASSIGNMENT_UNDEF:
         return 'undef'
-    elif QDPLL_ASSIGNMENT_FALSE:
+    elif a==QDPLL_ASSIGNMENT_FALSE:
         return 'false'
-    elif QDPLL_ASSIGNMENT_TRUE:
+    elif a==QDPLL_ASSIGNMENT_TRUE:
         return 'true'
     else:
         raise TypeError()
