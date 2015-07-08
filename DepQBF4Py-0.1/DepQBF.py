@@ -228,17 +228,19 @@ class QCDCL(object):
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
-        >>> qcdcl.add_cls([100])
+        >>> qcdcl.add_cls([1])
+        >>> qcdcl.add_cls([1])
         >>> qcdcl.print_dimacs()
-        p cnf 100 0
-        e 100 0
+        p cnf 1 1
+        e 1 0
+        1 0
 
-        >>> qcdcl.assume(-100)
+        >>> qcdcl.assume(-1)
         >>> qcdcl.evaluate()
         20
         >>> qcdcl.reset()
 
-        >>> qcdcl.assume(100)
+        >>> qcdcl.assume(1)
         >>> qcdcl.evaluate()
         10
         """
@@ -370,19 +372,33 @@ class QCDCL(object):
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
-        >>> qcdcl.add_cls([1,2])
-        >>> qcdcl.add_cls([2,3])
+        >>> qcdcl.add_cls([1,2,3])
+        >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
+        2
+        >>> qcdcl.add_cls([4,5])
+        >>> qcdcl.add_cls([1,4])
+        >>> qcdcl.add_cls([2,-5])
 
         >>> qcdcl.init_deps()
         >>> qcdcl.dump_dep_graph()
         digraph qdag {
           { rank=same;
-            e3[shape=diamond, peripheries=2];
           }
+          { rank=same;
+            a1[shape=box];
+            a2[shape=box, peripheries=2];
+          }
+          { rank=same;
+            e4[shape=diamond];
+            e5[shape=diamond, peripheries=2];
+          }
+        a2 -> e5[style=invisible, arrowhead=none]
+          a2 -> e5[style=solid];
+          a2 -> a1[style=solid, color=blue, arrowhead=none];
+          e5 -> e4[style=solid, color=blue, arrowhead=none];
         }
-        
         """
-        with captured_stdout():
+        with delayed_stdout():
             self.__lib.qdpll_dump_dep_graph(self.__depqbf)
 
 
@@ -822,22 +838,19 @@ class QCDCL(object):
         >>> qcdcl.get_value(1)
         0
         >>> qcdcl.get_value(2)
-        
+        0
+        >>> qcdcl.add_cls([1,2])
         >>> qcdcl.assume(-1)
 
         >>> qcdcl.evaluate()
+        10
         >>> qcdcl.get_value(1)
-        0
+        -1
         >>> qcdcl.get_value(2)
-
+        1
         >>> qcdcl.reset()
 
         """
-        # >>> qcdcl.assume(100)
-        # >>> qcdcl.evaluate()
-        # 10
-        #TODO: next
-
         return self.__lib.qdpll_get_value(self.__depqbf,var_id)
 
     def gc(self):
@@ -1081,21 +1094,46 @@ class QCDCL(object):
 
 if __name__ == "__main__":
     import doctest
-    #doctest.testmod()
+    doctest.testmod()
 
 
-def test():
-    qcdcl = QCDCL()
-    qcdcl.configure('--dep-man=simple','--incremental-use')
-    qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
-    qcdcl.add_cls([1,2])
-    print(assignment2str(qcdcl.get_value(1)))
-    print(assignment2str(qcdcl.get_value(2)))
-    qcdcl.assume(-1)
-    print(qcdcl.evaluate())
-    print(assignment2str(qcdcl.get_value(1)))
-    print(assignment2str(qcdcl.get_value(2)))
+# def test():
+#     qcdcl = QCDCL()
+#     qcdcl.configure('--dep-man=simple','--incremental-use')
+#     qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
+#     qcdcl.add_cls([1,2])
+#     qcdcl.add_cls([1,2])
+#     qcdcl.add_cls([-1])
+#     qcdcl.add_cls([-2])
+#     qcdcl.print_dimacs()
+#     print(assignment2str(qcdcl.get_value(1)))
+#     print(assignment2str(qcdcl.get_value(2)))
+#     #qcdcl.assume(-1)
+#     print(qcdcl.evaluate())
+#     print(assignment2str(qcdcl.get_value(1)))
+#     print(assignment2str(qcdcl.get_value(2)))
 
-    qcdcl.reset()
+#     qcdcl.reset()
 
-test()
+
+# print 'test'
+# sys.stdout.flush()
+
+# def test():
+#     qcdcl = QCDCL()
+#     qcdcl.configure('--dep-man=simple','--incremental-use')
+#     qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
+#     qcdcl.add_cls([1,2,3])
+#     qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
+#     qcdcl.add_cls([4,5])
+#     qcdcl.add_cls([1,4])
+#     qcdcl.add_cls([2,-5])
+
+
+#     qcdcl.init_deps()
+#     qcdcl.dump_dep_graph()
+
+
+    
+# test()
+
