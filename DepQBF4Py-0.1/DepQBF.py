@@ -11,6 +11,13 @@ from file_helper import *
 from stdout_helper import *
 from basic_types import *
 
+def kill_errcheck(retval, func, funcargs):
+    '''Check for error -- retval == -1.'''
+    print('foo')
+    #if retval < 0:
+    #    raise Exception('kill%s failed' % (funcargs, ))
+    #return True# Get the kill function from the standard library.
+
 class QCDCL(object):
     __lib=None
     __LIB_NAME='../libqdpll.so.1.0'
@@ -33,6 +40,7 @@ class QCDCL(object):
         logging.debug('QCDCL: Deleting...')
         self.__lib.qdpll_delete(self.__depqbf)
         logging.debug('QCDCL: Deleted')
+        cdll.LoadLibrary(None).dlclose(self.__lib._handle)
 
     def activate_clause_group(self,clause_group_id):
         """Activates all clauses in the group 'clause_group', which has been
@@ -208,9 +216,6 @@ class QCDCL(object):
         p cnf 300 0
         e 100 200 300 0
         """
-        #TODO:
-        #abort trap -> raise
-        #>>> qcdcl.add_var_to_scope(300, 2)
         self.__lib.qdpll_add_var_to_scope(self.__depqbf,var_id,nesting)
 
     def adjust_vars (self, var_id):
@@ -1227,7 +1232,6 @@ class QCDCL(object):
         >>> qcdcl.print_deps(1)
         4 5 0
         """
-        #TODO:
         with delayed_stdout():
             self.__lib.qdpll_print_deps(self.__depqbf,var_id)
 
@@ -1399,3 +1403,5 @@ class QCDCL(object):
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
+
+
