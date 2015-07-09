@@ -5,3 +5,8 @@ doc:
 test:
   python ./DepQBF.py
   #python -m doctest DepQBF.py
+
+
+with_stats:
+	sed s'/\#define COMPUTE_STATS 0/\#define COMPUTE_STATS 1/' ../qdpll_config.h 
+	sed s'/\#define COMPUTE_TIMES 0/\#define COMPUTE_TIMES 1/' ../qdpll_config.h 

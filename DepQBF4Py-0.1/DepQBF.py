@@ -1,6 +1,3 @@
-#TODO: lazy parameter loading
-#TODO: final todos
-
 from ctypes import *
 import sys
 import logging
@@ -11,13 +8,6 @@ from file_helper import *
 from stdout_helper import *
 from basic_types import *
 
-def kill_errcheck(retval, func, funcargs):
-    '''Check for error -- retval == -1.'''
-    print('foo')
-    #if retval < 0:
-    #    raise Exception('kill%s failed' % (funcargs, ))
-    #return True# Get the kill function from the standard library.
-
 class QCDCL(object):
     __lib=None
     __LIB_NAME='../libqdpll.so.1.0'
@@ -25,7 +15,7 @@ class QCDCL(object):
     def __load_libs(self):
         if not self.__lib:
             logging.debug('Shared Lib: Loading...')
-            logging.debug('Shared Lib: %s' %self.__LIB_NAME)
+            logging.debug('Shared Lib: %s', self.__LIB_NAME)
             self.__lib = cdll.LoadLibrary(self.__LIB_NAME)
 
     def __init__(self):
@@ -138,7 +128,7 @@ class QCDCL(object):
         1 -2 0
         -1 2 0
         """
-        logging.debug('QCDCL: add_variable=%i'%var_id)
+        logging.debug('QCDCL: add_variable=%i', var_id)
         self.__lib.qdpll_add(self.__depqbf, var_id)
 
 
@@ -296,7 +286,7 @@ class QCDCL(object):
         """
         logging.debug('QCDCL: Configure Parameter')
         for e in args:
-            logging.info('Parameter "%s"'%e)
+            logging.info('Parameter "%s"', e)
             configure=self.__lib.qdpll_configure
             configure.restype = c_char_p
             ret=configure(self.__depqbf, e)
@@ -468,7 +458,8 @@ class QCDCL(object):
         >>> cand[1]
         1
         >>> i = 0       
-        >>> while cand[i]:i+=1
+        >>> while cand[i]:
+        ...     i+=1
         >>> i
         2
         >>> qcdcl._free(cand)
@@ -1051,7 +1042,7 @@ class QCDCL(object):
         1
         """
         logging.debug('QCDCL: open new scope')
-        logging.debug('quantifier=%i nesting_level=%i '%(quantifier_type,level))
+        logging.debug('quantifier=%i nesting_level=%i ',quantifier_type,level)
         return self.__lib.qdpll_new_scope_at_nesting(self.__depqbf,
                                                      quantifier_type,
                                                      level)
@@ -1271,7 +1262,7 @@ class QCDCL(object):
         >>> temp_f.close()
         """
         with wopen(output) as f:
-             logging.debug('QCDCL: DIMACS formula goes to %s' %output)
+             logging.debug('QCDCL: DIMACS formula goes to %s',output)
              sys.stdout.flush()
              self.__lib.qdpll_print(self.__depqbf, c_file(f))
              if is_stdout_redirected() and (not isinstance(output,str) or output=='-') and not isinstance(output,file):
@@ -1307,11 +1298,13 @@ class QCDCL(object):
 
         >>> qcdcl.evaluate()
         10
+        >>> qcdcl.print_stats() # doctest: +ELLIPSIS
+        <BLANKLINE>
+        ---------------- STATS ----------------
+        ...
         """
-        #>>> qcdcl.print_stats()
-
-        #TODO: enable stat computation
-        self.__lib.qdpll_print_stats (self.__depqbf)
+        with delayed_stderr():
+            self.__lib.qdpll_print_stats (self.__depqbf)
 
     def reset(self):
         """Reset internal solver state, keep clauses and variables.
@@ -1342,7 +1335,13 @@ class QCDCL(object):
         self.__lib.qdpll_reset_deps(self.__depqbf)
 
     def reset_stats(self):
-        """Reset collected statistics.
+        """Reset collected statistics.  
+
+        Note: Statistics need to be activated by setting '#define
+        COMPUTE_STATS 1' in file 'qdpll_config.h' and recompiling the
+        qdpll library. Alternatively, you can run the makefile of the
+        python lib with options --with-stats.
+
         >>> qcdcl = QCDCL()
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -1353,11 +1352,12 @@ class QCDCL(object):
 
         >>> qcdcl.evaluate()
         10
+        >>> qcdcl.print_stats() # doctest: +ELLIPSIS
+        <BLANKLINE>
+        ---------------- STATS ----------------
+        ...
+        >>> qcdcl.reset_stats()
         """
-        #>>> qcdcl.print_stats()
-        #>>> qcdcl.reset_stats()
-        #>>> qcdcl.print_stats()
-        #TODO:
         self.__lib.qdpll_reset_stats(self.__depqbf)
         
     def reset_learned_constraints(self):

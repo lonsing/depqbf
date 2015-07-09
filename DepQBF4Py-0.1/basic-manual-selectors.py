@@ -4,7 +4,7 @@ from DepQBF import *
 #  basic-manual-selectors.py
 #=============================================================================
 
-# The API file 'qdpll.py' has some comments regarding the usage of the API.
+# The API file 'DepQBF.py' has some comments regarding the usage of the API.
 # The header file 'qdpll.h' has some comments regarding the usage of the API. 
 #
 # Please see also the file 'basic-api-example.py' for more
@@ -59,7 +59,7 @@ qcdcl.add(-1)
 qcdcl.add(2)
 qcdcl.add(0)
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 # Enable all clauses: set selector variables to false as assumptions.
 qcdcl.assume(-100)
@@ -68,7 +68,7 @@ qcdcl.assume(-200)
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
 # res == 10 means satisfiable, res == 20 means unsatisfiable.
-logging.warn('result is: %d' %res)
+logging.warn('result is: %d', res)
 
 qcdcl.reset()
 
@@ -82,7 +82,7 @@ qcdcl.add(1)
 qcdcl.add(2)
 qcdcl.add(0)
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 # Enable all clauses: set selector variables to false as assumptions.
 qcdcl.assume(-100)
@@ -91,7 +91,7 @@ qcdcl.assume(-300)
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is: %d'% res)
+logging.warn('result is: %d', res)
 
 qcdcl.reset ()
 
@@ -102,9 +102,9 @@ qcdcl.assume(-100)
 qcdcl.assume(-200)
 qcdcl.assume(300)
 
-qcdcl.qdpll_print()
+qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
-logging.warn('result after disabling the clause "300 1 2 0" is: %d' % res)
+logging.warn('result after disabling the clause "300 1 2 0" is: %d', res)
 

@@ -6,8 +6,9 @@ from DepQBF import *
 #  basic-clause-groups-api-example-assumptions.py
 #=============================================================================
 
-# The API file 'qdpll.py' has some comments regarding the usage of the API.
-# The header file 'qdpll.h' has some comments regarding the usage of the API. 
+# The API file 'DepQBF.py' has some comments regarding the usage of
+# the API.  The header file 'qdpll.h' has some comments regarding the
+# usage of the API.
 #
 # Please see also the file 'basic-api-example.py' for more
 # comments. The example below is similar to 'basic-api-example.py' but
@@ -123,38 +124,22 @@ qcdcl.assume(-6)
 # Formula is expected to be unsatisfiable.
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is %d'% res)
+logging.warn('result is %d', res)
 # Get a list of those selector variables which appear in clauses used
 # by the solver to determine unsatisfiability.
 
 relevant_assumptions=list(qcdcl.iter_relevant_assumptions())
 
-#check for memory leak
-#for i in xrange(1000000):
-#    relevant_clause_groups = list(qcdcl.iter_relevant_assumptions())
-#    assert (sum(1 for _ in relevant_clause_groups) == 1)
-
 qcdcl.reset()
 
-#BUG?
-#DOES NOT WORK IN PYTHON
-#[QDPLL] qdpll_get_relevant_assumptions at line 14742: Formula is undecided!
-#Abort trap: 6
-#assert (sum(1 for _ in qcdcl.get_relevant_assumptions()) == 1)
 assert (sum(1 for _ in relevant_assumptions) == 1)
 logging.warn('printing zero-terminated relevant assumptions:')
 print(*relevant_assumptions, sep='\n')
 
-#TODO
-# Caller must free memory of array returned by
-# 'qcdcl.get_relevant_assumptions'.
-#lib.freeme(ptr)
-#free (relevant_assumptions)
-
 # Deactivate the group which contains the last two clauses by setting
 # the selector variable to true. This way, these clauses will be
 # permanently satisfied in the fortcoming solver run after calling
-# 'qcdcl.sat' and hence are effectively removed from the formula. Note
+# 'evaluate' and hence are effectively removed from the formula. Note
 # that selector variable 5 has to be set to false again to enable the
 # first clause.
 
@@ -170,7 +155,7 @@ qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
-logging.warn('result is %d'% res)
+logging.warn('result is %d', res)
 qcdcl.reset()
 
 # By setting the selector variables 5 to true and 6 to false,
@@ -186,4 +171,4 @@ qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is %d'% res)
+logging.warn('result is %d', res)

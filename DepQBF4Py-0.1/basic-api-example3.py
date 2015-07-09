@@ -4,7 +4,7 @@ from DepQBF import *
 #  basic-api-example.py
 #=============================================================================
 
-# The API file 'qdpll.py' has some comments regarding the usage of the API.
+# The API file 'DepQBF.py' has some comments regarding the usage of the API.
 # The header file 'qdpll.h' has some comments regarding the usage of the API. 
 # Please see also the file 'basic-manual-selectors.py'.
 
@@ -61,7 +61,7 @@ res = qcdcl.evaluate()
 # Expecting that the formula is satisfiable.
 assert (res == QDPLL_RESULT_SAT)
 # res == 10 means satisfiable, res == 20 means unsatisfiable.
-logging.warn('result is: %d\n'% res)
+logging.warn('result is: %d\n', res)
 
 # Must reset the solver before adding further clauses or variables.
 qcdcl.reset()
@@ -99,7 +99,7 @@ res = qcdcl.evaluate()
 # Expecting that the formula is unsatisfiable due to the most recently
 # added clause.
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is: %d\n' % res)
+logging.warn('result is: %d\n', res)
 
 # Print partial countermodel as a value of the leftmost universal
 # variable.
@@ -126,4 +126,4 @@ res = qcdcl.evaluate()
 # The formula is satisfiable again because we discarded the clause 
 # '1 2 0' by a 'pop'.
 assert (res == QDPLL_RESULT_SAT)
-logging.warn('result after pop is: %d\n' % res)
+logging.warn('result after pop is: %d\n', res)

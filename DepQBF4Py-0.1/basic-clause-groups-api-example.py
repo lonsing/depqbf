@@ -6,8 +6,9 @@ import logging
 #  basic-clause-groups-api-example-assumptions.py
 #=============================================================================
 
-# The API file 'qdpll.py' has some comments regarding the usage of the API.
-# The header file 'qdpll.h' has some comments regarding the usage of the API. 
+# The API file 'DepQBF.py' has some comments regarding the usage of
+# the API.  The header file 'qdpll.h' has some comments regarding the
+# usage of the API.
 #
 # Please see also the file 'basic-api-example.py' for more
 # comments. The example below is similar to 'basic-api-example.py' but
@@ -98,16 +99,11 @@ qcdcl.print_dimacs()
 # Solve the formula, which is unsatisfiable.
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is %d' % res)
+logging.warn('result is %d', res)
   
 # Get a list of those clause groups which contain clauses used by
 # solver to determine unsatisfiability. This amounts to an
 # unsatisfiable core of the formula.
-
-#check for memory leak
-#for i in xrange(100000000):
-#    relevant_clause_groups = list(qcdcl.iter_relevant_clause_groups())
-#    assert (sum(1 for _ in relevant_clause_groups) == 1)
 
 relevant_clause_groups = list(qcdcl.iter_relevant_clause_groups())
 
@@ -136,7 +132,7 @@ qcdcl.print_dimacs()
 # The formula where group 'id2' has been deactivated is satisfiable.
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
-logging.warn('result is %d' % res)
+logging.warn('result is %d', res)
 qcdcl.reset()
 
 # Activate group 'id2' again, which makes the formula unsatisfiable.
@@ -164,4 +160,4 @@ qcdcl.print_dimacs()
 # clauses in group 'id2' is unsatisfiable.
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is %d\n' %res)
+logging.warn('result is %d\n', res)

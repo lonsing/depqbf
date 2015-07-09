@@ -4,7 +4,7 @@ from DepQBF import *
 #  basic-api-example.py
 #=============================================================================
 
-# The API file 'qdpll.py' has some comments regarding the usage of the API.
+# The API file 'DepQBF.py' has some comments regarding the usage of the API.
 # The header file 'qdpll.h' has some comments regarding the usage of the API. 
 # Please see also the file 'basic-manual-selectors.py'.
 
@@ -70,7 +70,7 @@ qcdcl.add(2)
 qcdcl.add(0)
 
 logging.warn('added clause "1 2 0" to a new stack frame.')
-logging.warn('res=%s'%res)
+logging.warn('res=%s', res)
 
 # At this point, the formula looks as follows:
 #      p cnf 2 3 
@@ -91,7 +91,7 @@ logging.warn("result is: %d", res)
 # Print partial countermodel as a value of the leftmost universal variable.
 a = qcdcl.get_value(1)
 
-logging.warn("partial countermodel - value of 1: %s\n" %assignment2str(a))
+logging.warn("partial countermodel - value of 1: %s\n", assignment2str(a))
 
 qcdcl.reset()
 
@@ -114,4 +114,4 @@ res=qcdcl.evaluate()
 #     by a 'pop'.
 
 assert (res == QDPLL_RESULT_SAT)
-logging.warn("result after pop is: %d\n" % res)
+logging.warn("result after pop is: %d\n", res)
