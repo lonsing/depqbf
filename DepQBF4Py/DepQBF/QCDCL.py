@@ -25,27 +25,28 @@
 # should have received a copy of the GNU General Public License along
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 
-# TODO: stdout redirect seems not to work under linux
-# TODO: pip package
-# TODO: makefile
-# TODO: update print to future in examples
-# TODO: autoindent
-
 from ctypes import *
 import sys
+from glob import glob
 import logging
 from logging.config import fileConfig
-fileConfig("logging.conf")
+#fileConfig('logging.conf')
 
-from file_helper import *
-from stdout_helper import *
-from basic_types import *
+from os import path
+from DepQBF.file_helper import *
+from DepQBF.stdout_helper import *
+from DepQBF.basic_types import *
 
 class QCDCL(object):
     __lib=None
-    __LIB_NAME='../libqdpll.so.1.0'
+    __LIB_NAME='libqdpll.so*'
 
     def __load_libs(self):
+        module_path=path.dirname(__file__)
+        libs = glob('%s/%s' %(module_path,self.__LIB_NAME))
+        assert(sum(1 for _ in libs) == 1)
+        self.__LIB_NAME = libs[0]
+
         if not self.__lib:
             logging.debug('Shared Lib: Loading...')
             logging.debug('Shared Lib: %s', self.__LIB_NAME)
