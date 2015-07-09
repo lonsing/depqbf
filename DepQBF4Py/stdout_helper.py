@@ -1,3 +1,30 @@
+#
+# This file is part of DepQBF (DepQBF Python API).
+#
+# DepQBF, a solver for quantified boolean formulae (QBF).  
+#
+# DepQBF4Py Copyright 2015
+#
+# Johannes K. Fichte, Vienna University of Technology, Austria
+#
+# Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+#
+# Florian Lonsing, Johannes Kepler University, Linz, Austria and
+# Vienna University of Technology, Vienna, Austria.  
+#
+# Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz,
+# Austria.  
+#
+# DepQBF is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.  DepQBF is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+# the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+# PURPOSE.  See the GNU General Public License for more details.  You
+# should have received a copy of the GNU General Public License along
+# with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
+
 #from __future__ import print_function
 from os import pipe,dup,dup2,read
 from select import select
