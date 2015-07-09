@@ -77,8 +77,8 @@
 #define DEFAULT_INTERNAL_VARS_INCREASE (100)
 #define QDPLL_INVALID_DECISION_LEVEL UINT_MAX
 
-#define COMPUTE_STATS 1
-#define COMPUTE_TIMES 1
+#define COMPUTE_STATS 0
+#define COMPUTE_TIMES 0
 
 /* Allow to collect as many cover sets as 'COLLECT_FULL_COVER_SETS_MULT_LIMIT'
    times the current maximal number of learned cubes. */
