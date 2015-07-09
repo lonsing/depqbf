@@ -42,6 +42,7 @@ from distutils.command.build_clib import build_clib
 from distutils.command.build_ext import build_ext
 from distutils.command.install_lib import install_lib
 from distutils import log
+import multiprocessing 
 
 here = path.abspath(path.dirname(__file__))
 
@@ -56,10 +57,20 @@ import glob
 import shutil
 
 class build_external_clib(build_clib):
+    # user_options = [
+    #     ('foo', None, 'Specify the foo to bar.'),
+    # ]
+    # def initialize_options(self):
+    #     self.foo = None
+    #     #TODO next
+
     def build_libraries(self, libraries):
         for (lib_name, build_info) in libraries:
             log.info('building external c library "%s" from source',lib_name)
             build_temp=self.build_temp
+
+            print self.user_options
+
             log.info('*'*80)
             log.info('Running make on path "%s"',build_info['path'])
             # Run make install.
@@ -104,7 +115,7 @@ setup(
     ],
     keywords='QBF SAT satisfiabily solving',
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
-    cmdclass = {'build_clib': build_external_clib},
+    cmdclass = {'build_ext': build_external_clib},
     libraries= [('qdpll',{'sources':[], 'path': '..', 'dest': 'build/lib/DepQBF'})],
     # List run-time dependencies here.  These will be installed by pip when
     # your project is installed. For an analysis of "install_requires" vs pip's
@@ -121,6 +132,7 @@ setup(
         'test': ['coverage','memory_profiler'],
     },
     include_package_data = True,
+    test_suite='tests'
 )
 
 # # Mac OS X depedencies

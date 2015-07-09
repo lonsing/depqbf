@@ -42,18 +42,28 @@ class QCDCL(object):
     __LIB_NAME='libqdpll.so*'
 
     def __load_libs(self):
-        module_path=path.dirname(__file__)
-        libs = glob('%s/%s' %(module_path,self.__LIB_NAME))
-        assert(sum(1 for _ in libs) == 1)
-        self.__LIB_NAME = libs[0]
-
         if not self.__lib:
+            if self.__lib_path:
+                if path.isabs(self.__lib_path):
+                    module_path = self.__lib_path
+                else:
+                    module_path = path.realpath('%s/%s' %(path.dirname(__file__),self.__lib_path))
+            else:
+                module_path = path.dirname(__file__)
+
+            self.__lib_path = '%s/%s' %(module_path, self.__LIB_NAME)
+            logging.info('Loading library from path=%s', self.__lib_path)
+        
+            libs = glob(self.__lib_path)
+            assert(sum(1 for _ in libs) == 1)
+            self.__LIB_NAME = libs[0]
             logging.debug('Shared Lib: Loading...')
             logging.debug('Shared Lib: %s', self.__LIB_NAME)
             self.__lib = cdll.LoadLibrary(self.__LIB_NAME)
 
-    def __init__(self):
+    def __init__(self,lib_path=None):
         logging.debug('QCDCL: Initializing...')
+        self.__lib_path=lib_path
         self.__load_libs()
         qdpll_create=self.__lib.qdpll_create
         qdpll_create.restype = QDPLL_P
