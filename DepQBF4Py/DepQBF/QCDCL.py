@@ -29,13 +29,20 @@ from ctypes import *
 import sys
 from glob import glob
 import logging
-from logging.config import fileConfig
-#fileConfig('logging.conf')
-
 from os import path
 from DepQBF.file_helper import *
 from DepQBF.stdout_helper import *
 from DepQBF.basic_types import *
+
+lib_path = './'
+
+import yaml
+with open(path.realpath('%s/config.yaml' %path.dirname(__file__)), 'r') as f:
+    y=yaml.load(f)
+    try:
+        compute_stats = y['COMPUTE_STATS']
+    except KeyError:
+        compute_stats = False
 
 class QCDCL(object):
     __lib=None
@@ -62,6 +69,19 @@ class QCDCL(object):
             self.__lib = cdll.LoadLibrary(self.__LIB_NAME)
 
     def __init__(self,lib_path=None):
+        """Activates all clauses in the group 'clause_group', which has been
+        deactivated before by 'deactivate_clause_group'. Clause groups
+        are activated at the time they are created and can be
+        deactivated by calling 'deactivate_clause_group'.
+        
+        Note: By default it is not necessary to specify the lib_path
+        since setup.py builds and copies the lib to the DepQBF4Py
+        installation path, e.g., QCDCL() is sufficient. The lib_path
+        is however required for testing the docstrings.
+        
+        >>> qcdcl = QCDCL(lib_path=lib_path)
+        """
+
         logging.debug('QCDCL: Initializing...')
         self.__lib_path=lib_path
         self.__load_libs()
@@ -82,7 +102,7 @@ class QCDCL(object):
         are activated at the time they are created and can be
         deactivated by calling 'deactivate_clause_group'.
         
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -145,7 +165,7 @@ class QCDCL(object):
         is, the variable of these literals is interpreted as a free
         variable. See also function 'is_var_declared' below.
         
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -203,7 +223,7 @@ class QCDCL(object):
         is, the variable of these literals is interpreted as a free
         variable. See also function 'is_var_declared' below.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -220,7 +240,6 @@ class QCDCL(object):
         e 2 0
         1 -2 0
         -1 2 0
-
         """
         for e in L:
             self.add(e)
@@ -237,7 +256,7 @@ class QCDCL(object):
         than or equal to the return value of
         'get_max_scope_nesting'.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
         1
@@ -263,7 +282,7 @@ class QCDCL(object):
         false, otherwise variable with ID 'id' will be assigned
         true.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -295,7 +314,7 @@ class QCDCL(object):
         been opened by a previous call of 'open_clause_group' and must
         be activated.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> id1 = qcdcl.new_clause_group()
@@ -313,16 +332,16 @@ class QCDCL(object):
         """Configure solver instance via configuration list of strings.
         Returns null pointer on success and error string otherwise.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('-dep-man=simple','--incremental-use')
         Traceback (most recent call last):
         ...
         ValueError: unknown option:-dep-man=simple
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=foo')
         Traceback (most recent call last):
         ...
@@ -352,7 +371,7 @@ class QCDCL(object):
         'activate_clause_group'. This adds the formerly
         deactivated clauses back to the formula.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -392,7 +411,7 @@ class QCDCL(object):
         must not be passed to the API functions anymore. All clauses
         in the deleted group are deleted from the formula.
         
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> id1 = qcdcl.new_clause_group()
@@ -407,7 +426,7 @@ class QCDCL(object):
     def dump_dep_graph(self):
         """Dump dependency graph to 'stdout' in DOT format.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -453,7 +472,7 @@ class QCDCL(object):
         (3) that clause group was not deleted by calling
         'delete_clause_group'.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.exists_clause_group(0)
@@ -487,7 +506,7 @@ class QCDCL(object):
         (iter_assumption_candidates) which does housekeeping.
 
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -521,7 +540,7 @@ class QCDCL(object):
         which are not necessarily from the leftmost quantifier set in
         the prefix.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -551,7 +570,7 @@ class QCDCL(object):
     def get_max_declared_var_id(self):
         """Return largest declared variable ID.
         
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -570,7 +589,7 @@ class QCDCL(object):
 
     def get_max_scope_nesting(self):
         """Returns the nesting level of the current rightmost scope.
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -598,7 +617,7 @@ class QCDCL(object):
         block. Fails if 'id' does not correspond to a declared
         variable, which should be checked with function
         'is_var_declared()' before.
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -625,7 +644,7 @@ class QCDCL(object):
         then all clauses added via 'add' will be permanently
         added to the formula and cannot be removed.
         
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -653,7 +672,7 @@ class QCDCL(object):
         should use the iterator based method
         (iter_relevant_assumptions) which does housekeeping.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -700,7 +719,7 @@ class QCDCL(object):
         which were used by the solver to determine (un)satisfiability
         by the most recent call of 'evaluate'.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -761,7 +780,7 @@ class QCDCL(object):
         based method (iter_relevant_clause_groups) which does
         housekeeping.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -803,7 +822,7 @@ class QCDCL(object):
         QDPLL_RESULT_UNSAT. The groups returned by this function are
         all activated.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -845,7 +864,7 @@ class QCDCL(object):
         Returns zero if there is no scope with nesting level
         'nesting'.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -870,7 +889,7 @@ class QCDCL(object):
     def get_value(self,var_id):
         """Get assignment of variable.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -914,7 +933,7 @@ class QCDCL(object):
         remove variables and quantifier blocks which you have
         previously added to the formula.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -951,7 +970,7 @@ class QCDCL(object):
         then 'init_deps'
 
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -997,7 +1016,7 @@ class QCDCL(object):
         is added by 'add' then these literals by default will be
         existentially quantified and put in the leftmost scope.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -1028,7 +1047,7 @@ class QCDCL(object):
         created and can be deactivated by calling
         'deactivate_clause_group'.
         
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -1056,7 +1075,7 @@ class QCDCL(object):
 
         NOTE: will fail if there is an opened scope already.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope(QDPLL_QTYPE_FORALL)
@@ -1080,7 +1099,7 @@ class QCDCL(object):
         NOTE: the run time of this function is linear in the length of
         quantifier prefix.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -1101,7 +1120,7 @@ class QCDCL(object):
         again by 'close_clause_group' and the other group must be
         opened.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -1125,7 +1144,7 @@ class QCDCL(object):
         function of the clause group API is called after a call of
         either 'push' or 'pop', or vice versa.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -1193,7 +1212,7 @@ class QCDCL(object):
         function of the clause group API is called after a call of
         either 'push' or 'pop', or vice versa.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -1251,7 +1270,7 @@ class QCDCL(object):
     def print_deps(self,var_id):
         """Print zero-terminated list of dependencies for 
         given variable to 'stdout'.
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
 
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -1272,7 +1291,7 @@ class QCDCL(object):
 
     def print_dimacs(self,output=None):
         """
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -1316,7 +1335,7 @@ class QCDCL(object):
 
     def print_qdimacs_output(self):
         """Print QDIMACS-compliant output.
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -1332,7 +1351,7 @@ class QCDCL(object):
 
     def print_stats(self):
         """Print statistics to 'stderr'.
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -1347,13 +1366,16 @@ class QCDCL(object):
         ---------------- STATS ----------------
         ...
         """
-        with delayed_stderr():
-            self.__lib.qdpll_print_stats (self.__depqbf)
+        if compute_stats:
+            with delayed_stderr():
+                self.__lib.qdpll_print_stats (self.__depqbf)
+        else:
+            raise NotImplementedError('You need to install without option --without-stats.')
 
     def reset(self):
         """Reset internal solver state, keep clauses and variables.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
@@ -1386,7 +1408,7 @@ class QCDCL(object):
         qdpll library. Alternatively, you can run the makefile of the
         python lib with options --with-stats.
 
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -1402,11 +1424,15 @@ class QCDCL(object):
         ...
         >>> qcdcl.reset_stats()
         """
-        self.__lib.qdpll_reset_stats(self.__depqbf)
+        if compute_stats:
+            self.__lib.qdpll_reset_stats(self.__depqbf)
+        else:
+            raise NotImplementedError('You need to install without option --without-stats.')
+
         
     def reset_learned_constraints(self):
         """Discard all learned constraints.
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
         1
@@ -1424,7 +1450,7 @@ class QCDCL(object):
         """Returns non-zero if variable 'id2' depends on variable 'id1',
         i.e. if id1 < id2, with respect to the current dependency
         scheme.
-        >>> qcdcl = QCDCL()
+        >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
         
         >>> qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -1444,7 +1470,8 @@ class QCDCL(object):
         return bool(self.__lib.qdpll_var_depends(self.__depqbf, var_id1, var_id2))
 
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
+def test():
     import doctest
     doctest.testmod()
 

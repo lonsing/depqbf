@@ -34,7 +34,7 @@ https://github.com/pypa/sampleproject
 """
 
 # Always prefer setuptools over distutils
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Command
 # To use a consistent encoding
 from codecs import open
 from os import path
@@ -55,22 +55,57 @@ from subprocess import check_output, CalledProcessError, check_call
 import os
 import glob
 import shutil
+import fileinput
+import yaml
 
-class build_external_clib(build_clib):
-    # user_options = [
-    #     ('foo', None, 'Specify the foo to bar.'),
-    # ]
-    # def initialize_options(self):
-    #     self.foo = None
-    #     #TODO next
+class build_myclib(build_clib):
+    without_stats = False
+    config_file = '../qdpll_config.h'
+    python_config_file = 'DepQBF/config.yaml'
+
+    user_options = [
+        ('without-stats', None, 'Build the shared library without statistics support'),
+    ]
+    def set_option(self,option,value):
+        #search first, so that we do not screw autorebuild of make
+        update=True
+        search_for='#define %s %s' %(option,value)
+        with open(self.config_file,'r') as f:
+            
+            if f.read().find(search_for)>0:
+                update=False
+        if update:
+            for line in fileinput.input(self.config_file,inplace=True):
+                if ' %s ' %option in line:
+                    line=line[:-1]
+                    line=line.split(' ')
+                    line[2]=value
+                    print(' '.join(line))
+                else:
+                    print(line),
+
+        #update property in python config file
+        config = yaml.load(file(self.python_config_file))
+        if not config:
+            config = {}
+        config[option] = bool(int(value))
+        with open(self.python_config_file, 'w') as outfile:
+            outfile.write(yaml.dump(config,default_flow_style=True))
+
 
     def build_libraries(self, libraries):
+        if self.without_stats:
+            log.info('Turning statistics off in file "%s"',self.config_file)
+            self.set_option('COMPUTE_STATS','0')
+            self.set_option('COMPUTE_TIMES','0')
+        else:
+            log.info('Turning statistics on in file "%s"',self.config_file)
+            self.set_option('COMPUTE_STATS','1')
+            self.set_option('COMPUTE_TIMES','1')
+
         for (lib_name, build_info) in libraries:
             log.info('building external c library "%s" from source',lib_name)
             build_temp=self.build_temp
-
-            print self.user_options
-
             log.info('*'*80)
             log.info('Running make on path "%s"',build_info['path'])
             # Run make install.
@@ -83,7 +118,7 @@ class build_external_clib(build_clib):
             
             log.info('copying %s to %s', lib, build_info['dest'])
             self.mkpath(build_info['dest'])
-            shutil.copy(lib,build_info['dest'] ) #self.build_temp)
+            shutil.copy(lib,build_info['dest'])
 
 setup(
     name='DepQBF4Py',
@@ -96,10 +131,6 @@ setup(
     license='GPLv3',
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
-        # How mature is this project? Common values are
-        #   3 - Alpha
-        #   4 - Beta
-        #   5 - Production/Stable
         'Development Status :: 3 - Alpha',
         'Environment :: Console',
         'Intended Audience :: Developers',
@@ -115,20 +146,18 @@ setup(
     ],
     keywords='QBF SAT satisfiabily solving',
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
-    cmdclass = {'build_ext': build_external_clib},
+    cmdclass = {'build_clib': build_myclib},
     libraries= [('qdpll',{'sources':[], 'path': '..', 'dest': 'build/lib/DepQBF'})],
-    # List run-time dependencies here.  These will be installed by pip when
-    # your project is installed. For an analysis of "install_requires" vs pip's
-    # requirements files see:
+
     # https://packaging.python.org/en/latest/requirements.html
-    #install_requires=['ctypes'],
+    install_requires=[],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
     # for example:
     # $ pip install -e .[dev,test]
     extras_require={
-        'dev': ['check-manifest'],
+        'dev': ['check-manifest', 'memory_profiler'],
         'test': ['coverage','memory_profiler'],
     },
     include_package_data = True,

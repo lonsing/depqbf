@@ -2,6 +2,8 @@ import unittest
 from DepQBF import *
 from memory_profiler import memory_usage
 from os import path
+import doctest
+import DepQBF
 
 lib_path = '../build/lib/DepQBF/libqdpll.so.1.0'
 lib_path = path.realpath(path.dirname('%s/%s' %(path.dirname(__file__), lib_path)))
@@ -74,17 +76,14 @@ class Test4MemoryLeaksInIters(unittest.TestCase):
             assert(sum(1 for _ in relevant_clause_groups)==1)
         self.assertLess(usage()-initial_mem_usage, 0.1)
 
-#import doctest
 
-#suite = unittest.TestSuite()
-#suite.addTest(doctest.DocTestSuite(QCDCL))
-#runner = unittest.TextTestRunner(verbosity=2)
+class TestDocTest(unittest.TestCase):
+    def test_doctest(self):
+        suite = unittest.TestSuite()
+        suite.addTest(doctest.DocTestSuite("DepQBF.QCDCL", extraglobs={'lib_path': lib_path}))
+        unittest.TextTestRunner(verbosity=2).run(suite)
+
 
 
 if __name__ == '__main__':
-    #unittest.main()
-    
-    print 'doctest'
-
-    #runner.run(suite)
-    #doctest.testmod(DepQBF)
+    unittest.main()
