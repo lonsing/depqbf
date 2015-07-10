@@ -4,6 +4,7 @@ from memory_profiler import memory_usage
 from os import path
 import doctest
 import DepQBF
+import glob
 
 lib_path = '../build/lib/DepQBF/libqdpll.so.1.0'
 lib_path = path.realpath(path.dirname('%s/%s' %(path.dirname(__file__), lib_path)))
@@ -83,6 +84,12 @@ class TestDocTest(unittest.TestCase):
         suite.addTest(doctest.DocTestSuite("DepQBF.QCDCL", extraglobs={'lib_path': lib_path}))
         unittest.TextTestRunner(verbosity=2).run(suite)
 
+
+try:
+    path.isfile(glob.glob('%s/%s' %(lib_path, 'libqdpll.so*'))[0])
+except IndexError:
+    print('File "%s" does not exist. Run "setup.py build" first' % '%s/%s' %(lib_path, 'libqdpll.so*'))
+    exit(1)
 
 
 if __name__ == '__main__':
