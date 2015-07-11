@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # DepQBF4Py setup script 
 #
