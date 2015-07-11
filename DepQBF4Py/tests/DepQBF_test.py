@@ -26,7 +26,8 @@ class Test4MemoryLeaksInIters(unittest.TestCase):
             assert (sum(1 for _ in cand) == 2)
         #assume that we do not need more than 0.1MB more after X runs
         #if it leaks then we need significantly more memory
-        self.assertLess(usage()-initial_mem_usage, 0.1)
+        #assume 0.2 otherwise we need psutil to be installed
+        self.assertLess(usage()-initial_mem_usage, 0.2)
         del qcdcl
 
     def test_relevant_assumptions(self):
