@@ -36,12 +36,14 @@ https://github.com/pypa/sampleproject
 
 # Always prefer setuptools over distutils
 from setuptools import setup, find_packages, Command
+from setuptools.dist import Distribution
 # To use a consistent encoding
 from codecs import open
 from fileinput import input as file_input
 from glob import glob
 from distutils import log
 from distutils.command.build_clib import build_clib
+import distutils.command.build
 # required for unittest and clib execution
 import multiprocessing
 from shutil import copy
@@ -53,6 +55,13 @@ here = path.abspath(path.dirname(__file__))
 # Get the long description from the relevant file
 with open(path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
     long_description = f.read()
+
+
+def get_lib_build_path():
+    b = distutils.command.build.build(Distribution())
+    b.initialize_options()
+    b.finalize_options()
+    return b.build_purelib
 
 
 class BuildClib(build_clib):
@@ -143,7 +152,7 @@ setup(
     keywords='QBF SAT satisfiabily solving',
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
     cmdclass={'build_clib': BuildClib},
-    libraries=[('qdpll', {'sources': [], 'path': '..', 'dest': 'build/lib/DepQBF'})],
+    libraries=[('qdpll', {'sources': [], 'path': '..', 'dest': get_lib_build_path()})],
 
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=['memory_profiler'],
