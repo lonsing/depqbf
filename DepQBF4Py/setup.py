@@ -61,7 +61,7 @@ def get_lib_build_path():
     b = distutils.command.build.build(Distribution())
     b.initialize_options()
     b.finalize_options()
-    return b.build_purelib
+    return '%s/DepQBF' % b.build_purelib
 
 
 class BuildClib(build_clib):
