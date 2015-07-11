@@ -37,28 +37,24 @@ https://github.com/pypa/sampleproject
 from setuptools import setup, find_packages, Command
 # To use a consistent encoding
 from codecs import open
-from os import path
-from distutils.command.build_clib import build_clib
-from distutils.command.build_ext import build_ext
-from distutils.command.install_lib import install_lib
+from fileinput import input as file_input
+from glob import glob
 from distutils import log
-import multiprocessing 
+from distutils.command.build_clib import build_clib
+# required for unittest and clib execution
+import multiprocessing
+from shutil import copy
+from subprocess import check_call
+from os import path
+import yaml
 
 here = path.abspath(path.dirname(__file__))
-
 # Get the long description from the relevant file
 with open(path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-from subprocess import check_output, CalledProcessError, check_call
 
-import os
-import glob
-import shutil
-import fileinput
-import yaml
-
-class build_myclib(build_clib):
+class BuildClib(build_clib):
     without_stats = False
     config_file = '../qdpll_config.h'
     python_config_file = 'DepQBF/config.yaml'
@@ -66,59 +62,58 @@ class build_myclib(build_clib):
     user_options = [
         ('without-stats', None, 'Build the shared library without statistics support'),
     ]
-    def set_option(self,option,value):
-        #search first, so that we do not screw autorebuild of make
-        update=True
-        search_for='#define %s %s' %(option,value)
-        with open(self.config_file,'r') as f:
-            
-            if f.read().find(search_for)>0:
-                update=False
+
+    def set_option(self, option, value):
+        # search first, so that we do not screw autorebuild of make
+        update = True
+        search_for = '#define %s %s' % (option, value)
+        with open(self.config_file, 'r') as f:
+            if f.read().find(search_for) > 0:
+                update = False
         if update:
-            for line in fileinput.input(self.config_file,inplace=True):
-                if ' %s ' %option in line:
-                    line=line[:-1]
-                    line=line.split(' ')
-                    line[2]=value
+            for line in file_input(self.config_file, inplace=True):
+                if ' %s ' % option in line:
+                    line = line[:-1]
+                    line = line.split(' ')
+                    line[2] = value
                     print(' '.join(line))
                 else:
                     print(line),
 
-        #update property in python config file
+        # update property in python config file
         config = yaml.load(file(self.python_config_file))
         if not config:
             config = {}
         config[option] = bool(int(value))
         with open(self.python_config_file, 'w') as outfile:
-            outfile.write(yaml.dump(config,default_flow_style=True))
-
+            outfile.write(yaml.dump(config, default_flow_style=True))
 
     def build_libraries(self, libraries):
         if self.without_stats:
-            log.info('Turning statistics off in file "%s"',self.config_file)
-            self.set_option('COMPUTE_STATS','0')
-            self.set_option('COMPUTE_TIMES','0')
+            log.info('Turning statistics off in file "%s"', self.config_file)
+            self.set_option('COMPUTE_STATS', '0')
+            self.set_option('COMPUTE_TIMES', '0')
         else:
-            log.info('Turning statistics on in file "%s"',self.config_file)
-            self.set_option('COMPUTE_STATS','1')
-            self.set_option('COMPUTE_TIMES','1')
+            log.info('Turning statistics on in file "%s"', self.config_file)
+            self.set_option('COMPUTE_STATS', '1')
+            self.set_option('COMPUTE_TIMES', '1')
 
         for (lib_name, build_info) in libraries:
-            log.info('building external c library "%s" from source',lib_name)
-            build_temp=self.build_temp
-            log.info('*'*80)
-            log.info('Running make on path "%s"',build_info['path'])
+            log.info('building external c library "%s" from source', lib_name)
+            log.info('*' * 80)
+            log.info('Running make on path "%s"', build_info['path'])
             # Run make install.
-            check_call(['make'], cwd=os.path.realpath(build_info['path']))
-            log.info('*'*80)
+            check_call(['make'], cwd=path.realpath(build_info['path']))
+            log.info('*' * 80)
 
-            generated_libs = glob.glob('../libqdpll.so*')
-            assert(sum(1 for _ in generated_libs) == 1)
+            generated_libs = glob('../libqdpll.so*')
+            assert (sum(1 for _ in generated_libs) == 1)
             lib = generated_libs[0]
-            
+
             log.info('copying %s to %s', lib, build_info['dest'])
             self.mkpath(build_info['dest'])
-            shutil.copy(lib,build_info['dest'])
+            copy(lib, build_info['dest'])
+
 
 setup(
     name='DepQBF4Py',
@@ -146,8 +141,8 @@ setup(
     ],
     keywords='QBF SAT satisfiabily solving',
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
-    cmdclass = {'build_clib': build_myclib},
-    libraries= [('qdpll',{'sources':[], 'path': '..', 'dest': 'build/lib/DepQBF'})],
+    cmdclass={'build_clib': BuildClib},
+    libraries=[('qdpll', {'sources': [], 'path': '..', 'dest': 'build/lib/DepQBF'})],
 
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[],
@@ -158,12 +153,10 @@ setup(
     # $ pip install -e .[dev,test]
     extras_require={
         'dev': ['check-manifest', 'memory_profiler'],
-        'test': ['coverage','memory_profiler'],
+        'test': ['coverage', 'memory_profiler'],
     },
-    #needed for lates linux versions
+    # needed for lates linux versions
     test_requires=['memory_profiler'],
-    include_package_data = True,
+    include_package_data=True,
     test_suite='tests'
 )
-
-
