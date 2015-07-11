@@ -146,7 +146,7 @@ setup(
     libraries=[('qdpll', {'sources': [], 'path': '..', 'dest': 'build/lib/DepQBF'})],
 
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=[],
+    install_requires=['memory_profiler'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
@@ -156,8 +156,6 @@ setup(
         'dev': ['check-manifest', 'memory_profiler'],
         'test': ['coverage', 'memory_profiler'],
     },
-    # needed for lates linux versions
-    test_requires=['memory_profiler'],
     include_package_data=True,
     test_suite='tests'
 )
