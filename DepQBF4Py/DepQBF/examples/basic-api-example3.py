@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # This file is part of DepQBF (DepQBF Python API).
 #
@@ -24,12 +25,13 @@
 # PURPOSE.  See the GNU General Public License for more details.  You
 # should have received a copy of the GNU General Public License along
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
+import logging
 
 from DepQBF import *
 
-#=============================================================================
+# =============================================================================
 #  basic-api-example.py
-#=============================================================================
+# =============================================================================
 
 # The API file 'DepQBF.py' has some comments regarding the usage of the API.
 # The header file 'qdpll.h' has some comments regarding the usage of the API. 
@@ -40,7 +42,7 @@ qcdcl = QCDCL()
 
 # --dep-man=simple ...  Use the linear ordering of the quantifier prefix.
 # --incremental-use ... Enable incremental solving.
-qcdcl.configure('--dep-man=simple','--incremental-use')
+qcdcl.configure('--dep-man=simple', '--incremental-use')
 
 # Add and open a new leftmost universal block at nesting level 1.
 qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -51,18 +53,18 @@ qcdcl.add(99)
 # Close open scope.
 qcdcl.add(0)
 
-assert(qcdcl.is_var_declared(1))
-assert(qcdcl.is_var_declared(99))
-assert(not qcdcl.is_var_declared(50))
-assert(not qcdcl.is_var_declared(51))
-assert(not qcdcl.is_var_declared(52))
+assert (qcdcl.is_var_declared(1))
+assert (qcdcl.is_var_declared(99))
+assert (not qcdcl.is_var_declared(50))
+assert (not qcdcl.is_var_declared(51))
+assert (not qcdcl.is_var_declared(52))
 
 # Add a new existential block at nesting level 2.
 qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
 # Add a fresh variable with 'id == 2' to the existential block.
-qcdcl.add(2);
+qcdcl.add(2)
 # Close open scope
-qcdcl.add(0);
+qcdcl.add(0)
 
 # Add clause: 1 -2 0
 qcdcl.add(1)
@@ -95,11 +97,11 @@ qcdcl.reset()
 
 # Var 99 still is declared although no clauses were added containing
 # literals of 99 before.
-assert(qcdcl.is_var_declared(1))
-assert(qcdcl.is_var_declared(99))
-assert(not qcdcl.is_var_declared(50))
-assert(not qcdcl.is_var_declared(51))
-assert(not qcdcl.is_var_declared(52))
+assert (qcdcl.is_var_declared(1))
+assert (qcdcl.is_var_declared(99))
+assert (not qcdcl.is_var_declared(50))
+assert (not qcdcl.is_var_declared(51))
+assert (not qcdcl.is_var_declared(52))
 
 # Open a new frame of clauses. Clauses added after the 'push' can be
 # removed later by calling 'pop'.
@@ -132,7 +134,7 @@ logging.warn('result is: %d\n', res)
 # variable.
 
 a = qcdcl.get_value(1)
-logging.warn('partial countermodel - value of 1: %s\n',assignment2str(a))
+logging.warn('partial countermodel - value of 1: %s\n', assignment2str(a))
 
 qcdcl.reset()
 

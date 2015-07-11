@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # This file is part of DepQBF (DepQBF Python API).
 #
@@ -24,12 +25,13 @@
 # PURPOSE.  See the GNU General Public License for more details.  You
 # should have received a copy of the GNU General Public License along
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
+import logging
 
 from DepQBF import *
 
-#=============================================================================
+# =============================================================================
 #  basic-manual-selectors.py
-#=============================================================================
+# =============================================================================
 
 # The API file 'DepQBF.py' has some comments regarding the usage of the API.
 # The header file 'qdpll.h' has some comments regarding the usage of the API. 
@@ -50,7 +52,7 @@ qcdcl = QCDCL()
 
 # --dep-man=simple ...  Use the linear ordering of the quantifier prefix.
 # --incremental-use ... Enable incremental solving.
-qcdcl.configure('--dep-man=simple','--incremental-use')
+qcdcl.configure('--dep-man=simple', '--incremental-use')
 
 # Add and open a new leftmost existential block at nesting level 1. 
 #    Selector variables are put into this block. 
@@ -120,7 +122,7 @@ res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
 logging.warn('result is: %d', res)
 
-qcdcl.reset ()
+qcdcl.reset()
 
 # Discard the most recently added clause '300 1 2 0' by setting the
 # selector variable 300 to true.
@@ -134,4 +136,3 @@ qcdcl.print_dimacs()
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
 logging.warn('result after disabling the clause "300 1 2 0" is: %d', res)
-

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # This file is part of DepQBF (DepQBF Python API).
 #
@@ -24,12 +25,13 @@
 # PURPOSE.  See the GNU General Public License for more details.  You
 # should have received a copy of the GNU General Public License along
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
+import logging
 
 from DepQBF import *
 
-#=============================================================================
+# =============================================================================
 #  basic-api-example.py
-#=============================================================================
+# =============================================================================
 
 # The API file 'DepQBF.py' has some comments regarding the usage of the API.
 # The header file 'qdpll.h' has some comments regarding the usage of the API. 
@@ -40,7 +42,7 @@ qcdcl = QCDCL()
 
 # --dep-man=simple ...  Use the linear ordering of the quantifier prefix.
 # --incremental-use ... Enable incremental solving.
-qcdcl.configure('--dep-man=simple','--incremental-use')
+qcdcl.configure('--dep-man=simple', '--incremental-use')
 
 # Add and open a new leftmost universal block at nesting level 1.
 qcdcl.new_scope_at_nesting(QDPLL_QTYPE_FORALL, 1)
@@ -50,7 +52,7 @@ qcdcl.add(1)
 qcdcl.add(0)
 
 # Add a new existential block at nesting level 2. 
-qcdcl.new_scope_at_nesting (QDPLL_QTYPE_EXISTS, 2)
+qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 2)
 # Add a fresh variable with 'id == 2' to the existential block.
 qcdcl.add(2)
 # Close open scope. 
@@ -74,9 +76,9 @@ qcdcl.add(0)
 #  -1 2 0 
 
 # Print formula.
-qcdcl.print_dimacs();
+qcdcl.print_dimacs()
 
-res=qcdcl.evaluate()
+res = qcdcl.evaluate()
 
 # Expecting that the formula is satisfiable.
 assert (res == QDPLL_RESULT_SAT)
@@ -108,7 +110,7 @@ logging.warn('res=%s', res)
 #      1 2 0 */
 qcdcl.print_dimacs()
 
-res = qcdcl.evaluate();
+res = qcdcl.evaluate()
 # Expecting that the formula is unsatisfiable due to the most recently added clause. 
 assert (res == QDPLL_RESULT_UNSAT)
 
@@ -135,7 +137,7 @@ logging.warn("discarding clause '1 2 0' by a 'pop'.\n")
 #     -1 2 0
 qcdcl.print_dimacs()
 
-res=qcdcl.evaluate()
+res = qcdcl.evaluate()
 
 # The formula is satisfiable again because we discarded the clause '1 2 0'
 #     by a 'pop'.

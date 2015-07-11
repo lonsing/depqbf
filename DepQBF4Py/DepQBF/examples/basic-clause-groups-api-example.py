@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # This file is part of DepQBF (DepQBF Python API).
 #
@@ -26,12 +27,14 @@
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import print_function
-from DepQBF import *
 import logging
 
-#=============================================================================
+from DepQBF import *
+
+
+# =============================================================================
 #  basic-clause-groups-api-example-assumptions.py
-#=============================================================================
+# =============================================================================
 
 # The API file 'DepQBF.py' has some comments regarding the usage of
 # the API.  The header file 'qdpll.h' has some comments regarding the
@@ -54,7 +57,7 @@ qcdcl = QCDCL()
 
 # --dep-man=simple ...  Use the linear ordering of the quantifier prefix.
 # --incremental-use ... Enable incremental solving.
-qcdcl.configure('--dep-man=simple','--incremental-use')
+qcdcl.configure('--dep-man=simple', '--incremental-use')
 
 # Given the following unsatisfiable formula:
 #
@@ -92,7 +95,7 @@ assert (not qcdcl.get_open_clause_group())
 # A clause group must be opened before clauses can be added to
 # it. Only one clause group can be open at a time.
 qcdcl.open_clause_group(id1)
-assert (qcdcl.get_open_clause_group () == id1)
+assert (qcdcl.get_open_clause_group() == id1)
 
 # Add the clause '-1 -3 0' to the currently open clause group 'id1'.
 qcdcl.add(-1)
@@ -105,7 +108,7 @@ assert (not qcdcl.get_open_clause_group())
 
 # Create another clause group 'id2'.
 id2 = qcdcl.new_clause_group()
-assert (not qcdcl.get_open_clause_group ())
+assert (not qcdcl.get_open_clause_group())
 qcdcl.open_clause_group(id2)
 assert (qcdcl.get_open_clause_group() == id2)
 # Add the clauses '1 2 4 0' and '1 -4 0' to the currently open clause
@@ -114,7 +117,7 @@ qcdcl.add(1)
 qcdcl.add(2)
 qcdcl.add(4)
 qcdcl.add(0)
-#---------------------
+# ---------------------
 qcdcl.add(1)
 qcdcl.add(-4)
 qcdcl.add(0)
@@ -127,7 +130,7 @@ qcdcl.print_dimacs()
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
 logging.warn('result is %d', res)
-  
+
 # Get a list of those clause groups which contain clauses used by
 # solver to determine unsatisfiability. This amounts to an
 # unsatisfiable core of the formula.
@@ -135,7 +138,7 @@ logging.warn('result is %d', res)
 relevant_clause_groups = list(qcdcl.iter_relevant_clause_groups())
 
 # We must reset the solver AFTER retrieving the relevant groups.
-qcdcl.reset ()
+qcdcl.reset()
 
 # In our example, the clauses in the group 'id2' are relevant for
 # unsatisfiability. (The clause '-1 -3 0' in 'id1' cannot be part of a

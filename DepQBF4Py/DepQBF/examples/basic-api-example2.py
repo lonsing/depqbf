@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # This file is part of DepQBF (DepQBF Python API).
 #
@@ -24,12 +25,13 @@
 # PURPOSE.  See the GNU General Public License for more details.  You
 # should have received a copy of the GNU General Public License along
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
+import logging
 
 from DepQBF import *
 
-#=============================================================================
+# =============================================================================
 #  basic-api-example.py
-#=============================================================================
+# =============================================================================
 
 # The API file 'DepQBF.py' has some comments regarding the usage of the API.
 # The header file 'qdpll.h' has some comments regarding the usage of the API. 
@@ -40,8 +42,7 @@ qcdcl = QCDCL()
 
 # --dep-man=simple ...  Use the linear ordering of the quantifier prefix.
 # --incremental-use ... Enable incremental solving.
-qcdcl.configure('--dep-man=simple','--incremental-use')
-
+qcdcl.configure('--dep-man=simple', '--incremental-use')
 
 qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
 qcdcl.add(1)
@@ -55,7 +56,7 @@ qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 3)
 qcdcl.add(3)
 qcdcl.add(0)
 
-qcdcl.add (3)
+qcdcl.add(3)
 qcdcl.add(0)
 
 qcdcl.push()
@@ -75,7 +76,7 @@ qcdcl.print_dimacs()
 #   variable is still present in the prefix of the formula. We can
 #   check this by calling 'is_var_declared', passing the respective
 #   variable ID.
-assert (qcdcl.is_var_declared (1))
+assert (qcdcl.is_var_declared(1))
 assert (qcdcl.is_var_declared(2))
 assert (qcdcl.is_var_declared(3))
 
@@ -152,7 +153,7 @@ assert (qcdcl.get_max_declared_var_id() == 3)
 # at nesting level 1 and new variable with ID 1 to this block.
 qcdcl.new_scope_at_nesting(QDPLL_QTYPE_EXISTS, 1)
 qcdcl.add(1)
-qcdcl.add(0) 
+qcdcl.add(0)
 assert (qcdcl.is_var_declared(1))
 
 assert (qcdcl.get_nesting_of_var(1) == 1)
@@ -192,4 +193,3 @@ qcdcl.print_dimacs()
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
 logging.warn("result is: %d\n", res)
-

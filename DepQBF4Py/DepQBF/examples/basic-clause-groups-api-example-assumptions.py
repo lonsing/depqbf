@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # This file is part of DepQBF (DepQBF Python API).
 #
@@ -26,11 +27,12 @@
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import print_function
+import logging
 from DepQBF import *
 
-#=============================================================================
+# =============================================================================
 #  basic-clause-groups-api-example-assumptions.py
-#=============================================================================
+# =============================================================================
 
 # The API file 'DepQBF.py' has some comments regarding the usage of
 # the API.  The header file 'qdpll.h' has some comments regarding the
@@ -53,7 +55,7 @@ qcdcl = QCDCL()
 
 # --dep-man=simple ...  Use the linear ordering of the quantifier prefix.
 # --incremental-use ... Enable incremental solving.
-qcdcl.configure('--dep-man=simple','--incremental-use')
+qcdcl.configure('--dep-man=simple', '--incremental-use')
 
 # This example is similar to'basic-clause-groups-api-example.py'.
 # However, instead of using DepQBF's clause group API, we emulate
@@ -83,7 +85,7 @@ qcdcl.configure('--dep-man=simple','--incremental-use')
 # -1 -3 0
 # 1 2 4 0
 # 1 -4 0
-     
+
 # To effectively put the variables into groups, we add the variable
 # '5' to the first clause and the variable '6' to the last two
 # clauses. The fresh selector variables 5 and 6 are existentially
@@ -126,13 +128,13 @@ qcdcl.add(0)
 # Add second and third clause augmented with selector variable 6.
 qcdcl.add(6)
 qcdcl.add(1)
-qcdcl.add(2)  
+qcdcl.add(2)
 qcdcl.add(4)
 qcdcl.add(0)
-#---------------------
+# ---------------------
 qcdcl.add(6)
 qcdcl.add(1)
-qcdcl.add(-4)  
+qcdcl.add(-4)
 qcdcl.add(0)
 
 #  By adding the selector variables to the clauses, we have
@@ -154,7 +156,7 @@ logging.warn('result is %d', res)
 # Get a list of those selector variables which appear in clauses used
 # by the solver to determine unsatisfiability.
 
-relevant_assumptions=list(qcdcl.iter_relevant_assumptions())
+relevant_assumptions = list(qcdcl.iter_relevant_assumptions())
 
 qcdcl.reset()
 
@@ -171,7 +173,7 @@ print(*relevant_assumptions, sep='\n')
 
 logging.warn('deactivating group 2 with clauses 1 2 4 0 and 1 -4 0 by assumption 6')
 
-qcdcl.assume(-5)  
+qcdcl.assume(-5)
 qcdcl.assume(6)
 
 qcdcl.print_dimacs()
@@ -190,7 +192,7 @@ qcdcl.reset()
 
 logging.warn('deactivating group 1 with clause -1 -3 0')
 
-qcdcl.assume(5)  
+qcdcl.assume(5)
 qcdcl.assume(-6)
 
 qcdcl.print_dimacs()
