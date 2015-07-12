@@ -1,16 +1,45 @@
-import doctest
+from setuptools.dist import Distribution
 import DepQBF
 from DepQBF import *
-import glob
+import distutils.command.build
+from distutils.util import get_platform
+import doctest
+from glob import glob
+import logging
 from memory_profiler import memory_usage
 from os import path
+from sys import version_info
 import unittest
 
-lib_path = '../build/lib/DepQBF/libqdpll.so.1.0'
-lib_path = path.realpath(path.dirname('%s/%s' % (path.dirname(__file__), lib_path)))
+
+#if we run from setup.py obtain paths from distutils
+def get_lib_build_path():
+    b = distutils.command.build.build(Distribution())
+    b.initialize_options()
+    b.finalize_options()
+    return path.realpath('%s/DepQBF' % b.build_purelib)
+
+lib_path = get_lib_build_path()
+
+#we cannot use the setuptools functions as they need to be initialized
+#with a setup which does not work for a standalone run
+def guess_lib_build_path():
+    libs = glob('build/lib*')
+    if len(libs)>1:
+        libs = filter(lambda x: get_platform() in x and '%s.%s'
+               %(version_info.major,version_info.minor) , libs)
+    libs = '%s/DepQBF' % libs[0]
+    return path.realpath(libs)
+
 
 avg = lambda L: float(sum(L)) / len(L) if len(L) > 0 else float('nan')
 usage = lambda: avg(memory_usage(-1, interval=.1, timeout=None))
+
+class TestDocTest(unittest.TestCase):
+    def test_doctest(self):
+        suite = unittest.TestSuite()
+        suite.addTest(doctest.DocTestSuite("DepQBF.QCDCL", extraglobs={'lib_path': lib_path}))
+        unittest.TextTestRunner(verbosity=1).run(suite)
 
 
 class Test4MemoryLeaksInIters(unittest.TestCase):
@@ -53,6 +82,7 @@ class Test4MemoryLeaksInIters(unittest.TestCase):
             relevant_assumptions = list(qcdcl.iter_relevant_assumptions())
             assert (sum(1 for _ in relevant_assumptions) == 1)
         self.assertLess(usage() - initial_mem_usage, 0.1)
+        del qcdcl
 
     def test_relevant_clause_groups(self):
         qcdcl = QCDCL(lib_path)
@@ -78,20 +108,17 @@ class Test4MemoryLeaksInIters(unittest.TestCase):
             relevant_clause_groups = list(qcdcl.iter_relevant_clause_groups())
             assert (sum(1 for _ in relevant_clause_groups) == 1)
         self.assertLess(usage() - initial_mem_usage, 0.1)
-
-
-class TestDocTest(unittest.TestCase):
-    def test_doctest(self):
-        suite = unittest.TestSuite()
-        suite.addTest(doctest.DocTestSuite("DepQBF.QCDCL", extraglobs={'lib_path': lib_path}))
-        unittest.TextTestRunner(verbosity=2).run(suite)
+        del qcdcl
 
 
 try:
-    path.isfile(glob.glob('%s/%s' % (lib_path, 'libqdpll.so*'))[0])
+    logging.debug('lib_path is "%s"', lib_path)
+    path.isfile(glob('%s/libqdpll.so*' %(lib_path))[0])
 except IndexError:
     print('File "%s" does not exist. Run "setup.py build" first' % '%s/%s' % (lib_path, 'libqdpll.so*'))
     exit(1)
 
 if __name__ == '__main__':
+    lib_path = guess_lib_build_path()
     unittest.main()
+    

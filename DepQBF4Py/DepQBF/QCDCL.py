@@ -62,8 +62,8 @@ class QCDCL(object):
 
             self.__lib_path = '%s/%s' % (module_path, self.__LIB_NAME)
             logging.info('Loading library from path=%s', self.__lib_path)
-
             libs = glob(self.__lib_path)
+            logging.info('Found the following matching libs=%s', libs)
             assert (sum(1 for _ in libs) == 1)
             self.__LIB_NAME = libs[0]
             logging.debug('Shared Lib: Loading...')
@@ -93,6 +93,10 @@ class QCDCL(object):
         logging.debug('QCDCL: Initialized')
 
     def __del__(self):
+        #starting the test using setup.py test yields an ignored
+        #AttributeError in QCDCL.__del__ might be a bug in setuputils
+        #see <https://bitbucket.org/pypa/setuptools/issues/294/>
+        #we simply ignore it for now
         logging.debug('QCDCL: Deleting...')
         self.__lib.qdpll_delete(self.__depqbf)
         logging.debug('QCDCL: Deleted')
@@ -335,6 +339,7 @@ class QCDCL(object):
 
         >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('--dep-man=simple','--incremental-use')
+        >>> del(qcdcl)
 
         >>> qcdcl = QCDCL(lib_path=lib_path)
         >>> qcdcl.configure('-dep-man=simple','--incremental-use')
