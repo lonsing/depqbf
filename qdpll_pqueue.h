@@ -47,20 +47,20 @@ typedef struct PriorityQueue PriorityQueue;
 
 #define PQUEUE_INVALID_POS UINT_MAX
 
-PriorityQueue *pqueue_create (QDPLLMemMan * mm, unsigned int init_size);
+PriorityQueue *qdpll_pqueue_create (QDPLLMemMan * mm, unsigned int init_size);
 
-void pqueue_delete (QDPLLMemMan * mm, PriorityQueue * pqueue);
+void qdpll_pqueue_delete (QDPLLMemMan * mm, PriorityQueue * pqueue);
 
-void pqueue_adjust (QDPLLMemMan * mm, PriorityQueue * pqueue,
+void qdpll_pqueue_adjust (QDPLLMemMan * mm, PriorityQueue * pqueue,
                     unsigned int size);
 
-void pqueue_insert (QDPLLMemMan * mm, PriorityQueue * pqueue,
+void qdpll_pqueue_insert (QDPLLMemMan * mm, PriorityQueue * pqueue,
                     void *data, double priority);
 
-void *pqueue_remove_first (PriorityQueue * pqueue);
+void *qdpll_pqueue_remove_first (PriorityQueue * pqueue);
 
-void *pqueue_remove_min (PriorityQueue * pqueue);
+void *qdpll_pqueue_remove_min (PriorityQueue * pqueue);
 
-void *pqueue_access_min (PriorityQueue * pqueue);
+void *qdpll_pqueue_access_min (PriorityQueue * pqueue);
 
 #endif

@@ -32,7 +32,7 @@
 #define PQ_ASSERT_HEAP_CONDITION_REMOVE_ELEM 1
 
 static unsigned int
-pqueue_get_left_child_pos (unsigned int cur_pos)
+qdpll_pqueue_get_left_child_pos (unsigned int cur_pos)
 {
   assert (cur_pos != PQUEUE_INVALID_POS);
   return 2 * cur_pos + 1;
@@ -40,7 +40,7 @@ pqueue_get_left_child_pos (unsigned int cur_pos)
 
 
 static unsigned int
-pqueue_get_right_child_pos (unsigned int cur_pos)
+qdpll_pqueue_get_right_child_pos (unsigned int cur_pos)
 {
   assert (cur_pos != PQUEUE_INVALID_POS);
   return 2 * (cur_pos + 1);
@@ -48,19 +48,19 @@ pqueue_get_right_child_pos (unsigned int cur_pos)
 
 
 static unsigned int
-pqueue_get_parent_pos (unsigned int cur_pos)
+qdpll_pqueue_get_parent_pos (unsigned int cur_pos)
 {
   assert (cur_pos != PQUEUE_INVALID_POS);
   unsigned int result;
   result = (cur_pos - 1) / 2;
-  assert (cur_pos == pqueue_get_right_child_pos (result) ||
-          cur_pos == pqueue_get_left_child_pos (result));
+  assert (cur_pos == qdpll_pqueue_get_right_child_pos (result) ||
+          cur_pos == qdpll_pqueue_get_left_child_pos (result));
   return result;
 }
 
 
 static int
-pqueue_compare (PriorityQueue * pqueue, unsigned int pos_a,
+qdpll_pqueue_compare (PriorityQueue * pqueue, unsigned int pos_a,
                 unsigned int pos_b)
 {
   assert (pos_a != PQUEUE_INVALID_POS);
@@ -89,7 +89,7 @@ pqueue_compare (PriorityQueue * pqueue, unsigned int pos_a,
 
 
 static void
-pqueue_swap (PriorityQueue * pqueue, unsigned int pos_a, unsigned int pos_b)
+qdpll_pqueue_swap (PriorityQueue * pqueue, unsigned int pos_a, unsigned int pos_b)
 {
   assert (pos_a != pos_b);
   assert (pos_a != PQUEUE_INVALID_POS);
@@ -115,26 +115,26 @@ pqueue_swap (PriorityQueue * pqueue, unsigned int pos_a, unsigned int pos_b)
 
 
 static void
-pqueue_up_heap (PriorityQueue * pqueue, unsigned int cur_pos)
+qdpll_pqueue_up_heap (PriorityQueue * pqueue, unsigned int cur_pos)
 {
   assert (cur_pos != PQUEUE_INVALID_POS);
   assert (cur_pos < pqueue->cnt);
 
   while (cur_pos > 0)
     {
-      unsigned int parent_pos = pqueue_get_parent_pos (cur_pos);
+      unsigned int parent_pos = qdpll_pqueue_get_parent_pos (cur_pos);
 
-      if (pqueue_compare (pqueue, cur_pos, parent_pos) <= 0)
+      if (qdpll_pqueue_compare (pqueue, cur_pos, parent_pos) <= 0)
         break;
 
-      pqueue_swap (pqueue, cur_pos, parent_pos);
+      qdpll_pqueue_swap (pqueue, cur_pos, parent_pos);
       cur_pos = parent_pos;
     }
 }
 
 
 static void
-pqueue_down_heap (PriorityQueue * pqueue, unsigned int cur_pos)
+qdpll_pqueue_down_heap (PriorityQueue * pqueue, unsigned int cur_pos)
 {
   assert (cur_pos != PQUEUE_INVALID_POS);
   assert (cur_pos < pqueue->cnt);
@@ -144,22 +144,22 @@ pqueue_down_heap (PriorityQueue * pqueue, unsigned int cur_pos)
 
   for (;;)
     {
-      left_child_pos = pqueue_get_left_child_pos (cur_pos);
+      left_child_pos = qdpll_pqueue_get_left_child_pos (cur_pos);
 
       if (left_child_pos >= count)
         break;
 
-      right_child_pos = pqueue_get_right_child_pos (cur_pos);
+      right_child_pos = qdpll_pqueue_get_right_child_pos (cur_pos);
 
       if (right_child_pos < count &&
-          pqueue_compare (pqueue, left_child_pos, right_child_pos) < 0)
+          qdpll_pqueue_compare (pqueue, left_child_pos, right_child_pos) < 0)
         child_pos = right_child_pos;
       else
         child_pos = left_child_pos;
 
-      if (pqueue_compare (pqueue, cur_pos, child_pos) < 0)
+      if (qdpll_pqueue_compare (pqueue, cur_pos, child_pos) < 0)
         {
-          pqueue_swap (pqueue, cur_pos, child_pos);
+          qdpll_pqueue_swap (pqueue, cur_pos, child_pos);
           cur_pos = child_pos;
         }
       else
@@ -169,7 +169,7 @@ pqueue_down_heap (PriorityQueue * pqueue, unsigned int cur_pos)
 
 
 static void
-assert_pqueue_condition (PriorityQueue * pqueue)
+assert_qdpll_pqueue_condition (PriorityQueue * pqueue)
 {
   unsigned int pos, no_children = pqueue->cnt / 2,
     left_child_pos, right_child_pos;
@@ -181,8 +181,8 @@ assert_pqueue_condition (PriorityQueue * pqueue)
       cur = pqueue->queue + pos;
       assert (cur->pos == pos);
 
-      left_child_pos = pqueue_get_left_child_pos (pos);
-      right_child_pos = pqueue_get_right_child_pos (pos);
+      left_child_pos = qdpll_pqueue_get_left_child_pos (pos);
+      right_child_pos = qdpll_pqueue_get_right_child_pos (pos);
 
       if (pos < no_children)
         {
@@ -212,7 +212,7 @@ assert_pqueue_condition (PriorityQueue * pqueue)
 
 
 static void
-print_pqueue (PriorityQueue * pqueue)
+print_qdpll_pqueue (PriorityQueue * pqueue)
 {
   fprintf (stderr, "pqueue:");
   PriorityQueueElem *p, *e;
@@ -226,7 +226,7 @@ print_pqueue (PriorityQueue * pqueue)
 
 
 PriorityQueue *
-pqueue_create (QDPLLMemMan * mm, unsigned int init_size)
+qdpll_pqueue_create (QDPLLMemMan * mm, unsigned int init_size)
 {
   PriorityQueue *pq = qdpll_malloc (mm, sizeof (PriorityQueue));
   if (init_size == 0)
@@ -244,7 +244,7 @@ pqueue_create (QDPLLMemMan * mm, unsigned int init_size)
 
 
 void
-pqueue_delete (QDPLLMemMan * mm, PriorityQueue * pqueue)
+qdpll_pqueue_delete (QDPLLMemMan * mm, PriorityQueue * pqueue)
 {
   qdpll_free (mm, pqueue->queue, sizeof (PriorityQueueElem) * pqueue->size);
   qdpll_free (mm, pqueue, sizeof (PriorityQueue));
@@ -252,7 +252,7 @@ pqueue_delete (QDPLLMemMan * mm, PriorityQueue * pqueue)
 
 
 void
-pqueue_adjust (QDPLLMemMan * mm, PriorityQueue * pqueue, unsigned int size)
+qdpll_pqueue_adjust (QDPLLMemMan * mm, PriorityQueue * pqueue, unsigned int size)
 {
   unsigned int old_size;
 
@@ -271,7 +271,7 @@ pqueue_adjust (QDPLLMemMan * mm, PriorityQueue * pqueue, unsigned int size)
 
 
 void
-pqueue_insert (QDPLLMemMan * mm, PriorityQueue * pqueue, void *data,
+qdpll_pqueue_insert (QDPLLMemMan * mm, PriorityQueue * pqueue, void *data,
                double priority)
 {
   assert (data);
@@ -280,7 +280,7 @@ pqueue_insert (QDPLLMemMan * mm, PriorityQueue * pqueue, void *data,
   pos = cnt;
 
   if (cnt == size)
-    pqueue_adjust (mm, pqueue,
+    qdpll_pqueue_adjust (mm, pqueue,
                    size ? (size + (size / 2) + 1) : 1);
 
   assert (pqueue->cnt == cnt);
@@ -292,11 +292,11 @@ pqueue_insert (QDPLLMemMan * mm, PriorityQueue * pqueue, void *data,
   pqueue->queue[pos].pos = pos;
 
   pqueue->cnt++;
-  pqueue_up_heap (pqueue, pos);
+  qdpll_pqueue_up_heap (pqueue, pos);
 
 #ifndef NDEBUG
 #if PQ_ASSERT_HEAP_CONDITION_INSERT
-  assert_pqueue_condition (pqueue);
+  assert_qdpll_pqueue_condition (pqueue);
 #endif
 #endif
 }
@@ -306,7 +306,7 @@ pqueue_insert (QDPLLMemMan * mm, PriorityQueue * pqueue, void *data,
    NOTE: destroys heap condition! 
 */
 void *
-pqueue_remove_first (PriorityQueue * pqueue)
+qdpll_pqueue_remove_first (PriorityQueue * pqueue)
 {
   PriorityQueueElem result;
   unsigned int cnt = pqueue->cnt;
@@ -333,21 +333,21 @@ pqueue_remove_first (PriorityQueue * pqueue)
 
 
 void *
-pqueue_remove_min (PriorityQueue * pqueue)
+qdpll_pqueue_remove_min (PriorityQueue * pqueue)
 {
   void *result_data = 0;
 
   if (pqueue->cnt == 0)
     return result_data;
 
-  result_data = pqueue_remove_first (pqueue);
+  result_data = qdpll_pqueue_remove_first (pqueue);
 
   if (pqueue->cnt > 0)
-    pqueue_down_heap (pqueue, 0);
+    qdpll_pqueue_down_heap (pqueue, 0);
 
 #ifndef NDEBUG
 #if PQ_ASSERT_HEAP_CONDITION_REMOVE_MIN
-  assert_pqueue_condition (pqueue);
+  assert_qdpll_pqueue_condition (pqueue);
 #endif
 #endif
 
@@ -356,7 +356,7 @@ pqueue_remove_min (PriorityQueue * pqueue)
 
 
 void *
-pqueue_access_min (PriorityQueue * pqueue)
+qdpll_pqueue_access_min (PriorityQueue * pqueue)
 {
   if (pqueue->cnt == 0)
     return 0;
