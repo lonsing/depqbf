@@ -1,5 +1,5 @@
 
-July 2015
+August 2015
 
 -------------------
 GENERAL INFORMATION
@@ -21,3 +21,38 @@ NOTES
 * If carry out a local installation, you need to build the clib first.
   ./setup.py build
   ./setup.py install --user
+
+-------------------
+FILES
+-------------------
+setup.py
+  PIP setup file
+setup.cfg
+  Setup configuration file, activates doctest
+PKG-INFO
+  Package Information
+DepQBF
+  config.yaml
+    Basic configurations (e.g., compiled with runtime information and 
+    statistics)
+  QCDCL.py
+    DepQBF solver class (QCDCL) by means of a ctype wrapper
+  basic_types.py
+    Data types and constants for DepQBF API, e.g., Solver, LiteralID
+  logging.conf
+    Configuration for QCDCL logging
+  stdout_helper.py
+    helper functions to capture the DepQBF lib (ctypes) stdout
+    output (mostly used for unit testing)
+  file_helper.py
+    helper functions for transparent file/stdout (+redirected stdout) 
+    handling
+  examples
+    basic-api-example.py
+    basic-api-example2.py
+    basic-api-example3.py
+    basic-clause-groups-api-example-assumptions.py
+    basic-clause-groups-api-example.py
+    basic-manual-selectors.py
+tests
+  DepQBF_test.py
