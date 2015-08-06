@@ -26,6 +26,7 @@
 # should have received a copy of the GNU General Public License along
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 import logging
+logging.basicConfig(format='%(message)s', level=logging.INFO)
 
 from DepQBF import *
 
@@ -96,7 +97,7 @@ assert (qcdcl.get_nesting_of_var(3) == 3)
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn("result is: %d\n", res)
+logging.info("result is: %d\n", res)
 
 qcdcl.reset()
 qcdcl.pop()
@@ -192,4 +193,4 @@ qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn("result is: %d\n", res)
+logging.info("result is: %d\n", res)

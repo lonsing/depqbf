@@ -28,6 +28,7 @@
 
 from __future__ import print_function
 import logging
+logging.basicConfig(format='%(message)s', level=logging.INFO)
 from DepQBF import *
 
 # =============================================================================
@@ -152,7 +153,7 @@ qcdcl.assume(-6)
 # Formula is expected to be unsatisfiable.
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is %d', res)
+logging.info('result is %d', res)
 # Get a list of those selector variables which appear in clauses used
 # by the solver to determine unsatisfiability.
 
@@ -161,7 +162,7 @@ relevant_assumptions = list(qcdcl.iter_relevant_assumptions())
 qcdcl.reset()
 
 assert (sum(1 for _ in relevant_assumptions) == 1)
-logging.warn('printing zero-terminated relevant assumptions:')
+logging.info('printing zero-terminated relevant assumptions:')
 print(*relevant_assumptions, sep='\n')
 
 # Deactivate the group which contains the last two clauses by setting
@@ -171,7 +172,7 @@ print(*relevant_assumptions, sep='\n')
 # that selector variable 5 has to be set to false again to enable the
 # first clause.
 
-logging.warn('deactivating group 2 with clauses 1 2 4 0 and 1 -4 0 by assumption 6')
+logging.info('deactivating group 2 with clauses 1 2 4 0 and 1 -4 0 by assumption 6')
 
 qcdcl.assume(-5)
 qcdcl.assume(6)
@@ -183,14 +184,14 @@ qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
-logging.warn('result is %d', res)
+logging.info('result is %d', res)
 qcdcl.reset()
 
 # By setting the selector variables 5 to true and 6 to false,
 # respectively, we deactivate the first clause and activate the last
 # two, which results in an unsatisfiable formula.  
 
-logging.warn('deactivating group 1 with clause -1 -3 0')
+logging.info('deactivating group 1 with clause -1 -3 0')
 
 qcdcl.assume(5)
 qcdcl.assume(-6)
@@ -199,4 +200,4 @@ qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is %d', res)
+logging.info('result is %d', res)

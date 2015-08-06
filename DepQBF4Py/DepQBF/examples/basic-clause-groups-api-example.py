@@ -28,6 +28,7 @@
 
 from __future__ import print_function
 import logging
+logging.basicConfig(format='%(message)s', level=logging.INFO)
 
 from DepQBF import *
 
@@ -129,7 +130,7 @@ qcdcl.print_dimacs()
 # Solve the formula, which is unsatisfiable.
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is %d', res)
+logging.info('result is %d', res)
 
 # Get a list of those clause groups which contain clauses used by
 # solver to determine unsatisfiability. This amounts to an
@@ -146,11 +147,11 @@ qcdcl.reset()
 assert (sum(1 for _ in relevant_clause_groups) == 1)
 assert (relevant_clause_groups[0] == id2)
 
-logging.warn('printing zero-terminated relevant clause group IDs:')
+logging.info('printing zero-terminated relevant clause group IDs:')
 print(*relevant_clause_groups, sep='\n')
 
 # Temporarily remove the clause group 'id2' by deactivating it.
-logging.warn('deactivating group 2 with clauses 1 2 4 0 and 1 -4 0')
+logging.info('deactivating group 2 with clauses 1 2 4 0 and 1 -4 0')
 qcdcl.deactivate_clause_group(relevant_clause_groups[0])
 
 # Calling 'qcdcl.gc()' removes superfluous variables and quantifiers
@@ -162,16 +163,16 @@ qcdcl.print_dimacs()
 # The formula where group 'id2' has been deactivated is satisfiable.
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
-logging.warn('result is %d', res)
+logging.info('result is %d', res)
 qcdcl.reset()
 
 # Activate group 'id2' again, which makes the formula unsatisfiable.
-logging.warn('activating group 2 again')
+logging.info('activating group 2 again')
 qcdcl.activate_clause_group(relevant_clause_groups[0])
 
 # Permanently remove the group 'id1'. This operation cannot be undone
 # and is in contrast to deactivating a group.
-logging.warn('deleting group 1 with clause -1 -3 0')
+logging.info('deleting group 1 with clause -1 -3 0')
 qcdcl.delete_clause_group(id1)
 # Deleting a group invalidates its ID, which can be checked by
 # 'qcdcl.exists_clause_group'.
@@ -190,4 +191,4 @@ qcdcl.print_dimacs()
 # clauses in group 'id2' is unsatisfiable.
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is %d\n', res)
+logging.info('result is %d\n', res)

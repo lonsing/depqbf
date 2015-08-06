@@ -26,6 +26,7 @@
 # should have received a copy of the GNU General Public License along
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 import logging
+logging.basicConfig(format='%(message)s', level=logging.INFO)
 
 from DepQBF import *
 
@@ -97,7 +98,7 @@ qcdcl.assume(-200)
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
 # res == 10 means satisfiable, res == 20 means unsatisfiable.
-logging.warn('result is: %d', res)
+logging.info('result is: %d', res)
 
 qcdcl.reset()
 
@@ -120,7 +121,7 @@ qcdcl.assume(-300)
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
-logging.warn('result is: %d', res)
+logging.info('result is: %d', res)
 
 qcdcl.reset()
 
@@ -135,4 +136,4 @@ qcdcl.print_dimacs()
 
 res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
-logging.warn('result after disabling the clause "300 1 2 0" is: %d', res)
+logging.info('result after disabling the clause "300 1 2 0" is: %d', res)

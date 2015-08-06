@@ -26,6 +26,7 @@
 # should have received a copy of the GNU General Public License along
 # with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 import logging
+logging.basicConfig(format='%(message)s', level=logging.INFO)
 
 from DepQBF import *
 
@@ -84,7 +85,7 @@ res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_SAT)
 
 # res == 10 means satisfiable, res == 20 means unsatisfiable.
-logging.warn("result is: %d", res)
+logging.info("result is: %d", res)
 
 # Must reset the solver before adding further clauses or variables.
 qcdcl.reset()
@@ -98,8 +99,8 @@ qcdcl.add(1)
 qcdcl.add(2)
 qcdcl.add(0)
 
-logging.warn('added clause "1 2 0" to a new stack frame.')
-logging.warn('res=%s', res)
+logging.info('added clause "1 2 0" to a new stack frame.')
+logging.info('res=%s', res)
 
 # At this point, the formula looks as follows:
 #      p cnf 2 3 
@@ -115,18 +116,18 @@ res = qcdcl.evaluate()
 assert (res == QDPLL_RESULT_UNSAT)
 
 # res == 10 means satisfiable, res == 20 means unsatisfiable.
-logging.warn("result is: %d", res)
+logging.info("result is: %d", res)
 
 # Print partial countermodel as a value of the leftmost universal variable.
 a = qcdcl.get_value(1)
 
-logging.warn("partial countermodel - value of 1: %s\n", assignment2str(a))
+logging.info("partial countermodel - value of 1: %s\n", assignment2str(a))
 
 qcdcl.reset()
 
 # Discard the clause '1 2 0' by popping off the topmost frame.
 qcdcl.pop()
-logging.warn("discarding clause '1 2 0' by a 'pop'.\n")
+logging.info("discarding clause '1 2 0' by a 'pop'.\n")
 
 
 # At this point, the formula looks as follows:
@@ -143,4 +144,4 @@ res = qcdcl.evaluate()
 #     by a 'pop'.
 
 assert (res == QDPLL_RESULT_SAT)
-logging.warn("result after pop is: %d\n", res)
+logging.info("result after pop is: %d\n", res)
