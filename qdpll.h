@@ -340,8 +340,6 @@ LitID * qdpll_get_assumption_candidates (QDPLL * qdpll);
    by this function. */
 LitID * qdpll_get_relevant_assumptions (QDPLL * qdpll);
 
-void qdpll_freeme(int* ptr);
-
-//void qdpll_freeme(LitID* ptr);
+void qdpll_freeme(void* ptr);
 
 #endif

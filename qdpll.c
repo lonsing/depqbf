@@ -14810,15 +14810,9 @@ void qdpll_reset_learned_constraints (QDPLL * qdpll)
   discard_all_collected_cover_sets (qdpll);
 }
 
-void qdpll_freeme(int* ptr)
+void qdpll_freeme(void* ptr)
 {
   free(ptr);
 }
-
-/*void qdpll_freeme(LitID* ptr)
-{
-  free(ptr);
-  }*/
-
 
 /* -------------------- END: PUBLIC FUNCTIONS --------------------*/
