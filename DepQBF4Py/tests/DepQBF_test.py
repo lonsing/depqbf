@@ -11,26 +11,30 @@ from os import path
 from sys import version_info
 import unittest
 
+base_path = path.realpath('%s/../' % path.dirname(path.realpath(__file__)))
 
 #if we run from setup.py obtain paths from distutils
 def get_lib_build_path():
     b = distutils.command.build.build(Distribution())
     b.initialize_options()
     b.finalize_options()
-    return path.realpath('%s/DepQBF' % b.build_purelib)
+    return '%s/%s/DepQBF' % (base_path,b.build_purelib)
 
 lib_path = get_lib_build_path()
 
 #we cannot use the setuptools functions as they need to be initialized
 #with a setup which does not work for a standalone run
 def guess_lib_build_path():
-    libs = glob('build/lib*')
+    libs = glob('%s/build/lib*' %base_path)
     if len(libs)>1:
         libs = filter(lambda x: get_platform() in x and '%s.%s'
                %(version_info.major,version_info.minor) , libs)
-    libs = '%s/DepQBF' % libs[0]
-    return path.realpath(libs)
-
+    try:
+        libs = '%s/DepQBF' % libs[0]
+        return path.realpath(libs)
+    except IndexError:
+        print('File "%s" does not exist. Run "setup.py build" first' % '%s/%s' % (lib_path, 'libqdpll.so*'))
+        exit(1)
 
 avg = lambda L: float(sum(L)) / len(L) if len(L) > 0 else float('nan')
 usage = lambda: avg(memory_usage(-1, interval=.1, timeout=None))
@@ -111,14 +115,9 @@ class Test4MemoryLeaksInIters(unittest.TestCase):
         del qcdcl
 
 
-try:
-    logging.debug('lib_path is "%s"', lib_path)
-    path.isfile(glob('%s/libqdpll.so*' %(lib_path))[0])
-except IndexError:
-    print('File "%s" does not exist. Run "setup.py build" first' % '%s/%s' % (lib_path, 'libqdpll.so*'))
-    exit(1)
+logging.debug('lib_path is "%s"', lib_path)
+lib_path = guess_lib_build_path()
 
 if __name__ == '__main__':
-    lib_path = guess_lib_build_path()
     unittest.main()
     
