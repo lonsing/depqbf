@@ -1,0 +1,6 @@
+include setup.py
+include MANIFEST.in
+include MANIFEST
+include ChangeLog
+recursive-include DepQBF *
+exclude DepQBF/logging.conf

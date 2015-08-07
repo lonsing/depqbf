@@ -5594,7 +5594,7 @@ qdpll_dep_man_print_deps_by_graph (QDPLLDepManGeneric * dmg, VarID id)
       Var *d = *p;
       fprintf (stdout, "%u ", d->id);
     }
-  fprintf (stdout, "0");
+  fprintf (stdout, "0\n");
   QDPLL_DELETE_STACK (mm, deps);
 }
 
@@ -5637,7 +5637,7 @@ qdpll_dep_man_print_deps_by_search (QDPLLDepManGeneric * dmg, VarID id)
       Var *d = *p;
       fprintf (stdout, "%u ", d->id);
     }
-  fprintf (stdout, "0");
+  fprintf (stdout, "0\n");
   QDPLL_DELETE_STACK (mm, deps);
 }
 

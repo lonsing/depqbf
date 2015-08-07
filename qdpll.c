@@ -222,7 +222,7 @@ check_depends (QDPLL * qdpll, VarID id1, VarID id2)
 }
 
 static void
-print_var_pqueue (QDPLL * qdpll)
+print_var_qdpll_pqueue (QDPLL * qdpll)
 {
   fprintf (stderr, "var_pqueue:");
   VarID *p, *e;
@@ -1210,7 +1210,7 @@ assert_all_unit_literals_and_literal_watchers_integrity (QDPLL * qdpll)
 
 
 static void
-assert_candidates_on_pqueue (QDPLL * qdpll)
+assert_candidates_on_qdpll_pqueue (QDPLL * qdpll)
 {
   QDPLLDepManGeneric *dm = qdpll->dm;
   Var *p, *e;
@@ -1689,7 +1689,7 @@ compute_constraint_lbd (QDPLL * qdpll, Constraint * c)
 /* -------------------- START: VARIABLE PRIORITY-QUEUE -------------------- */
 
 static void
-var_pqueue_adjust (QDPLL * qdpll, unsigned int size)
+var_qdpll_pqueue_adjust (QDPLL * qdpll, unsigned int size)
 {
   unsigned int old_size;
 
@@ -1705,7 +1705,7 @@ var_pqueue_adjust (QDPLL * qdpll, unsigned int size)
 
 
 static unsigned int
-var_pqueue_get_left_child_pos (unsigned int cur_pos)
+var_qdpll_pqueue_get_left_child_pos (unsigned int cur_pos)
 {
   assert (cur_pos != QDPLL_INVALID_PQUEUE_POS);
   return 2 * cur_pos + 1;
@@ -1713,7 +1713,7 @@ var_pqueue_get_left_child_pos (unsigned int cur_pos)
 
 
 static unsigned int
-var_pqueue_get_right_child_pos (unsigned int cur_pos)
+var_qdpll_pqueue_get_right_child_pos (unsigned int cur_pos)
 {
   assert (cur_pos != QDPLL_INVALID_PQUEUE_POS);
   return 2 * (cur_pos + 1);
@@ -1721,7 +1721,7 @@ var_pqueue_get_right_child_pos (unsigned int cur_pos)
 
 
 static unsigned int
-var_pqueue_get_parent_pos (unsigned int cur_pos)
+var_qdpll_pqueue_get_parent_pos (unsigned int cur_pos)
 {
   assert (cur_pos != QDPLL_INVALID_PQUEUE_POS);
   unsigned int result;
@@ -1733,7 +1733,7 @@ var_pqueue_get_parent_pos (unsigned int cur_pos)
 
 
 static int
-var_pqueue_compare (QDPLL * qdpll, unsigned int pos_a, unsigned int pos_b)
+var_qdpll_pqueue_compare (QDPLL * qdpll, unsigned int pos_a, unsigned int pos_b)
 {
   assert (pos_a != QDPLL_INVALID_PQUEUE_POS);
   assert (pos_b != QDPLL_INVALID_PQUEUE_POS);
@@ -1766,7 +1766,7 @@ var_pqueue_compare (QDPLL * qdpll, unsigned int pos_a, unsigned int pos_b)
 
 
 static void
-var_pqueue_swap (QDPLL * qdpll, unsigned int pos_a, unsigned int pos_b)
+var_qdpll_pqueue_swap (QDPLL * qdpll, unsigned int pos_a, unsigned int pos_b)
 {
   assert (pos_a != pos_b);
   assert (pos_a != QDPLL_INVALID_PQUEUE_POS);
@@ -1799,26 +1799,26 @@ var_pqueue_swap (QDPLL * qdpll, unsigned int pos_a, unsigned int pos_b)
 
 
 static void
-var_pqueue_up_heap (QDPLL * qdpll, unsigned int cur_pos)
+var_qdpll_pqueue_up_heap (QDPLL * qdpll, unsigned int cur_pos)
 {
   assert (cur_pos != QDPLL_INVALID_PQUEUE_POS);
   assert (cur_pos < qdpll->cnt_var_pqueue);
 
   while (cur_pos > 0)
     {
-      unsigned int parent_pos = var_pqueue_get_parent_pos (cur_pos);
+      unsigned int parent_pos = var_qdpll_pqueue_get_parent_pos (cur_pos);
 
-      if (var_pqueue_compare (qdpll, cur_pos, parent_pos) <= 0)
+      if (var_qdpll_pqueue_compare (qdpll, cur_pos, parent_pos) <= 0)
         break;
 
-      var_pqueue_swap (qdpll, cur_pos, parent_pos);
+      var_qdpll_pqueue_swap (qdpll, cur_pos, parent_pos);
       cur_pos = parent_pos;
     }
 }
 
 
 static void
-var_pqueue_down_heap (QDPLL * qdpll, unsigned int cur_pos)
+var_qdpll_pqueue_down_heap (QDPLL * qdpll, unsigned int cur_pos)
 {
   assert (cur_pos != QDPLL_INVALID_PQUEUE_POS);
   assert (cur_pos < qdpll->cnt_var_pqueue);
@@ -1828,22 +1828,22 @@ var_pqueue_down_heap (QDPLL * qdpll, unsigned int cur_pos)
 
   for (;;)
     {
-      left_child_pos = var_pqueue_get_left_child_pos (cur_pos);
+      left_child_pos = var_qdpll_pqueue_get_left_child_pos (cur_pos);
 
       if (left_child_pos >= count)
         break;
 
-      right_child_pos = var_pqueue_get_right_child_pos (cur_pos);
+      right_child_pos = var_qdpll_pqueue_get_right_child_pos (cur_pos);
 
       if (right_child_pos < count &&
-          var_pqueue_compare (qdpll, left_child_pos, right_child_pos) < 0)
+          var_qdpll_pqueue_compare (qdpll, left_child_pos, right_child_pos) < 0)
         child_pos = right_child_pos;
       else
         child_pos = left_child_pos;
 
-      if (var_pqueue_compare (qdpll, cur_pos, child_pos) < 0)
+      if (var_qdpll_pqueue_compare (qdpll, cur_pos, child_pos) < 0)
         {
-          var_pqueue_swap (qdpll, cur_pos, child_pos);
+          var_qdpll_pqueue_swap (qdpll, cur_pos, child_pos);
           cur_pos = child_pos;
         }
       else
@@ -1853,7 +1853,7 @@ var_pqueue_down_heap (QDPLL * qdpll, unsigned int cur_pos)
 
 
 static void
-assert_var_pqueue_condition (QDPLL * qdpll)
+assert_var_qdpll_pqueue_condition (QDPLL * qdpll)
 {
   unsigned int *var_pqueue = qdpll->var_pqueue;
   unsigned int pos, no_children, left_child_pos, right_child_pos;
@@ -1870,8 +1870,8 @@ assert_var_pqueue_condition (QDPLL * qdpll)
       cur_var = VARID2VARPTR (vars, *cur);
       assert (cur_var->priority_pos == pos);
 
-      left_child_pos = var_pqueue_get_left_child_pos (pos);
-      right_child_pos = var_pqueue_get_right_child_pos (pos);
+      left_child_pos = var_qdpll_pqueue_get_left_child_pos (pos);
+      right_child_pos = var_qdpll_pqueue_get_right_child_pos (pos);
 
       if (pos < no_children)
         {
@@ -1904,20 +1904,20 @@ assert_var_pqueue_condition (QDPLL * qdpll)
 
 
 static void
-var_pqueue_increase_key (QDPLL * qdpll, VarID id)
+var_qdpll_pqueue_increase_key (QDPLL * qdpll, VarID id)
 {
   unsigned int cur_pos = VARID2VARPTR (qdpll->pcnf.vars, id)->priority_pos;
-  var_pqueue_up_heap (qdpll, cur_pos);
+  var_qdpll_pqueue_up_heap (qdpll, cur_pos);
 #ifndef NDEBUG
 #if QDPLL_PQ_ASSERT_HEAP_CONDITION_INCREASE_KEY
-  assert_var_pqueue_condition (qdpll);
+  assert_var_qdpll_pqueue_condition (qdpll);
 #endif
 #endif
 }
 
 
 static void
-var_pqueue_insert (QDPLL * qdpll, VarID id, double priority)
+var_qdpll_pqueue_insert (QDPLL * qdpll, VarID id, double priority)
 {
   assert (id > 0);
   unsigned int pos, cnt = qdpll->cnt_var_pqueue, size =
@@ -1925,7 +1925,7 @@ var_pqueue_insert (QDPLL * qdpll, VarID id, double priority)
   pos = cnt;
 
   if (cnt == size)
-    var_pqueue_adjust (qdpll, size ? 2 * size : 1);
+    var_qdpll_pqueue_adjust (qdpll, size ? 2 * size : 1);
 
   qdpll->var_pqueue[pos] = id;
   Var *var = VARID2VARPTR (qdpll->pcnf.vars, id);
@@ -1935,11 +1935,11 @@ var_pqueue_insert (QDPLL * qdpll, VarID id, double priority)
   cnt++;
   qdpll->cnt_var_pqueue = cnt;
 
-  var_pqueue_up_heap (qdpll, pos);
+  var_qdpll_pqueue_up_heap (qdpll, pos);
 
 #ifndef NDEBUG
 #if QDPLL_PQ_ASSERT_HEAP_CONDITION_INSERT
-  assert_var_pqueue_condition (qdpll);
+  assert_var_qdpll_pqueue_condition (qdpll);
 #endif
 #endif
 }
@@ -1948,7 +1948,7 @@ var_pqueue_insert (QDPLL * qdpll, VarID id, double priority)
 /* Remove first element in constant time, e.g. for clearing queue.
    NOTE: destroys heap condition! */
 static VarID
-var_pqueue_remove_first (QDPLL * qdpll)
+var_qdpll_pqueue_remove_first (QDPLL * qdpll)
 {
   Var *vars = qdpll->pcnf.vars;
   VarID *var_pqueue = qdpll->var_pqueue;
@@ -1978,21 +1978,21 @@ var_pqueue_remove_first (QDPLL * qdpll)
 
 
 static VarID
-var_pqueue_remove_min (QDPLL * qdpll)
+var_qdpll_pqueue_remove_min (QDPLL * qdpll)
 {
   VarID result = 0;
 
   if (qdpll->cnt_var_pqueue == 0)
     return result;
 
-  result = var_pqueue_remove_first (qdpll);
+  result = var_qdpll_pqueue_remove_first (qdpll);
 
   if (qdpll->cnt_var_pqueue > 0)
-    var_pqueue_down_heap (qdpll, 0);
+    var_qdpll_pqueue_down_heap (qdpll, 0);
 
 #ifndef NDEBUG
 #if QDPLL_PQ_ASSERT_HEAP_CONDITION_REMOVE_MIN
-  assert_var_pqueue_condition (qdpll);
+  assert_var_qdpll_pqueue_condition (qdpll);
 #endif
 #endif
 
@@ -2001,7 +2001,7 @@ var_pqueue_remove_min (QDPLL * qdpll)
 
 
 static VarID
-var_pqueue_access_min (QDPLL * qdpll)
+var_qdpll_pqueue_access_min (QDPLL * qdpll)
 {
   VarID *var_pqueue = qdpll->var_pqueue;
   unsigned int cnt = qdpll->cnt_var_pqueue;
@@ -2018,14 +2018,14 @@ var_pqueue_access_min (QDPLL * qdpll)
 
 /* Removes elem at index 'remove_pos' and maintains heap condition. */
 static VarID
-var_pqueue_remove_elem (QDPLL * qdpll, unsigned int remove_pos)
+var_qdpll_pqueue_remove_elem (QDPLL * qdpll, unsigned int remove_pos)
 {
   assert (remove_pos != QDPLL_INVALID_PQUEUE_POS);
   assert (remove_pos < qdpll->cnt_var_pqueue);
 
 #ifndef NDEBUG
 #if QDPLL_PQ_ASSERT_HEAP_CONDITION_REMOVE_ELEM
-  assert_var_pqueue_condition (qdpll);
+  assert_var_qdpll_pqueue_condition (qdpll);
 #endif
 #endif
 
@@ -2052,13 +2052,13 @@ var_pqueue_remove_elem (QDPLL * qdpll, unsigned int remove_pos)
       last_var = VARID2VARPTR (vars, last_id);
       assert (last_var->priority_pos == cnt);
       last_var->priority_pos = remove_pos;
-      var_pqueue_up_heap (qdpll, remove_pos);
-      var_pqueue_down_heap (qdpll, remove_pos);
+      var_qdpll_pqueue_up_heap (qdpll, remove_pos);
+      var_qdpll_pqueue_down_heap (qdpll, remove_pos);
     }
 
 #ifndef NDEBUG
 #if QDPLL_PQ_ASSERT_HEAP_CONDITION_REMOVE_ELEM
-  assert_var_pqueue_condition (qdpll);
+  assert_var_qdpll_pqueue_condition (qdpll);
 #endif
 #endif
 
@@ -4475,7 +4475,7 @@ cleanup_no_occ_variables (QDPLL * qdpll, const int cleanup_user_prefix)
               /* Bug fix: in incremental mode, user variables might lose all
                  their occs if clauses are popped off. */
               if (v->priority_pos != QDPLL_INVALID_PQUEUE_POS)
-                var_pqueue_remove_elem (qdpll, v->priority_pos);
+                var_qdpll_pqueue_remove_elem (qdpll, v->priority_pos);
               *p-- = *last--;
               end--;
               scope_vars->top--;
@@ -5699,7 +5699,7 @@ increase_var_activity (QDPLL * qdpll, Var * var, Scope *s)
     }
 
   if (var->priority_pos != QDPLL_INVALID_PQUEUE_POS)
-    var_pqueue_increase_key (qdpll, var->id);
+    var_qdpll_pqueue_increase_key (qdpll, var->id);
 }
 
 
@@ -7003,7 +7003,7 @@ qpup_res_unmark_var (Var *var)
 static void
 qpup_collect_qpup_node (QDPLL *qdpll, Var *var)
 {
-  pqueue_insert (qdpll->mm, qdpll->qpup_nodes, var, var->trail_pos);
+  qdpll_pqueue_insert (qdpll->mm, qdpll->qpup_nodes, var, var->trail_pos);
   assert (var->decision_level != QDPLL_INVALID_DECISION_LEVEL);
   if (!qdpll->qpup_var_at_max_dec_level || qdpll->qpup_var_at_max_dec_level->decision_level < var->decision_level)
     {
@@ -7114,14 +7114,14 @@ qpup_select_next_node (QDPLL *qdpll)
     }
 
 
-  result = pqueue_remove_min (qdpll->qpup_nodes);
+  result = qdpll_pqueue_remove_min (qdpll->qpup_nodes);
 
   if (!qdpll->qpup_uip)
     {
       if (qdpll->qpup_cnt_at_max_dec_level > 0)
         qdpll->qpup_cnt_at_max_dec_level--;
       if (qdpll->qpup_cnt_at_max_dec_level == 1)
-        qdpll->qpup_var_at_max_dec_level = pqueue_access_min (qdpll->qpup_nodes);     
+        qdpll->qpup_var_at_max_dec_level = qdpll_pqueue_access_min (qdpll->qpup_nodes);     
     }
 
  return result;
@@ -9243,7 +9243,7 @@ backtrack_undo_assignment (QDPLL * qdpll, Var * var, const int notify_active)
   /* BUG FIX: must put candidate variables back on pqueue. */
   if (dm->is_candidate (dm, var->id)
       && var->priority_pos == QDPLL_INVALID_PQUEUE_POS)
-    var_pqueue_insert (qdpll, var->id, var->priority);
+    var_qdpll_pqueue_insert (qdpll, var->id, var->priority);
 
   if (QDPLL_VAR_MARKED_PROPAGATED (var))
     {
@@ -9355,18 +9355,18 @@ select_decision_variable (QDPLL * qdpll)
 
       if (!QDPLL_VAR_ASSIGNED (candidate_var) &&
           candidate_var->priority_pos == QDPLL_INVALID_PQUEUE_POS)
-        var_pqueue_insert (qdpll, candidate_var->id, candidate_var->priority);
+        var_qdpll_pqueue_insert (qdpll, candidate_var->id, candidate_var->priority);
     }
 
 #ifndef NDEBUG
 #if QDPLL_ASSERT_CANDIDATES_ON_PQUEUE
-  assert_candidates_on_pqueue (qdpll);
+  assert_candidates_on_qdpll_pqueue (qdpll);
 #endif
 #endif
 
   do
     {
-      decision_var_id = var_pqueue_remove_min (qdpll);
+      decision_var_id = var_qdpll_pqueue_remove_min (qdpll);
       assert (decision_var_id > 0);
       QDPLL_ABORT_QDPLL (!decision_var_id,
                          "Fatal Error: did not find decision variable!");
@@ -11164,7 +11164,7 @@ cleanup_popped_off_vars (QDPLL *qdpll)
         {
           assert (var->is_internal);
           if (var->priority_pos != QDPLL_INVALID_PQUEUE_POS)
-            var_pqueue_remove_elem (qdpll, var->priority_pos);
+            var_qdpll_pqueue_remove_elem (qdpll, var->priority_pos);
           reset_variable (qdpll, var);
         }
       var->mark0 = 0;
@@ -11608,7 +11608,7 @@ reset_clean_up_assignments (QDPLL *qdpll)
             }
           if (qdpll->dm->is_candidate (qdpll->dm, assigned_var->id)
               && assigned_var->priority_pos == QDPLL_INVALID_PQUEUE_POS)
-            var_pqueue_insert (qdpll, assigned_var->id, assigned_var->priority);
+            var_qdpll_pqueue_insert (qdpll, assigned_var->id, assigned_var->priority);
           if (QDPLL_VAR_MARKED_PROPAGATED (assigned_var))
             {
               QDPLL_VAR_UNMARK_PROPAGATED (assigned_var);
@@ -12245,7 +12245,7 @@ qdpll_create ()
     (Var *) qdpll_malloc (mm, DEFAULT_VARS_SIZE * sizeof (Var));
   qdpll->state.next_free_internal_var_id = qdpll->pcnf.size_user_vars;
 
-  PriorityQueue *pqueue = pqueue_create (mm, 1);
+  PriorityQueue *pqueue = qdpll_pqueue_create (mm, 1);
   qdpll->qpup_nodes = pqueue;
 
   /* Set default options. */
@@ -12328,7 +12328,7 @@ qdpll_delete (QDPLL * qdpll)
   QDPLL_DELETE_STACK (mm, qdpll->wreason_e);
   QDPLL_DELETE_STACK (mm, qdpll->dec_vars);
   QDPLL_DELETE_STACK (mm, qdpll->smaller_type_lits);
-  pqueue_delete (mm, qdpll->qpup_nodes);
+  qdpll_pqueue_delete (mm, qdpll->qpup_nodes);
   QDPLL_DELETE_STACK (mm, qdpll->qpup_vars);
   QDPLL_DELETE_STACK (mm, qdpll->qpup_units);
   QDPLL_DELETE_STACK (mm, qdpll->qpup_kept_lits);
@@ -14808,6 +14808,11 @@ void qdpll_reset_learned_constraints (QDPLL * qdpll)
 
   /* Discard all collected cover sets. */
   discard_all_collected_cover_sets (qdpll);
+}
+
+void qdpll_freeme(void* ptr)
+{
+  free(ptr);
 }
 
 /* -------------------- END: PUBLIC FUNCTIONS --------------------*/
