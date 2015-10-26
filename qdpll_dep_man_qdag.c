@@ -1137,7 +1137,6 @@ assert_c_edges_integrity (Var * vars, Var * start)
     }
 }
 
-
 static void
 collect_deps_from_cnf_check_clause (QDPLLDepManQDAG * dm,
                                     VarPtrStack * deps,
@@ -1516,8 +1515,7 @@ assert_check_deps_by_functions_in_clause (QDPLLDepManQDAG * dm,
         {
           LitID lit_tmp = *tmp;
           Var *var_tmp = LIT2VARPTR (vars, lit_tmp);
-          assert (!
-                  (QDPLL_VAR_MARKED_PROPAGATED (var_tmp)
+          assert (!(QDPLL_VAR_MARKED_PROPAGATED (var_tmp)
                    && var_tmp->decision_level <= 0));
           if (QDPLL_VAR_MARKED_PROPAGATED (var_tmp)
               && var_tmp->decision_level <= 0)
@@ -3011,8 +3009,7 @@ collect_deps_from_cnf_check_clause (QDPLLDepManQDAG * dm,
     {
       LitID lit = *litp;
       Var *d = LIT2VARPTR (vars, lit);
-      assert (!
-              (QDPLL_VAR_MARKED_PROPAGATED (d)
+      assert (!(QDPLL_VAR_MARKED_PROPAGATED (d)
                && d->decision_level <= 0));
       if (QDPLL_VAR_MARKED_PROPAGATED (d)
           && d->decision_level <= 0)

@@ -80,6 +80,20 @@
 #define COMPUTE_STATS 0
 #define COMPUTE_TIMES 0
 
+/* Try to eliminate universal variables from initial cubes while
+   preserving effects of QBCE. */
+#define QBCP_QBCE_DYNAMIC_ASSIGNMENT_ELIM_UNIV_VARS 1
+
+/* Allow to learn 'elim_univ_dynamic_switch_delay' initial cubes before
+   checking whether to turn of elimination of universals from initial
+   cubes. */
+#define ELIM_UNIV_DYNAMIC_SWITCH_DELAY_INIT_VAL 1000
+
+/* When generating initial cubes, make sure that first we collect an
+assignment which satisfies all the clauses WITHOUT reducing innermost
+existential literals on the fly. */
+#define COLLECT_FULL_COVER_SETS 1
+
 /* Allow to collect as many cover sets as 'COLLECT_FULL_COVER_SETS_MULT_LIMIT'
    times the current maximal number of learned cubes. */
 #define COLLECT_FULL_COVER_SETS_MULT_LIMIT (1)

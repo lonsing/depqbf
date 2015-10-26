@@ -39,7 +39,7 @@
 
 
 #define VERSION                                                         \
-  "DepQBF 4.0\n"                                                        \
+  "DepQBF 5.0\n"                                                        \
   "Copyright 2010, 2011, 2012, 2013, 2014, 2015 Florian Lonsing,\n"     \
   "  Johannes Kepler University, Linz, Austria and\n"                   \
   "  Vienna University of Technology, Vienna, Austria.\n"               \
@@ -77,8 +77,13 @@
 "                                    which was applied in previous versions of DepQBF.\n"\
 "                                    In this version, by default lazy QPUP-based QCDCL is applied.\n"\
 "  --long-dist-res                 Apply long-distance resolution in constraint learning. \n"\
-"                                    Must be combined with '--traditional-qcdcl' and '--dep-man=simple'.\n"\
-"  --no-lazy-qpup                  disable lazy QPUP-based QCDCL and carry out all resolution steps.\n"\
+"                                    Must be combined with '--dep-man=simple'.\n"\
+"                                    Optionally, '--traditional-qcdcl' may be specified which enables\n"\
+"                                    long-distance resolution where intermediate resolutions are carried\n"\
+"                                    out starting from the empty clause.\n" \
+"  --no-lazy-qpup                  disable lazy QPUP-based QCDCL and carry out all resolution\n"\
+"                                    steps starting from a separating cut in the implication graph.\n"\
+"                                    This works also with long-distance resolution.\n"                   \
 "  --no-qpup-cdcl                  apply traditional QCDCL for clause learning (instead of QPUP).\n"\
 "  --no-qpup-sdcl                  apply traditional QCDCL for cube learning (instead of QPUP).\n"\
 "  --trace[=<format>]              dump trace in <format> to <stdout>\n"\
@@ -112,6 +117,14 @@
 "  --max-dec=<val>                 Abort after <val> assignments by decision making.\n"\
 "  --max-btracks=<val>             Abort after <val> backtracks.\n"\
 "  --max-secs=<val>                Abort after <val> seconds.\n"\
+"\n"\
+"Options that control QBCE:"\
+"\n"\
+"  --no-qbce-dynamic               disable dynamic QBCE (enabled by default)\n"\
+"  --qbce-preprocessing            enable QBCE preprocessing (must be preceded by '--no-qbce-dynamic')\n"\
+"  --qbce-inprocessing             enable QBCE inprocessing (must be preceded by '--no-qbce-dynamic')\n"\
+"  --qbce-witness-max-occs=<val>   maximum number <val> of occurrences considered in QBCE (default: 50)\n"\
+"  --qbce-max-clause-size=<val>    maximum length <val> of clauses considered in QBCE (default: 50)\n"\
 "\n"
 
 

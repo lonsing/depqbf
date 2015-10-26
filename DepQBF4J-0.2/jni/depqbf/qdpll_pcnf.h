@@ -74,7 +74,49 @@ QDPLL_DECLARE_STACK (ClauseGroupID, ClauseGroupID);
 QDPLL_DECLARE_STACK (QDPLLQuantifierType, QDPLLQuantifierType);
 QDPLL_DECLARE_STACK (LitIDPtr, LitID *);
 QDPLL_DECLARE_STACK (BLitsOcc, BLitsOcc);
+QDPLL_DECLARE_STACK (BLitsOccPtr, BLitsOcc *);
 QDPLL_DECLARE_STACK (ScopePtr, Scope *);
+QDPLL_DECLARE_STACK (LitIDStack, LitIDStack);
+QDPLL_DECLARE_STACK (ConstraintPtrStack, ConstraintPtrStack);
+
+/* Every clause C has a list of 'QBCENonBlockedWitness' objects, which
+   indicate that C is a witness that some other clause C' is not blocked
+   because resolution on a literal 'non_blocking_lit' is not a tautology by
+   some outer literal, as required by QBCE definition. The literal
+   'non_blocking_lit' occurs in both C and C'. */
+struct QBCENonBlockedWitness
+{
+  LitID non_blocking_lit;
+  /* Cache a literal of the clause to be checked before 'is_clause_satisfied'
+     is called. This may improve the cache performance. */
+  BLitsOcc blit_occ;
+  union
+  {
+    /* If this object represents a maybe-blocked-clause pair 'pair ==
+       (non_blocking_lit, non_blocked_clause)' stored on
+       'clause->qbcp_qbce_notify_list' then 'offset.witness_in_list'
+       is the position of the witness clause in the list
+       'pair.non_blocked_clause->qbcp_qbce_witness_clauses' indicating
+       that 'pair.non_blocking_lit' is not a blocking literal of
+       'pair.non_blocked_clause'. */
+    unsigned int witness_in_witness_list;
+    /* If this object represents a witness pair 'pair ==
+       (non_blocking_lit, witness)' stored on
+       'clause->qbcp_qbce_witness_clauses' then
+       'offset.maybe_blocked_clause_in_notify_list' is the position of
+       the maybe-blocked clause in the list
+       'pair.witness->qbcp_qbce_notify_list' indicating that
+       'pair.clause' is a witness of the non-blocking literal. */
+    unsigned int maybe_blocked_clause_in_notify_list;
+  } offset;
+  /* Position of a maybe-blocked-clause pair on the working queue
+     'qdpll->qbcp_qbce_maybe_blocked_clauses', if any. */
+  unsigned int offset_in_working_queue;
+};
+
+typedef struct QBCENonBlockedWitness QBCENonBlockedWitness;
+
+QDPLL_DECLARE_STACK (QBCENonBlockedWitness, QBCENonBlockedWitness);
 
 typedef unsigned int QDPLLVarMode;
 #define QDPLL_VARMODE_UNDEF 0
@@ -180,11 +222,18 @@ struct Var
   unsigned int qpup_mark_neg:1;
   unsigned int qpup_res_mark_pos:1;
   unsigned int qpup_res_mark_neg:1;
-  unsigned int qpup_predict_mark:1;
+  unsigned int qpup_pos_predict_mark:1;
+  unsigned int qpup_neg_predict_mark:1;
   Constraint *qpup_constraint;
 
   /* Mark used for qrp extraction. */
   unsigned int mark_qrp:1;
+
+  /* Flag to indicate if a variable occurs positively/negatively in the clause
+     currently being watched for empty formula. These marks are used to schedule
+     a watcher update after a variable has been assigned. */
+  unsigned int empty_formula_watcher_neg_occ:1;
+  unsigned int empty_formula_watcher_pos_occ:1;
 
   LitIDStack type_red_member_lits;
 
@@ -195,6 +244,29 @@ struct Var
      is watched for pure literal detection. Using blocking literals as well. */
   BLitsOccStack neg_occ_clauses;
   BLitsOccStack pos_occ_clauses;
+
+  /* Lists 'var->qbcp_qbce_watched_pos/neg_occ_clauses' of pos/neg occurrences
+     which are watched (i.e. used as witnesses)for QBCE. Additionally, keep
+     the position of the pos/neg literal in a watched occurrence in lists
+     'var->qbcp_qbce_offset_of_pos/neg_occ_in_watched_occ'. */
+  VarIDStack qbcp_qbce_offset_of_neg_lit_in_watched_occ;
+  VarIDStack qbcp_qbce_offset_of_pos_lit_in_watched_occ;
+  ConstraintPtrStack qbcp_qbce_watched_neg_occ_clauses;
+  ConstraintPtrStack qbcp_qbce_watched_pos_occ_clauses;
+  unsigned int longest_pos_occ_size;
+  unsigned int longest_neg_occ_size;
+  /* Lists of clauses which are blocked by preprocessing (i.e. not taking any
+     assignment into account) and which have pos/neg literal of variable as a
+     blocking literal. This information is necessary to efficiently check whether
+     clauses blocked by preprocessing are still blocked if the user adds new
+     input clauses. */
+  ConstraintPtrStack qbcp_qbce_prepro_pos_blocking_lit_clauses;
+  ConstraintPtrStack qbcp_qbce_prepro_neg_blocking_lit_clauses;
+
+  /* Marks to indicate if a recently added clause contains a pos/neg literal
+     of the variable. This information is necessary for incremental QBCE. */
+  unsigned int pos_lit_in_new_input_clause:1;
+  unsigned int neg_lit_in_new_input_clause:1;
 
   BLitsOccStack neg_occ_cubes;
   BLitsOccStack pos_occ_cubes;
@@ -252,7 +324,8 @@ struct Var
 struct Constraint
 {
   ConstraintID id;
-  unsigned int size_lits;
+  unsigned int size_lits:(sizeof (unsigned int) * 8 - 1);
+  unsigned int qbcp_qbce_elim_univ_mark:1;
   unsigned int num_lits:(sizeof (unsigned int) * 8 - 4);
   unsigned int is_cube:1;
   unsigned int learnt:1;
@@ -261,9 +334,33 @@ struct Constraint
      variable. */
   unsigned int is_watched:(sizeof (unsigned int) * 8 - 2);
   unsigned int is_taut:1;
-
   /* NOTE: only for '--no-spure-literals'; marks constraints to be cleaned up. */
   unsigned int deleted:1;
+
+  /* For QBCE in QBCP: indicates that a clause is blocked. */
+  unsigned int qbcp_qbce_blocked:1;
+  unsigned int qbcp_qbce_mark:1;
+  /* Blocking literal, set if and only if 'qbcp_qbce_blocked' is true. */
+  LitID qbcp_qbce_blocking_lit;
+  /* List of clauses for which this clauses is a non-blocked witness. If this
+     clause becomes blocked (or satisfied, but this must be handled from
+     assigned variables) then all the clauses in the list may be blocked and
+     must be inspected again. We also store the non-blocking literal for which
+     a clause in the list is a witness. This way, we can check this
+     non-blocking literals only and search for a new witness. */
+  QBCENonBlockedWitnessStack qbcp_qbce_notify_maybe_blocked_clauses;
+  /* List of clauses and respective non-blocking literals which are witnesses
+     that this clause is not blocked by the respective literal. Every
+     non-blocked clause has exactly one witness for every non-blocking
+     literal. */
+  QBCENonBlockedWitnessStack qbcp_qbce_witness_clauses;
+  /* If this clause is currently a witness, then a pointer to this clause is
+     stored in the lists 'var->qbcp_qbce_watched_pos/neg_occ_clauses' of all
+     variables which occur positively and negatively in the witness. We maintain
+     the offset of the pointer entry in this lists in
+     'clause->offsets_of_witness_in_watched_occs' to allow for O(1) deletion in
+     'qbcp_qbce_remove_watched_occ'. */
+  VarIDStack qbcp_qbce_offset_of_witness_in_watched_occs;
 
   /* All original clauses are kept in linked list, also learnt clauses
      separately and learnt cubes. */

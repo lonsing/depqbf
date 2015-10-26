@@ -71,6 +71,34 @@ struct QDPLL
 
   ConstraintList cover_sets;
 
+  /* Data structures for empty formula watching. */
+  /* Pointer to an unsatisfied, non-blocked clause which is a witness the
+     formula is not empty. */
+  BLitsOcc *empty_formula_watcher;
+  /* Stack of pointers o empty formula watchers per each decision level. This
+     allows to continue the search for an empty formula watcher where we stopped
+     earlier after backtracking. */
+  BLitsOccPtrStack empty_formula_watchers_per_dec_level;
+  /* For better cache performance: stack of BLitsOccs to check if a clause is
+     satisfied by a cached literal, to avoid fetching the clause from memory. */
+  BLitsOccStack empty_formula_watching_blit_occs;
+
+  QBCENonBlockedWitnessStack qbcp_qbce_maybe_blocked_clauses;
+  /* Stack of clauses identified as being blocked. This is necessary to
+     reconstruct a cover set of the CNF for initial cube learning. There is
+     one stack of blocked clauses per decision level which is cleared during
+     backtracking. */
+  ConstraintPtrStackStack qbcp_qbce_blocked_clauses;
+  /* Stack of clauses which have been marked at each decision level by setting
+     'clause->qbcp_qbce_mark'. */
+  ConstraintPtrStackStack qbcp_qbce_marked_clauses;
+
+  /* Variables which appear in newly added input clauses AND which have
+     occurrences that are used as QBCE witnesses. This information is needed
+     for incremental QBCE to reschedule currently blocked clauses for QBCE
+     checking based on newly added clauses. */
+  VarIDStack qbcp_qbce_relevant_vars_in_new_input_clauses;
+
   LitIDStack internal_cover_lits;
 
   /* Assumptions given by the user through 'qdpll_assume' are collected on a
@@ -217,6 +245,22 @@ struct QDPLL
     unsigned int popped_off_orig_clause_cnt;
     /* Flag to toggle import of user given prefix. */
     unsigned int no_scheduled_import_user_scopes:1;
+    /* Flag to indicate necessary update of clause watched for empty formula
+       detection. */
+    unsigned int empty_formula_watcher_scheduled_update:1; 
+#if QBCP_QBCE_DYNAMIC_ASSIGNMENT_ELIM_UNIV_VARS
+    unsigned int elim_univ_dynamic_disabled;
+    unsigned int elim_univ_tried;
+    unsigned int elim_univ_eliminated;
+    unsigned int univ_vars_cur_collected;
+#endif
+
+    /* Flag indicates whether we are currently preprocessing by QBCE,
+       i.e. 'find-blocked-clauses' is called at decision level 0 but WITHOUT
+       having assigned any variables before. */
+    unsigned int qbcp_qbce_currently_preprocessing:1;
+    /* For QDIMACS partial output: schedule model reconstruction. */
+    unsigned int qdo_no_schedule_model_reconstruction:1;
   } state;
 
   struct
@@ -276,6 +320,60 @@ struct QDPLL
     unsigned int bump_vars_once:1;
     unsigned int long_dist_res:1;
     unsigned int incremental_use:1;
+    unsigned int qbcp_qbce_watcher_list_mtf:1;
+    /* For QBCE: do not check if literal 'l' is a blocking literal in
+       clause, if '\neg l' has more than
+       'qdpll->options.qbcp_qbce_find_witness_max_occs'
+       occurrences. The value has to be non-zero to have any
+       effect. */ 
+    unsigned int qbcp_qbce_find_witness_max_occs;
+    /* For QBCE: do not check clauses longer than limit whether they
+       are blocked. Further, do not check literals 'l' whether they are
+       blocking if '\neg l' has an occurrence which is longer than the
+       limit. */
+    unsigned int qbcp_qbce_max_clause_size;
+#if QBCP_QBCE_DYNAMIC_ASSIGNMENT_ELIM_UNIV_VARS
+    /* Indicate whether to turn off elimination of universals from initial
+       cubes dynamically. Default value 0. */
+    unsigned int elim_univ_dynamic_switch:1;
+    /* Allow to learn 'elim_univ_dynamic_switch_delay' initial cubes before
+       checking whether to turn of elimination of universals from initial
+       cubes. See also 'qdpll_config.h' for its initial value.*/
+    unsigned int elim_univ_dynamic_switch_delay;
+    /* Turn off elimination of universals from initial cubes if the success
+       rate is less than or equal to 'elim_univ_dynamic_success_threshold'
+       percent.  Default value 0. */
+    unsigned int elim_univ_dynamic_success_threshold;
+#endif
+    /* Apply QBCE as preprocessing, i.e. do not take into account the
+       top-level assignment. */
+    unsigned int qbce_preprocessing:1;
+    /* Apply QBCE as inprocessing. Take into account top-level assignment to
+       simplify the formula. Inprocessing also allows for the usual way to
+       construct learned cubes by collecting one satisfying literal from each
+       original non-blocked clause. We may ignore blocked clauses in cube
+       generation because they are blocked on the top-level. */
+    unsigned int qbce_inprocessing:1;
+    /* Apply QBCE for deduction. This generalizes inprocessing in that QBCE is
+       applied at every decision level after QBCP (and may trigger additional
+       rounds of QBCP). The usual cube learning cannot be applied because
+       clauses may be blocked at arbitrary decision levels and we might not
+       find a satisfying literal for a blocked clause (solution reconstruction
+       does not work either). Hence we stop assigning variables as soon as the
+       formula is true under the current assignment and under QBCE, and
+       collect the current assignment as learned cube. Universals may be
+       removed provided that QBCE can be "replayed", i.e. must keep universal
+       is it was responsible for a clause becoming blocked. */
+    unsigned int no_qbce_dynamic:1;
+    /* Empty formula watching watches an unsatisfied and non-blocked clause as
+       a witness that the CNF is not empty. If no such clause can be watched
+       then the CNF is empty and the current assignment can be learned as an
+       initial cube. We made mixed experiences with this option. When using
+       dynamic QBCE then empty formula watching seems to improve the
+       performance in contrast to plain QCDCL solving. Without empty formula
+       watching the solver keeps assigning variables until all are assigned
+       and no conflict was found, which shows the the CNF is currently true. */
+    unsigned int empty_formula_watching:1;
   } options;
 
 #if COMPUTE_STATS
@@ -328,7 +426,6 @@ struct QDPLL
     unsigned long long int btlevels[COMPUTE_STATS_BTLEVELS_SIZE];
     unsigned long long int btlevels_lin[COMPUTE_STATS_BTLEVELS_SIZE];
 #endif
-    unsigned long long int total_sdcl_covers;
     unsigned long long int total_learnt_cubes_mtfs;
     unsigned long long int total_learnt_clauses_mtfs;
     unsigned long long int total_learnt_clauses;
@@ -388,6 +485,60 @@ struct QDPLL
 
     unsigned long long int constr_min_lits_reducible;
     unsigned long long int constr_min_lits_seen;
+
+    unsigned long long int qbcp_qbce_rounds;
+    unsigned long long int qbcp_qbce_clauses_blocked;
+    unsigned long long int qbcp_qbce_clauses_seen;
+    unsigned long long int qbcp_qbce_literals_seen;
+    unsigned long long int qbcp_qbce_find_entry_calls;
+    unsigned long long int qbcp_qbce_find_entries_seen;
+
+    unsigned long long int qbcp_qbce_watched_occ_find_entry_calls;
+    unsigned long long int qbcp_qbce_watched_occ_find_entries_seen;
+    unsigned long long int qbcp_qbce_watched_occ_add_or_remove_calls;
+    unsigned long long int qbcp_qbce_watched_occ_add_or_remove_lits_seen;
+
+    unsigned long long int qbcp_qbce_is_clause_sat_cache_accesses;
+    unsigned long long int qbcp_qbce_is_clause_sat_cache_hits;
+    unsigned long long int qbcp_qbce_is_clause_sat_found_sat;
+    unsigned long long int qbcp_qbce_is_clause_sat_found_blocked;
+
+    unsigned long long int qbcp_qbce_witness_is_clause_sat_cache_accesses;
+    unsigned long long int qbcp_qbce_witness_is_clause_sat_cache_hits;
+    unsigned long long int qbcp_qbce_witness_is_clause_sat_found_sat;
+    unsigned long long int qbcp_qbce_witness_is_clause_sat_found_blocked;
+
+    unsigned long long int qbcp_qbce_backtracks_to_toplevel;
+    unsigned long long int qbcp_qbce_inprocessing_rounds;
+
+    unsigned long long int qbcp_qbce_ignored_clauses_by_size_limit;
+    unsigned long long int qbcp_qbce_ignored_maybe_blocking_literals_by_size_limit;
+    unsigned long long int qbcp_qbce_ignored_maybe_blocking_literals_by_occ_limit;
+    unsigned long long int qbcp_qbce_total_maybe_blocking_literals_seen;
+
+    /* Number of clauses currently blocked. This is updated during backtracking. */
+    unsigned int qbcp_qbce_current_blocked_clauses;
+    /* Total number of clauses currently blocked summed up each time we
+       produce an initial cube. */
+    unsigned long long int qbcp_qbce_total_current_blocked_clauses;
+
+    unsigned long long int initial_cubes;
+    unsigned long long int initial_cubes_sizes;
+    unsigned long long int initial_cubes_univ_lits;
+
+    unsigned long long int empty_formula_watcher_total_update_calls;
+    unsigned long long int empty_formula_watcher_effective_update_calls;
+    unsigned long long int empty_formula_watcher_is_clause_sat_cache_accesses;
+    unsigned long long int empty_formula_watcher_is_clause_sat_cache_hits;
+    unsigned long long int empty_formula_watcher_is_clause_sat_found_sat;
+    unsigned long long int empty_formula_watcher_is_clause_sat_found_blocked;
+
+#if QBCP_QBCE_DYNAMIC_ASSIGNMENT_ELIM_UNIV_VARS
+    unsigned long long int elim_univ_vars_calls;
+    unsigned long long int elim_univ_vars_total_univ_vars;
+    unsigned long long int elim_univ_vars_eliminated;
+    unsigned long long int elim_univ_vars_clauses_seen;
+#endif
   } stats;
 #endif
 

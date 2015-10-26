@@ -3,6 +3,15 @@
 NEWS
 ----
 
+October 26 2015:
+
+release of version 5.0
+  - includes blocked clause elimination (QBCE)
+  - dynamic QBCE
+  - preprocessing QBCE
+  - inprocessing QBCE
+
+
 June 9 2015:
 
 release of version 4.01
