@@ -28,8 +28,8 @@
         <div class="downloads">
           <span>Download the latest release:</span>
           <ul>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-4.01.zip" class="button">ZIP</a></li>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-4.01.tar.gz" class="button">TAR</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-5.0.zip" class="button">ZIP</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-5.0.tar.gz" class="button">TAR</a></li>
           </ul>
         </div>
       </div><!-- end banner -->
@@ -45,10 +45,11 @@
 
 <h2>News</h2>
 <ul>
-<li><b>2015-06-09: Source code of DepQBF 4.01 released.</b></li>
+<li><b>2015-10-26: Source code of DepQBF 5.0 released.</b> This release includes blocked clause elimination (QBCE) both as a pre- and inprocessing technique and as a novel dynamic variant for cube learning. The approach is described in our LPAR 2015 paper. See also the notes on preprocessing below.</li>
+<li>2015-06-09: Source code of DepQBF 4.01 released.</li>
 <li>2015-02-19: Source code of DepQBF 4.0 released, including a novel API
     for incremental solving.</li>
-<li>2015-02-19: <a href="http://fmv.jku.at/qbf15/"><b>QBF Workshop 2015</b></a>
+<li>2015-02-19: <a href="http://fmv.jku.at/qbf15/">QBF Workshop 2015</a>
   affiliated to <a href="http://www.cs.utexas.edu/~marijn/sat15/">SAT 2015</a>.</li>
 <li>2015-01-26: <a href="http://fmv.jku.at/quantify15/">QUANTIFY Workshop 2015</a>
   affiliated to <a href="http://conference.mi.fu-berlin.de/cade-25/home">CADE 2015</a>.</li>
@@ -106,7 +107,7 @@ Bronze medal in the Applications Track of the <a href="http://qbf.satisfiability
 
 <ul>
 <li>
-Version 4.01 (<a href="https://github.com/lonsing/depqbf/archive/version-4.01.tar.gz">source code</a>), see the
+Version 5.0 (<a href="https://github.com/lonsing/depqbf/archive/version-5.0.tar.gz">source code</a>), see the
 <a href="README.txt">README</a> file for release notes.
 </li>
 </ul>
@@ -118,6 +119,9 @@ Version 4.01 (<a href="https://github.com/lonsing/depqbf/archive/version-4.01.ta
   release above (unless stated otherwise).</em></p>
 
 <ul>
+<li>
+Version 4.01 (<a href="https://github.com/lonsing/depqbf/archive/version-4.01.tar.gz">source code</a>).
+</li>
 <li>
 Version 4.0 (<a href="https://github.com/lonsing/depqbf/archive/version-4.0.tar.gz">source code</a>).
 </li>
@@ -189,7 +193,7 @@ details and an overview of the API can be found in the following tool paper:
 <p>
 Florian Lonsing and Uwe Egly: 
 <em>Incrementally Computing Minimal Unsatisfiable Cores of QBFs via a Clause Group Solver API.</em> 
-6-page tool paper, to appear in proceedings of <a href="http://www.cs.utexas.edu/~marijn/sat15/">SAT 2015</a>. Preprint of
+6-page tool paper, proceedings of <a href="http://www.cs.utexas.edu/~marijn/sat15/">SAT 2015</a>, LNCS, Springer. Preprint of
   proceedings version with appendix (<a href="http://arxiv.org/abs/1502.02484">PDF</a>).
 </p>
 
@@ -270,13 +274,24 @@ examples. You can browse the code of DepQBF4J <a href="https://github.com/lonsin
 
 <h2>Preprocessing</h2>
 
-<p>DepQBF does NOT include preprocessing, apart from cleaning up the input formula
-by removing tautological clauses and duplicate literals from clauses.</p>
+<p>
+Version 5.0 of DepQBF (or any later version) includes blocked clause elimination (QBCE) as a pre- and inprocessing
+technique and as a novel dynamic approach (enabled by default) where QBCE is
+interleaved with the search process. The QBCE variants are currently available
+only in non-incremental mode.
+</p>
 
-<p>Preprocessing is usually important for the performance of QBF-based
-  workflows. For QBF preprocessing tools, we refer to <a href="http://fmv.jku.at/bloqqer/">Bloqqer</a>
-or <a href="http://fmv.jku.at/qxbf/">QxBF</a>, for example.</p>
+<p>
+It is recommended to run DepQBF in its default configuration, which has dynamic QBCE enabled. Alternatively, QBCE pre- and inprocessing may be enabled via command line arguments. Depending on your application, preprocessors such as <a href="http://fmv.jku.at/bloqqer/">Bloqqer</a>
+or <a href="http://fmv.jku.at/qxbf/">QxBF</a>, for
+example, may improve the performance of DepQBF further.
+</p>
 
+<p>
+<b><font color="red">HOWEVER:</font></b> depending on the given instance, preprocessing by Bloqqer may be
+harmful to the performance of DepQBF version 5.0 in its default configuration
+(using dynamic QBCE).
+</p>
 
 <h2>Proofs and Certificates</h2>
 
@@ -304,6 +319,12 @@ contact <a href="http://www.kr.tuwien.ac.at/staff/lonsing/">Florian Lonsing</a>.
 <h2>Publications</h2>
 
 <ul>
+
+<li>
+Paper at LPAR 2015 on dynamic blocked clause elimination (QBCE): F. Lonsing, F. Bacchus, A. Biere, U. Egly, and M. Seidl: Enhancing Search-Based QBF Solving by Dynamic Blocked Clause Elimination. In <i>Proc.&nbsp;20th International Conference on Logic for
+    Programming, Artificial Intelligence and Reasoning (<a href="http://www.lpar-20.org/">LPAR 2015</a>), LNCS,
+    Springer, 2015</i>. To appear. Preprint of proceedings version (<a href="http://www.kr.tuwien.ac.at/staff/lonsing/papers/LonsingBBES-LPAR2015.pdf">PDF</a>).
+</li>
 
 <li>
 Tool paper at SAT 2015 on clause groups and minimal unsatisfiable cores: <em>Florian Lonsing and Uwe Egly: 

@@ -1,21 +1,34 @@
 
-February 2015
+October 2015
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-This is version 4.0 of the search-based QBF solver DepQBF.  Compared to the
-previously released versions, DepQBF 4.0 includes a novel API to support
-incremental solving based on clause groups. A clause group is a set of clauses
-which is incrementally added to and removed from a formula. A description of
-the API can be found in the following technical report:
+IMPORTANT: please see the guidelines on preprocessing, incremental solving and
+API usage below.
 
-Florian Lonsing and Uwe Egly: 
-"DepQBF: An Incremental QBF Solver Based on Clause Groups". 
-Technical report, arXiv/CoRR, February 2015. http://arxiv.org/abs/1502.02484
+This is version 5.0 of the search-based QBF solver DepQBF. Version 5.0
+includes blocked clause elimination (QBCE) as a pre- and inprocessing
+technique and as a novel dynamic approach (enabled by default) where QBCE is
+interleaved with the search process. The QBCE variants are currently available
+only in non-incremental mode. The novel dynamic QBCE approach is described in
+the following paper (proceedings of LPAR 2015):
 
-This release of DepQBF comes with DepQBF4J, a Java interface to DepQBF which
+F. Lonsing, F. Bacchus, A. Biere, U. Egly, and M. Seidl: "Enhancing
+Search-Based QBF Solving by Dynamic Blocked Clause Elimination". In
+Proceedings of LPAR 2015, LNCS, Springer, 2015.
+
+DepQBF provides an API for incremental solving based on clause groups. A
+clause group is a set of clauses which is incrementally added to and removed
+from a formula. A description of the API can be found in the following tool
+paper (proceedings of SAT 2015):
+
+F. Lonsing and U. Egly: "Incrementally Computing Minimal Unsatisfiable Cores
+of QBFs via a Clause Group Solver API". In Proceedings of SAT 2015, volume
+9340 of LNCS, Springer, 2015. Preprint: http://arxiv.org/abs/1502.02484
+
+This release also includes DepQBF4J, a Java interface to DepQBF which
 allows to call DepQBF as a library from Java programs. Please see the README
 file in the subdirectory './DepQBF4J-0.2' for further information and usage
 examples. DepQBF4J is based on the Java Native Interface (JNI) and was
@@ -24,8 +37,6 @@ implemented by Martin Kronegger and Andreas Pfandler.
 PLEASE SEE the header file 'qdpll.h', the examples in the subdirectory
 'examples', and the command line documentation (call './depqbf -h') for
 further information on using DepQBF and its library.
-
-PLEASE SEE ALSO the guidelines on incremental solving and API usage below.
 
 The example './examples/basic-api-example2.c' demonstrates the basic use of
 the API and, in particular, the 'qdpll_gc' function. The clause group API is
@@ -39,6 +50,11 @@ FEATURES
 --------
 
 General features of DepQBF:
+
+- Since version 5.0: pre- and inprocessing by blocked clause elimination
+  (QBCE) and dynamic QBCE (enabled by default). See also './depqbf -h' for
+  configuration options. The QBCE variants are currently available only in
+  non-incremental mode.
 
 - The solver can be used as a library. The API is declared in file 'qdpll.h'
   and the examples in the subdirectory 'examples' demonstrate its basic use.
@@ -118,7 +134,6 @@ If you are interested only in the core solver based on QDPLL then it is
 probably best not to look at the code of the dependency manager in file
 'qdpll_dep_man_qdag.c' at all but only consider file 'qdpll.c'.
 
-
 -------
 LICENSE
 -------
@@ -128,7 +143,6 @@ DepQBF is free software released under GPLv3:
 https://www.gnu.org/copyleft/gpl.html
 
 See also the file COPYING.
-
 
 ------------
 INSTALLATION
@@ -147,12 +161,6 @@ switch on *expensive* assertions (recommended only for debugging). The solver
 will run *substantially* slower in this case. As usual, using the compiler
 flag 'DNDEBUG' removes all assertions from the code, regardless from the value
 of 'FULL_ASSERT'.
-
-Compilation on a Mac:
-
-Depending on your system, it might be necessary to replace "-soname"
-by "-install_name" in the makefile.
-
 
 -----------------------
 CONFIGURATION AND USAGE
@@ -187,20 +195,25 @@ By default, statistical output is disabled. To enable statistics, set the flag
 'COMPUTE_STATS' in file 'qdpll_config.h' from 0 to 1. Similarly, time
 statistics can be enabled by setting flag 'COMPUTE_STATS'.
 
-
 -------------------------------
 IMPORTANT NOTE ON PREPROCESSING
 -------------------------------
 
-DepQBF is a plain solver and does not have built-in preprocessing. However,
-preprocessing typically increases the performance considerably. It is highly
-recommended -- for non-incremental solving -- to combine DepQBF with
-preprocessors such as Bloqqer and/or QxBF, for example:
+Version 5.0 includes blocked clause elimination (QBCE) as a pre- and inprocessing
+technique and as a novel dynamic approach (enabled by default) where QBCE is
+interleaved with the search process. The QBCE variants are currently available
+only in non-incremental mode.
 
-http://fmv.jku.at/bloqqer/
+Depending on your application, preprocessors such as Bloqqer [1] and/or QxBF [2], for
+example, may improve the performance of DepQBF further.
 
-http://fmv.jku.at/qxbf/
+HOWEVER: depending on the given instance, preprocessing by Bloqqer may be
+harmful to the performance of DepQBF version 5.0 in its default configuration
+(using dynamic QBCE).
 
+[1] http://fmv.jku.at/bloqqer/ 
+
+[2] http://fmv.jku.at/qxbf/
 
 ----------------------------------------------------
 IMPORTANT NOTES ON INCREMENTAL SOLVING AND API USAGE
@@ -209,7 +222,7 @@ IMPORTANT NOTES ON INCREMENTAL SOLVING AND API USAGE
 Please see the header file 'qdpll.h' for some documentation of the API
 functions.
 
-When using the API of the solver (versions 3.0 up to 4.0), it is HIGHLY
+When using the API of the solver (versions 3.0 or later), it is HIGHLY
 RECOMMENDED to first add all the variables to the quantifier prefix and then
 all the clauses of the formula rather than adding variables and clauses in
 interleaved fashion. In the latter case, runtime overhead will occur for large
@@ -247,7 +260,6 @@ called with the parameters '--dep-man=simple' and '--incremental-use' after
 the solver object has been created by 'qdpll_create'. Otherwise, if no clauses
 are added, then the aforementioned calls of the API function 'qdpll_configure'
 can be omitted.
-
 
 -------
 CONTACT
