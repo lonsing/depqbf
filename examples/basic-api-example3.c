@@ -86,7 +86,7 @@ int main (int argc, char** argv)
   qdpll_add (depqbf, 2);
   qdpll_add (depqbf, 0);
 
-  printf ("added clause '1 2 0' to a new stack frame.\n", res);
+  printf ("added clause '1 2 0' to a new stack frame.\n");
 
   /* At this point, the formula looks as follows:
      p cnf 2 3 
@@ -115,7 +115,7 @@ int main (int argc, char** argv)
   /* Discard the clause '1 2 0' by popping off the topmost frame. */
   qdpll_pop (depqbf);
 
-  printf ("discarding clause '1 2 0' by a 'pop'.\n", res);
+  printf ("discarding clause '1 2 0' by a 'pop'.\n");
 
 
   /* At this point, the formula looks as follows:

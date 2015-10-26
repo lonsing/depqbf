@@ -129,9 +129,9 @@ int main (int argc, char** argv)
     qdpll_get_relevant_assumptions (depqbf);
   qdpll_reset (depqbf);
   assert (count_relevant_assumptions (relevant_assumptions) == 1);
-  printf ("printing zero-terminated relevant assumptions: ", res);
+  printf ("printing zero-terminated relevant assumptions: ");
   print_relevant_assumptions (relevant_assumptions);
-  printf ("\n", res);
+  printf ("\n");
   /* Caller must free memory of array returned by
      'qdpll_get_relevant_assumptions'. */
   free (relevant_assumptions);

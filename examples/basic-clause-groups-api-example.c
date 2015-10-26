@@ -114,9 +114,9 @@ main (int argc, char **argv)
      refutation found by the solver.) */
   assert (count_relevant_clause_groups (relevant_clause_groups) == 1);
   assert (relevant_clause_groups[0] == id2);
-  printf ("printing zero-terminated relevant clause group IDs: ", res);
+  printf ("printing zero-terminated relevant clause group IDs: ");
   print_relevant_clause_groups (relevant_clause_groups);
-  printf ("\n", res);
+  printf ("\n");
 
   /* Temporarily remove the clause group 'id2' by deactivating it. */
   printf ("deactivating group 2 with clauses 1 2 4 0 and 1 -4 0\n");
