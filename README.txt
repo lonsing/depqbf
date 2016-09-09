@@ -1,5 +1,5 @@
 
-October 2015
+September 2016
 
 -------------------
 GENERAL INFORMATION
@@ -8,8 +8,8 @@ GENERAL INFORMATION
 IMPORTANT: please see the guidelines on preprocessing, incremental solving and
 API usage below.
 
-This is version 5.0 of the search-based QBF solver DepQBF. Version 5.0
-includes blocked clause elimination (QBCE) as a pre- and inprocessing
+This is version 5.01 of the search-based QBF solver DepQBF. Since version 5.0
+DepQBF includes blocked clause elimination (QBCE) as a pre- and inprocessing
 technique and as a novel dynamic approach (enabled by default) where QBCE is
 interleaved with the search process. The QBCE variants are currently available
 only in non-incremental mode. The novel dynamic QBCE approach is described in
@@ -199,17 +199,17 @@ statistics can be enabled by setting flag 'COMPUTE_STATS'.
 IMPORTANT NOTE ON PREPROCESSING
 -------------------------------
 
-Version 5.0 includes blocked clause elimination (QBCE) as a pre- and inprocessing
-technique and as a novel dynamic approach (enabled by default) where QBCE is
-interleaved with the search process. The QBCE variants are currently available
-only in non-incremental mode.
+Version 5.0 (or later) includes blocked clause elimination (QBCE) as a pre-
+and inprocessing technique and as a novel dynamic approach (enabled by
+default) where QBCE is interleaved with the search process. The QBCE variants
+are currently available only in non-incremental mode.
 
 Depending on your application, preprocessors such as Bloqqer [1] and/or QxBF [2], for
 example, may improve the performance of DepQBF further.
 
 HOWEVER: depending on the given instance, preprocessing by Bloqqer may be
-harmful to the performance of DepQBF version 5.0 in its default configuration
-(using dynamic QBCE).
+harmful to the performance of DepQBF version 5.0 (or later) in its default
+configuration (using dynamic QBCE).
 
 [1] http://fmv.jku.at/bloqqer/ 
 
