@@ -3,7 +3,7 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
  Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 
@@ -39,8 +39,8 @@
 
 
 #define VERSION                                                         \
-  "DepQBF 5.0\n"                                                        \
-  "Copyright 2010, 2011, 2012, 2013, 2014, 2015 Florian Lonsing,\n"     \
+  "DepQBF 5.01\n"                                                        \
+  "Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 Florian Lonsing,\n"     \
   "  Johannes Kepler University, Linz, Austria and\n"                   \
   "  Vienna University of Technology, Vienna, Austria.\n"               \
   "Copyright 2012 Aina Niemetz, "                                       \

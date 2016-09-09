@@ -3,7 +3,7 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
  Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 

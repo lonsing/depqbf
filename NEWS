@@ -3,6 +3,13 @@
 NEWS
 ----
 
+September 09 2016:
+
+release of version 5.01
+  - bug fix in the generation of QDIMACS output
+  - many thanks to Johannes Marti for pointing out the problem and to Uwe Egly
+    for helpful discussions on implementing the fix.
+
 October 26 2015:
 
 release of version 5.0

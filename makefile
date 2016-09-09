@@ -1,12 +1,25 @@
-CFLAGS=-Wextra -Wall -Wno-unused-parameter -Wno-unused -pedantic -std=c99 -DNDEBUG -O3
+CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -O3
 #CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -g3 -DNDEBUG
-#CFLAGS=-Wextra -Wall -Wno-unused-parameter -Wno-unused -pedantic -std=c99 -g3
+#CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -g3
 #CFLAGS=-Wextra -Wall -Wno-unused -pedantic -std=c99 -DNDEBUG -g3 -pg -fprofile-arcs -ftest-coverage -static
 OBJECTS=qdpll_main.o qdpll_app.o qdpll.o qdpll_mem.o qdpll_dep_man_qdag.o qdpll_pqueue.o
 
 MAJOR=1
 MINOR=0
 VERSION=$(MAJOR).$(MINOR)
+
+TARGETS:=qdpll_main.o qdpll_app.o libqdpll.a
+
+UNAME:=$(shell uname)
+
+ifeq ($(UNAME), Darwin)
+# Mac OS X
+SONAME=-install_name
+TARGETS+=libqdpll.$(VERSION).dylib
+else
+SONAME=-soname
+TARGETS+=libqdpll.so.$(VERSION)
+endif
 
 .SUFFIXES: .c .o .fpico
 
@@ -16,7 +29,7 @@ VERSION=$(MAJOR).$(MINOR)
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 
-depqbf: qdpll_main.o qdpll_app.o libqdpll.a libqdpll.so.$(VERSION)
+depqbf: $(TARGETS)
 	$(CC) $(CFLAGS) qdpll_main.o qdpll_app.o -L. -lqdpll -o depqbf
 
 qdpll_main.o: qdpll_main.c qdpll.h
@@ -54,7 +67,10 @@ libqdpll.a: qdpll.o qdpll_pqueue.o qdpll_mem.o qdpll_dep_man_qdag.o
 	ranlib $@
 
 libqdpll.so.$(VERSION): qdpll.fpico qdpll_pqueue.fpico qdpll_mem.fpico qdpll_dep_man_qdag.fpico
-	$(CC) -shared -Wl,-soname,libqdpll.so.$(MAJOR) $^ -o $@
+	$(CC) -shared -Wl,$(SONAME),libqdpll.so.$(MAJOR) $^ -o $@
+
+libqdpll.$(VERSION).dylib: libqdpll.so.$(VERSION)
+	cp $< $@
 
 clean:
-	rm -f *.so.$(VERSION) *.fpico *.a *.o *.gcno *.gcda *.gcov *~ gmon.out depqbf
+	rm -f *.so.$(VERSION) *.dylib *.fpico *.a *.o *.gcno *.gcda *.gcov *~ gmon.out depqbf

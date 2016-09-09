@@ -3,7 +3,7 @@
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
 
- Copyright 2010, 2011, 2012, 2013, 2014, 2015 
+ Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
  Florian Lonsing, Johannes Kepler University, Linz, Austria and 
  Vienna University of Technology, Vienna, Austria.
 
@@ -4772,7 +4772,6 @@ type_reduce_unmark_members (QDPLL * qdpll, Var * check_var)
       qdpll->stats.total_type_reduce_costs++;
 #endif
       Var *var = LIT2VARPTR (vars, *p);
-      assert (LEARN_VAR_MARKED (var));
       LEARN_VAR_UNMARK (var);
     }
 }
@@ -4833,7 +4832,6 @@ type_reduce_by_std_deps_adv (QDPLL * qdpll, LitIDStack ** lit_stack,
       assert (LEARN_VAR_MARKED (var));
       assert (QDPLL_LIT_POS (lit) || LEARN_VAR_NEG_MARKED (var));
       assert (QDPLL_LIT_NEG (lit) || LEARN_VAR_POS_MARKED (var));
-      assert (!(LEARN_VAR_POS_MARKED (var) && LEARN_VAR_NEG_MARKED (var)));
       if (QDPLL_SCOPE_FORALL (var->scope))
         {
           Var *rep = VARID2VARPTR (vars,
