@@ -2,12 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
-
- Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
- Florian Lonsing, Johannes Kepler University, Linz, Austria and 
- Vienna University of Technology, Vienna, Austria.
-
- Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
+ Copyright 2013, 2014, 2015, 2016, 2017 Florian Lonsing,
+   Vienna University of Technology, Vienna, Austria.
+ Copyright 2010, 2011, 2012 Florian Lonsing,
+   Johannes Kepler University, Linz, Austria.
+ Copyright 2012 Aina Niemetz,
+   Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@
 #include "qdpll_pcnf.h"
 #include "qdpll_config.h"
 #include "qdpll.h"
+#include "./picosat-960/picosat.h"
 
 /* Support both ascii QRP and binary QRP format when tracing. */
 #define TRACE_QRP 1
@@ -69,6 +70,15 @@ struct QDPLL
   QDPLLPCNF pcnf;
   unsigned int cur_constraint_id;
 
+  /* Stack to collect IDs of variables from outermost quantifier block which
+     were assigned during QDIMACS output reconstruction. These variables were
+     previously unassigned but were then assigned for QBCE assignment
+     reconstruction. */
+  VarIDStack qdo_dummy_assigned_vars;
+
+  PicoSAT *trivial_falsity_solver;
+  PicoSAT *trivial_truth_solver;
+
   ConstraintList cover_sets;
 
   /* Data structures for empty formula watching. */
@@ -92,6 +102,11 @@ struct QDPLL
   /* Stack of clauses which have been marked at each decision level by setting
      'clause->qbcp_qbce_mark'. */
   ConstraintPtrStackStack qbcp_qbce_marked_clauses;
+
+  /* For incremental solving under assumptions with QBCE: stack stores
+     clauses which have been marked to be rescheduled for QBCE in next
+     solver run. */
+  ConstraintPtrStack reschedule_qbce_marked_clauses;
 
   /* Variables which appear in newly added input clauses AND which have
      occurrences that are used as QBCE witnesses. This information is needed
@@ -219,6 +234,14 @@ struct QDPLL
        been added after a 'push'. */
     unsigned int pending_cubes_check:1;
     unsigned int clauses_added_since_cube_check;
+    /* For incremental solving: store full cover sets only if NO VARIANT
+       (i.e. fully dynamic, pre-, or inprocessing) of dynamic QBCE is used.
+       Purpose of flag: when generating initial cubes, make sure that first we
+       collect an assignment which satisfies all the clauses WITHOUT reducing
+       innermost existential literals on the fly. In incremental solving, this
+       is needed to check if collected cover sets are propositional models of
+       the CNF that may have been updated by the user. */
+    unsigned int collect_full_cover_sets:1;
     unsigned int num_sat_calls;
 
     double var_act_inc;
@@ -261,6 +284,47 @@ struct QDPLL
     unsigned int qbcp_qbce_currently_preprocessing:1;
     /* For QDIMACS partial output: schedule model reconstruction. */
     unsigned int qdo_no_schedule_model_reconstruction:1;
+    /* Flag to indicate positive trivial truth test or that Bloqqer
+       returned SAT: the current branch in the search tree is
+       satisfiable -> learn the current QBF solver assignment as a
+       cube (or use that cube as starting point of a cube derivation). */
+    unsigned int sat_branch_detected:1;
+    /* Flag to skip trivial truth test based on failed assumptions of most
+       recent negative trivial truth test. */
+    unsigned int no_scheduled_trivial_truth:1;
+
+    /* If the current assignment corresponds to an unsatisfiable
+       branch in the search tree: Clause obtained by collecting
+       negated failed assumption literals from the SAT solver (if
+       trivial falsity is used) or by collecting negation of all
+       literals currently assigned (if bloqqer is used). */
+    Constraint *unsat_branch_clause;
+
+    /* Number of times the state of the formula after QBCP is undetermined. */
+    unsigned int cnt_state_undetermined_after_qbcp;
+
+    /* Disable calls of Bloqqer if average calling time exceeds certain
+       value. Using time is nondeterministic but there is currently no other,
+       clean way to get information about how expensive a call of Bloqqer
+       was. Alternatively, we could collect statistics but this requires to let
+       Bloqqer print statistics to a log file which we then must parse again. */
+    unsigned int dyn_bloqqer_disabled:1;
+    double dyn_bloqqer_time;
+    unsigned int dyn_bloqqer_calls;
+
+    /* Flag to dynamically disable calls of trivial falsity. */
+    unsigned int trivial_falsity_disabled:1;
+    /* Number of calls of trivial falsity. */
+    unsigned int trivial_falsity_tried;
+
+    /* Time spent in trivial falsity tests. */
+    double trivial_falsity_time;
+    /* Flag to dynamically disable calls of trivial truth. */
+    unsigned int trivial_truth_disabled:1;
+    /* Number of calls of trivial truth. */
+    unsigned int trivial_truth_tried;
+    /* Time spent in trivial truth tests. */
+    double trivial_truth_time;
   } state;
 
   struct
@@ -373,7 +437,76 @@ struct QDPLL
        performance in contrast to plain QCDCL solving. Without empty formula
        watching the solver keeps assigning variables until all are assigned
        and no conflict was found, which shows the the CNF is currently true. */
-    unsigned int empty_formula_watching:1;
+    unsigned int no_empty_formula_watching:1;
+    /* Flag to enable trivial falsity. */
+    unsigned int no_trivial_falsity:1;
+    /* Try to remove innermost existential by PicoSAT calls, and
+       innermost universals by forall reductions. Abort if an existential
+       cannot be removed. */
+    unsigned int trivial_falsity_partial_mus_assumptions:1;
+    /* Test trivial falsity dynamically every '2^{dyn_bloqqer_call_interval}' times the
+       formula state under the current assignment after QBCP is undetermined. */
+    unsigned int trivial_falsity_pow2_call_interval;
+    /* Limit on number of decisions per SAT solver call in trivial falsity. */
+    unsigned int trivial_falsity_decision_limit;
+    /* Disable trivial falsity calls if average calling time exceeds
+       'trivial_falsity_disable_time_threshold'. */
+    float trivial_falsity_disable_time_threshold;
+    /* Disable trivial falsity calls if number of calls is equal to or greater than
+       'trivial_falsity_disable_calls_threshold' AND the average calling time
+       exceeds 'trivial_falsity_disable_time_threshold'. */
+    unsigned int trivial_falsity_disable_calls_threshold;
+
+    /* Do not call trivial falsity test at all (i.e. disable it permanently)
+       if the number of clauses in the CNF is equal to or greater than
+       'trivial_falsity_disable_cnf_threshold'. */
+    unsigned int trivial_falsity_disable_cnf_threshold;
+
+    /* Flag to enable trivial truth. */
+    unsigned int no_trivial_truth:1;
+    /* Test trivial truth dynamically every
+       '2^{trivial_truth_pow2_call_interval}' times the formula state under
+       the current assignment after QBCP is undetermined. */
+    unsigned int trivial_truth_pow2_call_interval;
+    /* Disable trivial truth calls if average calling time exceeds
+       'trivial_truth_disable_time_threshold'. */
+    float trivial_truth_disable_time_threshold;
+    /* Disable trivial truth calls if number of calls is equal to or greater than
+       'trivial_truth_disable_calls_threshold' AND the average calling time
+       exceeds 'trivial_truth_disable_time_threshold'. */
+    unsigned int trivial_truth_disable_calls_threshold;
+
+    /* Limit on number of decisions per SAT solver call in trivial
+       truth. */
+    unsigned int trivial_truth_decision_limit;
+    /* Do not call trivial truth test at all (i.e. disable it permanently)
+       if the number of clauses in the CNF is equal to or greater than
+       'trivial_truth_disable_cnf_threshold'. */
+    unsigned int trivial_truth_disable_cnf_threshold;
+
+    /* Flag to enable dynamic Bloqqer tests to check if current branch in
+       search tree is (un)satisfiable. */
+    unsigned int no_dynamic_bloqqer:1;
+    /* Ignore if Bloqqer finds out that current branch is
+       (un)satisfiable. */
+    unsigned int dyn_bloqqer_ignore_sat:1;
+    /* Ignore if Bloqqer finds out that current branch is
+       unsatisfiable. */
+    unsigned int dyn_bloqqer_ignore_unsat:1;
+    /* Disable Bloqqer calls if average calling time exceeds
+       'dyn_bloqqer_disable_time_threshold'. */
+    float dyn_bloqqer_disable_time_threshold;
+    /* Disable Bloqqer calls if number of calls is equal to or greater than
+       'dyn_bloqqer_disable_calls_threshold' AND the average calling time
+       exceeds 'dyn_bloqqer_disable_time_threshold'. */
+    unsigned int dyn_bloqqer_disable_calls_threshold;
+    /* Call Bloqqer dynamically every '2^{dyn_bloqqer_call_interval}' times the
+       formula state under the current assignment after QBCP is undetermined. */
+    unsigned int dyn_bloqqer_pow2_call_interval;
+    /* Do not call Bloqqer at all (i.e. disable it permanently) if the
+       number of clauses in the CNF is equal to or greater than
+       'dyn_bloqqer_disable_cnf_threshold'. */
+    unsigned int dyn_bloqqer_disable_cnf_threshold;
   } options;
 
 #if COMPUTE_STATS
@@ -421,11 +554,6 @@ struct QDPLL
     unsigned long long int total_occ_list_adds;
     unsigned long long int total_occ_list_cnt;
     unsigned long long int total_dep_man_init_calls;
-#if COMPUTE_STATS_BTLEVELS_SIZE
-    /* How often do we jump to level 'i' or less, regardless of result-type. */
-    unsigned long long int btlevels[COMPUTE_STATS_BTLEVELS_SIZE];
-    unsigned long long int btlevels_lin[COMPUTE_STATS_BTLEVELS_SIZE];
-#endif
     unsigned long long int total_learnt_cubes_mtfs;
     unsigned long long int total_learnt_clauses_mtfs;
     unsigned long long int total_learnt_clauses;
@@ -539,6 +667,50 @@ struct QDPLL
     unsigned long long int elim_univ_vars_eliminated;
     unsigned long long int elim_univ_vars_clauses_seen;
 #endif
+
+    unsigned long long int trivial_falsity_detected;
+    unsigned long long int trivial_falsity_max_decisions_per_call;
+    unsigned long long int trivial_falsity_assumptions_passed;
+    unsigned long long int trivial_falsity_assumptions_failed;
+    unsigned long long int trivial_falsity_assumptions_failed_before_mus;
+    unsigned long long int trivial_falsity_assumptions_failed_after_mus;
+    double trivial_falsity_mus_assumptions_time;
+    unsigned long long int trivial_falsity_lits_in_falsity_clause;
+    /* Count how often we learn trivial falsity clause having size 0, 1, 2,
+       3. Learning an empty clause will occur at most once, but may be more
+       often in library use. */
+    unsigned int trivial_falsity_empty_clauses_learned;
+    unsigned int trivial_falsity_unit_clauses_learned;
+    unsigned int trivial_falsity_binary_clauses_learned;
+    unsigned int trivial_falsity_ternary_clauses_learned;
+
+    unsigned long long int trivial_falsity_remove_inner_existentials_calls;
+    unsigned long long int trivial_falsity_remove_inner_existentials_sat_calls;
+    unsigned long long int trivial_falsity_remove_inner_existentials_removed;
+    unsigned long long int trivial_falsity_remove_inner_existentials_reduced_univs;
+    unsigned long long int trivial_falsity_remove_inner_existentials_rounds;
+    unsigned long long int trivial_falsity_remove_inner_existentials_max_rounds;
+    unsigned long long int trivial_falsity_deleted_clauses;
+    unsigned long long int trivial_falsity_unit_clauses;
+    unsigned long long int trivial_falsity_conflicting_clauses;
+
+    unsigned long long int trivial_truth_detected;
+    unsigned long long int trivial_truth_max_decisions_per_call;
+    unsigned long long int trivial_truth_deleted_cubes;
+    unsigned long long int trivial_truth_unit_cubes;
+    unsigned long long int trivial_truth_satisfied_cubes;
+
+    unsigned int dyn_bloqqer_result_sat;
+    unsigned int dyn_bloqqer_result_unsat;
+    unsigned int dyn_bloqqer_cur_result_unknown_streak;
+    unsigned int dyn_bloqqer_max_result_unknown_streak;
+    unsigned long long int dyn_bloqqer_success_dlevels;
+    unsigned long long int dyn_bloqqer_unit_cubes;
+    unsigned long long int dyn_bloqqer_unit_clauses;
+    unsigned long long int dyn_bloqqer_deleted_cubes;
+    unsigned long long int dyn_bloqqer_deleted_clauses;
+    unsigned long long int dyn_bloqqer_satisfied_cubes;
+    unsigned long long int dyn_bloqqer_conflicting_clauses;
   } stats;
 #endif
 

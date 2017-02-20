@@ -1,19 +1,31 @@
 
-September 2016
+February 2017
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-IMPORTANT: please see the guidelines on preprocessing, incremental solving and
-API usage below.
+IMPORTANT NOTE: with version 6.0 the compilation process has
+changed. Instead of 'make', run the script 'compile.sh'.
 
-This is version 5.01 of the search-based QBF solver DepQBF. Since version 5.0
-DepQBF includes blocked clause elimination (QBCE) as a pre- and inprocessing
-technique and as a novel dynamic approach (enabled by default) where QBCE is
-interleaved with the search process. The QBCE variants are currently available
-only in non-incremental mode. The novel dynamic QBCE approach is described in
-the following paper (proceedings of LPAR 2015):
+IMPORTANT NOTE: please see the guidelines on preprocessing,
+incremental solving and API usage below.
+
+This is version 6.0 of the search-based QBF solver DepQBF. This recent
+version implements conflict-driven clause and solution-driven cube
+learning (QCDCL) with generalized axioms. To this end, DepQBF applies
+the SAT solver PicoSAT and the QBF preprocessor Bloqqer as oracles to
+check the satisfiability of formulas that arise in the context of
+axiom applications. The approach is described in the following paper:
+
+Florian Lonsing, Uwe Egly, Martina Seidl: "Q-Resolution with
+Generalized Axioms". In Proceedings of SAT 2016, LNCS, Springer, 2016.
+
+Since version 5.0 DepQBF includes blocked clause elimination (QBCE) as
+a pre- and inprocessing technique and as a novel dynamic approach
+(enabled by default) where QBCE is interleaved with the search
+process. The novel dynamic QBCE approach is described in the following
+paper (proceedings of LPAR 2015):
 
 F. Lonsing, F. Bacchus, A. Biere, U. Egly, and M. Seidl: "Enhancing
 Search-Based QBF Solving by Dynamic Blocked Clause Elimination". In
@@ -51,13 +63,17 @@ FEATURES
 
 General features of DepQBF:
 
+- Since version 6.0. QCDCL with generalized axioms.
+
 - Since version 5.0: pre- and inprocessing by blocked clause elimination
   (QBCE) and dynamic QBCE (enabled by default). See also './depqbf -h' for
-  configuration options. The QBCE variants are currently available only in
-  non-incremental mode.
+  configuration options. 
 
 - The solver can be used as a library. The API is declared in file 'qdpll.h'
   and the examples in the subdirectory 'examples' demonstrate its basic use.
+
+- Java API called DepQBF4J, which allows DepQBF to be integrated in
+  Java programs.
 
 - Incremental solving: Incremental solving can be beneficial in applications
   where a sequence of closely related formulae must be solved. This way, the
@@ -144,14 +160,25 @@ https://www.gnu.org/copyleft/gpl.html
 
 See also the file COPYING.
 
+IMPORTANT NOTE: since version 6.0, DepQBF requires the SAT solver
+PicoSAT and the QBF preprocessor Bloqqer as external libraries.
+
+Bloqqer: http://fmv.jku.at/bloqqer/
+PicoSAT  http://fmv.jku.at/picosat/
+
+Please see the individual licenses that come with PicoSAT and Bloqqer.
+
 ------------
 INSTALLATION
 ------------
 
 The latest release is available from http://lonsing.github.io/depqbf/
 
-Unpack the sources into a directory and call 'make'. This produces optimized
-code without assertions (default).
+Unpack the archive and run the script './compile.sh', which will first
+download and compile PicoSAT and Bloqqer and then compile DepQBF.
+
+The build process produces optimized code without assertions
+(default).
 
 If you want to use the solver as a library in your own applications, then link
 against 'libqdpll.a'.
@@ -201,8 +228,7 @@ IMPORTANT NOTE ON PREPROCESSING
 
 Version 5.0 (or later) includes blocked clause elimination (QBCE) as a pre-
 and inprocessing technique and as a novel dynamic approach (enabled by
-default) where QBCE is interleaved with the search process. The QBCE variants
-are currently available only in non-incremental mode.
+default) where QBCE is interleaved with the search process. 
 
 Depending on your application, preprocessors such as Bloqqer [1] and/or QxBF [2], for
 example, may improve the performance of DepQBF further.

@@ -2,10 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
-
- Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
- Florian Lonsing, Johannes Kepler University, Linz, Austria and 
- Vienna University of Technology, Vienna, Austria.
+ Copyright 2013, 2014, 2015, 2016, 2017 Florian Lonsing,
+   Vienna University of Technology, Vienna, Austria.
+ Copyright 2010, 2011, 2012 Florian Lonsing,
+   Johannes Kepler University, Linz, Austria.
+ Copyright 2012 Aina Niemetz,
+   Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -218,6 +220,11 @@ struct Var
   unsigned int mark_learn0:1;
   unsigned int mark_learn1:1;
 
+  /* Trivial falsity: mark indicates if a variable can be removed from the
+     clause. */
+  unsigned int mark_tf_redundant:1;
+
+  /* Marks used for QPUP. */
   unsigned int qpup_mark_pos:1;
   unsigned int qpup_mark_neg:1;
   unsigned int qpup_res_mark_pos:1;
@@ -325,15 +332,27 @@ struct Constraint
 {
   ConstraintID id;
   unsigned int size_lits:(sizeof (unsigned int) * 8 - 1);
-  unsigned int qbcp_qbce_elim_univ_mark:1;
+  /* Multi-purpose mark used for QBCE: for elimination of universal
+     literals from assignments in learning, and for rescheduling of
+     clauses to be checked again in QBCE. */
+  unsigned int qbcp_qbce_multi_purpose_mark:1;
   unsigned int num_lits:(sizeof (unsigned int) * 8 - 4);
   unsigned int is_cube:1;
   unsigned int learnt:1;
   unsigned int is_reason:1;
   /* Counting the number of times a constraint is watched by a
      variable. */
-  unsigned int is_watched:(sizeof (unsigned int) * 8 - 2);
+  unsigned int is_watched:(sizeof (unsigned int) * 8 - 3);
   unsigned int is_taut:1;
+
+#if COMPUTE_STATS
+  /* Flag to indicate if a clause/cube has been derived from a start
+     clause/cube which was learned due to an application of trivial
+     truth/falsity. */
+  unsigned int derived_by_trivial_truth_or_falsity:1;
+  unsigned int derived_by_dynamic_bloqqer:1;
+#endif 
+
   /* NOTE: only for '--no-spure-literals'; marks constraints to be cleaned up. */
   unsigned int deleted:1;
 
@@ -365,6 +384,10 @@ struct Constraint
   /* All original clauses are kept in linked list, also learnt clauses
      separately and learnt cubes. */
   ConstraintLink link;
+
+  /* ID of selector variable used to disable this clause in SAT solver when
+     testing trivial truth. */
+  VarID trivial_truth_selector;
 
   /* For O(1)-notify list maintenance during literal watcher update,
      we store the position of a constraint in the notify lists of the watched

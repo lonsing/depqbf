@@ -2,12 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
-
- Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
- Florian Lonsing, Johannes Kepler University, Linz, Austria and 
- Vienna University of Technology, Vienna, Austria.
-
- Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
+ Copyright 2013, 2014, 2015, 2016, 2017 Florian Lonsing,
+   Vienna University of Technology, Vienna, Austria.
+ Copyright 2010, 2011, 2012 Florian Lonsing,
+   Johannes Kepler University, Linz, Austria.
+ Copyright 2012 Aina Niemetz,
+   Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -4839,7 +4839,9 @@ type_reduce_by_std_deps_adv (QDPLL * qdpll, LitIDStack ** lit_stack,
                                                              var->id, 0));
           assert (QDPLL_VAR_POS_MARKED (rep));
           assert (QDPLL_COUNT_STACK (rep->type_red_member_lits) != 0);
-          assert (is_lit_on_lit_stack (&(rep->type_red_member_lits), lit));
+	  /* With long distance resolution, may have complementary literals on stack. */
+          assert (is_lit_on_lit_stack (&(rep->type_red_member_lits), lit) || 
+		  is_lit_on_lit_stack (&(rep->type_red_member_lits), -lit));
         }
       else
         {

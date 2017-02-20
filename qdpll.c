@@ -2,12 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
-
- Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
- Florian Lonsing, Johannes Kepler University, Linz, Austria and 
- Vienna University of Technology, Vienna, Austria.
-
- Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
+ Copyright 2013, 2014, 2015, 2016, 2017 Florian Lonsing,
+   Vienna University of Technology, Vienna, Austria.
+ Copyright 2010, 2011, 2012 Florian Lonsing,
+   Johannes Kepler University, Linz, Austria.
+ Copyright 2012 Aina Niemetz,
+   Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -39,6 +39,8 @@
 #include "qdpll_dep_man_generic.h"
 #include "qdpll_dep_man_qdag.h"
 #include "qdpll_config.h"
+#include "qdpll_dynamic_bloqqer.h"
+#include "./picosat-960/picosat.h"
 
 #define QDPLL_ABORT_QDPLL(cond,msg)					\
   do {									\
@@ -3188,6 +3190,22 @@ update_empty_formula_watcher_toggle_var_marks (QDPLL *qdpll,
     }
 }
 
+/* For assertion checking only: returns non-zero iff the constraint 'c' has
+   ALL of its literals assigned as assumptions. */
+static int
+assert_all_assigned_assumption_lits_clause (QDPLL *qdpll, Constraint *c)
+{
+  LitID *p, *e;
+  for (p = c->lits, e = p + c->num_lits; p < e; p++)
+    {
+      LitID lit = *p;
+      Var *var = LIT2VARPTR (qdpll->pcnf.vars, lit);
+      if (!QDPLL_VAR_ASSIGNED (var) || var->mode != QDPLL_VARMODE_ASSUMED)
+        return 0;
+    }
+  return 1;
+}
+
 /* Returns zero iff the formula is currently empty. */
 static BLitsOcc *
 update_empty_formula_watcher (QDPLL *qdpll)
@@ -3243,11 +3261,20 @@ update_empty_formula_watcher (QDPLL *qdpll)
             }
           else
             {
+              /* We must detect conflicts first. We may encounter
+                 syntactically empty input clauses if this function is called
+                 from 'set_up_watchers'. In incremental solving, empty input
+                 clauses have one selector literal. Conflict will be found
+                 during literal watcher initialization then. 
+                 Further, we may have conflict due to user-given
+                 assumptions. In this case, we watch that clause although
+                 conflict will be found later. */
               assert (cur_watcher->num_lits == 0 || 
                       (cur_watcher->num_lits == 1 && 
                        (LIT2VARPTR(qdpll->pcnf.vars, cur_watcher->lits[0])->is_internal)) ||  
                       cur_watcher->qbcp_qbce_blocked || 
-                      !is_clause_empty (qdpll, cur_watcher));
+                      !is_clause_empty (qdpll, cur_watcher) || 
+                      assert_all_assigned_assumption_lits_clause (qdpll, cur_watcher));
               if (cur_watcher->qbcp_qbce_blocked)
                 {
 #if COMPUTE_STATS
@@ -3812,17 +3839,27 @@ handle_detected_unit_constraint (QDPLL * qdpll, LitID lit, Var * var,
       if (!qdpll->options.no_unit_mtf)
         learnt_constraint_mtf (qdpll, constraint);
 #if COMPUTE_STATS
+      assert (!constraint->derived_by_trivial_truth_or_falsity || 
+              !constraint->derived_by_dynamic_bloqqer);
       if (constraint->is_cube)
         {
           qdpll->stats.total_unit_lcubes++;
           if (constraint->is_taut)
             qdpll->stats.total_unit_taut_lcubes++;
+          if (constraint->derived_by_trivial_truth_or_falsity)
+            qdpll->stats.trivial_truth_unit_cubes++;
+          else if (constraint->derived_by_dynamic_bloqqer)
+            qdpll->stats.dyn_bloqqer_unit_cubes++;
         }
       else
         {
           qdpll->stats.total_unit_lclauses++;
           if (constraint->is_taut)
             qdpll->stats.total_unit_taut_lclauses++;
+          if (constraint->derived_by_trivial_truth_or_falsity)
+            qdpll->stats.trivial_falsity_unit_clauses++;
+          else if (constraint->derived_by_dynamic_bloqqer)
+            qdpll->stats.dyn_bloqqer_unit_clauses++;
         }
 #endif
     }
@@ -4798,7 +4835,7 @@ reset_watchers (QDPLL * qdpll)
     }
 
   /* Reset data structures for empty-formula-watching. */
-  if (qdpll->options.empty_formula_watching)
+  if (!qdpll->options.no_empty_formula_watching)
     {
       /* Reset marks of variables appearing in old watched clause. */
       update_empty_formula_watcher_toggle_var_marks (qdpll, qdpll->empty_formula_watcher, 0);
@@ -4818,7 +4855,7 @@ set_up_watchers (QDPLL * qdpll)
   /* Handle empty formula. */
   if (qdpll->pcnf.clauses.cnt == 0)
     return QDPLL_SOLVER_STATE_SAT;
-  if (qdpll->options.empty_formula_watching)
+  if (!qdpll->options.no_empty_formula_watching)
     {
       /* Check if all clauses are blocked or satisfied. */
       assert (!qdpll->empty_formula_watcher);
@@ -5400,6 +5437,37 @@ qbcp_qbce_setup_first_call_aux (QDPLL *qdpll, Constraint *c)
   QDPLL_PUSH_STACK(qdpll->mm, qdpll->qbcp_qbce_maybe_blocked_clauses, pair);
 }
 
+/* Reschedule blocked-check for currently blocked clauses which contain a
+   blocking literal 'l' and where newly added input clauses may make this
+   clause non-blocked. Further, we use this function to reschedule checks if
+   user provides assumptions. Assumptions may require reschedule of checks if
+   a blocking literal is assigned as an assumptions, for example. See also
+   function 'qdpll_assume'. */
+static void
+qbcp_qbce_reschedule_from_exists_var (QDPLL *qdpll, Var *var, LitID lit)
+{
+  /* Function must be called only if we apply any variant of QBCE. */
+  assert (qdpll->options.qbce_preprocessing || 
+          qdpll->options.qbce_inprocessing || 
+          !qdpll->options.no_qbce_dynamic);
+  assert (QDPLL_VAR_EXISTS (var) && !var->is_internal);
+  /* If a variable 'v' does not have clauses where a literal of
+     'v' is the blocking literal, then there is no need to collect
+     them. */
+  if (QDPLL_COUNT_STACK (var->qbcp_qbce_prepro_pos_blocking_lit_clauses) != 0 || 
+      QDPLL_COUNT_STACK (var->qbcp_qbce_prepro_neg_blocking_lit_clauses) != 0)
+    {
+      if (!var->neg_lit_in_new_input_clause && 
+          !var->pos_lit_in_new_input_clause)
+        QDPLL_PUSH_STACK 
+          (qdpll->mm, qdpll->qbcp_qbce_relevant_vars_in_new_input_clauses, var->id);
+      if (QDPLL_LIT_NEG (lit))
+        var->neg_lit_in_new_input_clause = 1;
+      else            
+        var->pos_lit_in_new_input_clause = 1;
+    }
+}
+
 /* Push constraint given through API on constraint stack, update occ_lists if
    needed. */
 static void
@@ -5419,7 +5487,7 @@ import_original_constraint (QDPLL * qdpll, Constraint * constr)
   if (!constr->is_cube)
     {
       LINK_LAST (qdpll->pcnf.clauses, constr, link);
-      if (qdpll->options.empty_formula_watching)
+      if (!qdpll->options.no_empty_formula_watching)
         {
           /* Store pair of clause and one of its literals for better cache performance. */
           BLitsOcc occ = {constr->num_lits > 0 ? constr->lits[0] : 0, constr};
@@ -5447,23 +5515,7 @@ import_original_constraint (QDPLL * qdpll, Constraint * constr)
 
       if (qbce_enabled && qbce_blocked_input_clauses_present && 
           QDPLL_VAR_EXISTS (var) && !var->is_internal)
-        {
-          /* If a variable 'v' does not have clauses where a literal of
-             'v' is the blocking literal, then there is no need to collect
-             them. */
-          if (QDPLL_COUNT_STACK (var->qbcp_qbce_prepro_pos_blocking_lit_clauses) != 0 || 
-              QDPLL_COUNT_STACK (var->qbcp_qbce_prepro_neg_blocking_lit_clauses) != 0)
-            {
-              if (!var->neg_lit_in_new_input_clause && 
-                  !var->pos_lit_in_new_input_clause)
-                QDPLL_PUSH_STACK 
-                  (qdpll->mm, qdpll->qbcp_qbce_relevant_vars_in_new_input_clauses, var->id);
-              if (QDPLL_LIT_NEG (lit))
-                var->neg_lit_in_new_input_clause = 1;
-              else            
-                var->pos_lit_in_new_input_clause = 1;
-            }
-        }
+        qbcp_qbce_reschedule_from_exists_var (qdpll, var, lit);
 
       if (!constr->is_cube)
         {
@@ -5775,7 +5827,7 @@ push_assigned_variable (QDPLL * qdpll, Var * var, QDPLLAssignment assignment,
   var->mode = mode;
   var->assignment = assignment;
 
-  if (qdpll->options.empty_formula_watching)
+  if (!qdpll->options.no_empty_formula_watching)
     {
       /* If the current assignment satisfies the clause being watched for empty
          formula detection, then schedule a watcher update. */
@@ -5808,9 +5860,9 @@ push_assigned_variable (QDPLL * qdpll, Var * var, QDPLLAssignment assignment,
 
       if (!qdpll->options.no_qbce_dynamic)
         {
-          assert (!qdpll->options.empty_formula_watching || 
+          assert (qdpll->options.no_empty_formula_watching || 
                   qdpll->empty_formula_watcher);
-          assert (!qdpll->options.empty_formula_watching || 
+          assert (qdpll->options.no_empty_formula_watching || 
                   !qdpll->empty_formula_watcher->constraint->qbcp_qbce_blocked);
           /* Initialize stack of blocked clauses found at next decision level. */
           assert (QDPLL_COUNT_STACK (qdpll->qbcp_qbce_blocked_clauses) == 
@@ -5824,7 +5876,7 @@ push_assigned_variable (QDPLL * qdpll, Var * var, QDPLLAssignment assignment,
             (qdpll, &qdpll->qbcp_qbce_marked_clauses);
         }
 
-      if (qdpll->options.empty_formula_watching)
+      if (!qdpll->options.no_empty_formula_watching)
         {
           assert (qdpll->empty_formula_watcher);
           assert (!qdpll->empty_formula_watcher->constraint->qbcp_qbce_blocked);
@@ -6128,7 +6180,8 @@ update_stop_crit_data (QDPLL * qdpll, Var * vars, LitID lit,
       assert (LEARN_VAR_MARKED (var));
       assert (QDPLL_LIT_POS (lit) || LEARN_VAR_NEG_MARKED (var));
       assert (QDPLL_LIT_NEG (lit) || LEARN_VAR_POS_MARKED (var));
-      assert (!(LEARN_VAR_POS_MARKED (var) && LEARN_VAR_NEG_MARKED (var)));
+      assert (!(LEARN_VAR_POS_MARKED (var) && LEARN_VAR_NEG_MARKED (var)) || 
+	      qdpll->options.long_dist_res);
       if (var_type == QDPLL_QTYPE_FORALL)
         {
           Var *rep = VARID2VARPTR (vars,
@@ -6177,9 +6230,11 @@ cover_by_clauses_collect_lit (QDPLL * qdpll, QDPLLMemMan * mm,
   assert (var);
   assert (lit);
   assert (LIT2VARPTR(qdpll->pcnf.vars, lit) == var);
-  assert (COLLECT_FULL_COVER_SETS || !qdpll->options.no_qbce_dynamic || 
+  assert (qdpll->state.collect_full_cover_sets || !qdpll->options.no_qbce_dynamic ||
+	  qdpll->state.sat_branch_detected || 
           qdpll->pcnf.user_scopes.last != var->user_scope);
-  assert (COLLECT_FULL_COVER_SETS || !qdpll->options.no_qbce_dynamic || 
+  assert (qdpll->state.collect_full_cover_sets || !qdpll->options.no_qbce_dynamic || 
+          qdpll->state.sat_branch_detected ||
           qdpll->pcnf.scopes.last != var->scope);
   assert ((QDPLL_LIT_NEG (lit) && QDPLL_VAR_ASSIGNED_FALSE (var)) ||
           (QDPLL_LIT_POS (lit) && QDPLL_VAR_ASSIGNED_TRUE (var)));
@@ -6249,30 +6304,28 @@ cover_by_clauses_collect_lits_sorted (QDPLL * qdpll, QDPLLMemMan * mm,
   cover_by_clauses_collect_lits_sorted_aux (qdpll, mm,
                                             lit_stack, &qdpll->pcnf.scopes.first->cover_lits);
 #ifndef NDEBUG
-#if !COLLECT_FULL_COVER_SETS
-  /* NOTE: with dynamic QBCE, this function is called from
-     'cover-by-assignment' where we collect all literals and do not discard
-     innermost existential variables on the fly (i.e. on the fly existential
-     reduction). */
-  if (qdpll->options.no_qbce_dynamic)
+  if (!qdpll->state.collect_full_cover_sets)
     {
-      /* No literal is marked in innermost scope, since that
-         literals would be immediately removed by type-reduce. */
-      assert (QDPLL_SCOPE_EXISTS (qdpll->pcnf.scopes.last));
-      assert (QDPLL_EMPTY_STACK (qdpll->pcnf.scopes.last->cover_lits));
-      do
+      if (qdpll->options.no_qbce_dynamic && 
+	  !qdpll->state.sat_branch_detected)
         {
-          VarID *p, *e;
-          for (p = qdpll->pcnf.scopes.last->vars.start, 
-                 e = qdpll->pcnf.scopes.last->vars.top; p < e; p++)
+          /* No literal is marked in innermost scope, since that
+             literals would be immediately removed by type-reduce. */
+          assert (QDPLL_SCOPE_EXISTS (qdpll->pcnf.scopes.last));
+          assert (QDPLL_EMPTY_STACK (qdpll->pcnf.scopes.last->cover_lits));
+          do
             {
-              Var *v = VARID2VARPTR (vars, *p);
-              assert (!LEARN_VAR_MARKED (v));
+              VarID *p, *e;
+              for (p = qdpll->pcnf.scopes.last->vars.start, 
+                     e = qdpll->pcnf.scopes.last->vars.top; p < e; p++)
+                {
+                  Var *v = VARID2VARPTR (vars, *p);
+                  assert (!LEARN_VAR_MARKED (v));
+                }
             }
+          while (0);
         }
-      while (0);
     }
-#endif
 #endif
 
   /* Re-collect all marked literals by traversing all scopes from
@@ -6421,7 +6474,7 @@ cover_by_assignment_push_blocked_clauses_of_exists_var (QDPLL *qdpll,
             fprintf (stderr, "  ...is blocked\n");
           else
             fprintf (stderr, "  ...is not blocked\n");
-          if (c->qbcp_qbce_elim_univ_mark)
+          if (c->qbcp_qbce_multi_purpose_mark)
             fprintf (stderr, "  ...marked already\n");
           else
             fprintf (stderr, "  ...not marked already\n");
@@ -6432,11 +6485,11 @@ cover_by_assignment_push_blocked_clauses_of_exists_var (QDPLL *qdpll,
       /* Follow chain of blocked clauses. */
       else if (LIT2VARPTR(qdpll->pcnf.vars, c->qbcp_qbce_blocking_lit) != exists_var)
         continue;
-      if (!c->qbcp_qbce_elim_univ_mark)
+      if (!c->qbcp_qbce_multi_purpose_mark)
         {
           if (qdpll->options.verbosity >= 2)
             fprintf (stderr, "  ...which is pushed to be checked\n");
-          c->qbcp_qbce_elim_univ_mark = 1;
+          c->qbcp_qbce_multi_purpose_mark = 1;
           QDPLL_PUSH_STACK (qdpll->mm, *marked_clauses_stack, c);
           QDPLL_PUSH_STACK (qdpll->mm, *check_clauses_stack, c);
         }
@@ -6467,7 +6520,7 @@ cover_by_assignment_check_maybe_blocked_clauses_on_exists_var (QDPLL *qdpll,
       qdpll->stats.elim_univ_vars_clauses_seen++;
 #endif
       c = QDPLL_POP_STACK (*check_clauses_stack);
-      assert (c->qbcp_qbce_elim_univ_mark);
+      assert (c->qbcp_qbce_multi_purpose_mark);
       assert (c->qbcp_qbce_blocked);
       if (!cover_by_assignment_check_blocked_clauses_aux 
           (qdpll, univ_var, c))
@@ -6584,8 +6637,8 @@ cover_by_assignment_keep_univ_var (QDPLL *qdpll, Var *univ_var,
       qdpll->stats.elim_univ_vars_clauses_seen++;
 #endif
       Constraint *c = QDPLL_POP_STACK (*marked_clauses_stack);
-      assert (c->qbcp_qbce_elim_univ_mark);
-      c->qbcp_qbce_elim_univ_mark = 0;
+      assert (c->qbcp_qbce_multi_purpose_mark);
+      c->qbcp_qbce_multi_purpose_mark = 0;
     }
   assert (QDPLL_EMPTY_STACK (*marked_clauses_stack));
   QDPLL_RESET_STACK (*check_clauses_stack);
@@ -6712,9 +6765,9 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
 #endif
           BLitsOcc occ = *op;
           Constraint *c = occ.constraint;
-          if (!c->qbcp_qbce_blocked && !c->qbcp_qbce_elim_univ_mark)
+          if (!c->qbcp_qbce_blocked && !c->qbcp_qbce_multi_purpose_mark)
             {
-              c->qbcp_qbce_elim_univ_mark = 1;
+              c->qbcp_qbce_multi_purpose_mark = 1;
               QDPLL_PUSH_STACK (qdpll->mm, *check_clauses_stack, c);
             }
         }
@@ -6729,9 +6782,9 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
 #endif
       Constraint *c = QDPLL_POP_STACK (*check_clauses_stack);
       assert (!c->qbcp_qbce_blocked);
-      assert (c->qbcp_qbce_elim_univ_mark);
+      assert (c->qbcp_qbce_multi_purpose_mark);
       /* Clear clause marks. */
-      c->qbcp_qbce_elim_univ_mark = 0;
+      c->qbcp_qbce_multi_purpose_mark = 0;
       cover_by_assignment_collect_univ_vars_from_orig_occ (qdpll, c);
     }
 
@@ -6752,11 +6805,11 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
           assert (c->qbcp_qbce_blocked);
           if (qdpll->options.verbosity >= 2)
             {
-              fprintf (stderr, "seen blocked clause at level %ld:\n", 
+              fprintf (stderr, "seen blocked clause at level %d:\n", 
                        sp - qdpll->qbcp_qbce_blocked_clauses.start);
               print_constraint (qdpll, c);
             }
-          if (!c->qbcp_qbce_elim_univ_mark && 
+          if (!c->qbcp_qbce_multi_purpose_mark && 
               (cover_by_assignment_collect_univ_vars_init_blocked_clause (qdpll, c)))
             {
               if (qdpll->options.verbosity >= 2)
@@ -6764,7 +6817,7 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
                   fprintf (stderr, "pushing root blocked clause:");
                   print_constraint (qdpll, c);
                 }
-              c->qbcp_qbce_elim_univ_mark = 1;
+              c->qbcp_qbce_multi_purpose_mark = 1;
               QDPLL_PUSH_STACK (qdpll->mm, *check_clauses_stack, c);
               QDPLL_PUSH_STACK (qdpll->mm, *marked_clauses_stack, c);
             }
@@ -6778,7 +6831,7 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
       qdpll->stats.elim_univ_vars_clauses_seen++;
 #endif
       Constraint *c = QDPLL_POP_STACK (*check_clauses_stack);
-      assert (c->qbcp_qbce_elim_univ_mark);
+      assert (c->qbcp_qbce_multi_purpose_mark);
       if (c->qbcp_qbce_blocked)
         {
           if (qdpll->options.verbosity >= 2)
@@ -6800,14 +6853,14 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
 #endif
               BLitsOcc occ = *op;
               Constraint *c = occ.constraint;
-              if (!c->qbcp_qbce_elim_univ_mark)
+              if (!c->qbcp_qbce_multi_purpose_mark)
                 {
                   if (qdpll->options.verbosity >= 2)
                     {
                       fprintf (stderr, "pushing clause:");
                       print_constraint (qdpll, c);
                     }
-                  c->qbcp_qbce_elim_univ_mark = 1;
+                  c->qbcp_qbce_multi_purpose_mark = 1;
                   QDPLL_PUSH_STACK (qdpll->mm, *check_clauses_stack, c);
                   QDPLL_PUSH_STACK (qdpll->mm, *marked_clauses_stack, c);
                 }
@@ -6860,14 +6913,14 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
 #endif
                           BLitsOcc occ = *op;
                           Constraint *c = occ.constraint;
-                          if (!c->qbcp_qbce_elim_univ_mark)
+                          if (!c->qbcp_qbce_multi_purpose_mark)
                             {
                               if (qdpll->options.verbosity >= 2)
                                 {
                                   fprintf (stderr, "pushing clause:");
                                   print_constraint (qdpll, c);
                                 }
-                              c->qbcp_qbce_elim_univ_mark = 1;
+                              c->qbcp_qbce_multi_purpose_mark = 1;
                               QDPLL_PUSH_STACK (qdpll->mm, *check_clauses_stack, c);
                               QDPLL_PUSH_STACK (qdpll->mm, *marked_clauses_stack, c);
                             }
@@ -6886,8 +6939,8 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
       qdpll->stats.elim_univ_vars_clauses_seen++;
 #endif
       Constraint *c = QDPLL_POP_STACK (*marked_clauses_stack);
-      assert (c->qbcp_qbce_elim_univ_mark);
-      c->qbcp_qbce_elim_univ_mark = 0;
+      assert (c->qbcp_qbce_multi_purpose_mark);
+      c->qbcp_qbce_multi_purpose_mark = 0;
     }
 }
 
@@ -6931,7 +6984,8 @@ cover_by_assignment (QDPLL * qdpll, LitIDStack * lit_stack)
   qdpll->stats.qbcp_qbce_total_current_blocked_clauses += 
     qdpll->stats.qbcp_qbce_current_blocked_clauses;
 #endif
-  assert (!qdpll->options.no_qbce_dynamic);
+  assert (qdpll->state.sat_branch_detected ||
+	  !qdpll->options.no_qbce_dynamic);
 #if QBCP_QBCE_DYNAMIC_ASSIGNMENT_ELIM_UNIV_VARS
   /* First collect ALL assigned existential variables in the initial cube. Then
      go over assigned universal variables and check if we can exclude some of
@@ -7042,9 +7096,11 @@ static int
 cover_by_clauses (QDPLL * qdpll, LitIDStack * lit_stack,
                   LitIDStack * lit_stack_tmp)
 {
-  /* With dynamic QBCE, construct initial cube from assignment instead. */
-  QDPLL_ABORT_QDPLL (!qdpll->options.no_qbce_dynamic, 
-                     "unexpected call of cover-by-clauses with dynamic QBCE!");
+  /* With dynamic QBCE or trivial truth, construct initial cube from
+     assignment instead. */
+  QDPLL_ABORT_QDPLL (qdpll->state.sat_branch_detected ||
+		     !qdpll->options.no_qbce_dynamic, 
+                     "unexpected call of cover-by-clauses!");
 #if COMPUTE_STATS
   qdpll->state.univ_vars_cur_collected = 0;
 #endif
@@ -7070,7 +7126,7 @@ cover_by_clauses (QDPLL * qdpll, LitIDStack * lit_stack,
   /* Abusing stack for stats-computation. */
   assert (QDPLL_COUNT_STACK (qdpll->wreason_a) == 0);
 #endif
-  const int collect_full_cover_set = COLLECT_FULL_COVER_SETS && 
+  const int collect_full_cover_set = qdpll->state.collect_full_cover_sets && 
     qdpll->options.incremental_use && 
     (qdpll->state.cnt_created_clause_groups > 0 || 
      QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0);
@@ -7274,21 +7330,45 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
   LitID *p, *e, lit;
   Constraint *res_cons = qdpll->result_constraint;
   assert (!qdpll->options.trace || !qdpll->res_cons_id);
-  if ((res_cons))
+  if ((res_cons) || type == QDPLL_QTYPE_EXISTS)
     {
-      assert (!res_cons->qbcp_qbce_blocked);
-      qdpll->res_cons_id = res_cons->id;
-      assert (type != QDPLL_QTYPE_EXISTS || (res_cons && !res_cons->is_cube));
-      assert (type == QDPLL_QTYPE_EXISTS || (res_cons && res_cons->is_cube));
+      assert (!qdpll->state.sat_branch_detected);
+      /* We enter this branch when learning a clause by trivial falsity or
+         dynamic bloqqer. This
+         clause will be used as the start point for the derivation of further
+         clauses, unless it is already asserting or empty. */
+      assert (res_cons || qdpll->state.unsat_branch_clause);
+      if (res_cons)
+        {
+          assert (!res_cons->qbcp_qbce_blocked);
+          qdpll->res_cons_id = res_cons->id;
+          assert (type != QDPLL_QTYPE_EXISTS || (res_cons && !res_cons->is_cube));
+          assert (type == QDPLL_QTYPE_EXISTS || (res_cons && res_cons->is_cube));
+          learnt_constraint_mtf (qdpll, res_cons);
+        }
 
-      learnt_constraint_mtf (qdpll, res_cons);
       /* Push and mark literals of reason clause onto 'lit-stack',
          which is the working reason. */
-      p = res_cons->lits;
-      e = p + res_cons->num_lits;
-      /* Can happen that input formula contains clause with universal
-         literals only. Initial reason will then be empty. */
-      assert (qdpll->state.decision_level == 0 || p < e);
+      if (res_cons)
+        {
+          p = res_cons->lits;
+          e = p + res_cons->num_lits;
+        }
+      else
+        {
+          assert (qdpll->state.unsat_branch_clause);
+          /* For QPUP tracing: must set 'qdpll->res_cons_id' to ID of unsat
+             branch clause. */
+          qdpll->res_cons_id = qdpll->state.unsat_branch_clause->id;
+          p = qdpll->state.unsat_branch_clause->lits;
+          e = p + qdpll->state.unsat_branch_clause->num_lits;
+        }
+      /* Can happen that input formula contains clause with universal literals
+         only. Initial reason will then be empty. This may also happen if the
+         clause learned by trivial falsity is empty after universal
+         reduction. */
+      assert (qdpll->state.decision_level == 0 || p < e || 
+              qdpll->state.unsat_branch_clause);
       for (; p < e; p++)
         {
           lit = *p;
@@ -7332,19 +7412,33 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
            assignment and QBCE. Without QBCE or with QBCE pre/inprocessing, we
            compute initial cubes as usual. */
       int res;
-      if (qdpll->options.qbce_preprocessing || qdpll->options.qbce_inprocessing || 
-          qdpll->options.no_qbce_dynamic)
-        res = cover_by_clauses (qdpll, stack, &tmp) && qdpll->options.trace;
+      if (!qdpll->state.sat_branch_detected &&
+	  (qdpll->options.qbce_preprocessing || qdpll->options.qbce_inprocessing || 
+	   qdpll->options.no_qbce_dynamic))
+	{
+	  res = cover_by_clauses (qdpll, stack, &tmp) && qdpll->options.trace;
+	  if (res)
+	    {
+	      qdpll->trace_full_cover_set (qdpll,
+					   (cid = ++(qdpll->cur_constraint_id)),
+					   tmp.start, QDPLL_COUNT_STACK (tmp),
+					   (*lit_stack)->start,
+					   QDPLL_COUNT_STACK (**lit_stack));
+	      qdpll->res_cons_id = cid;
+	    }
+	}
       else
-        res = cover_by_assignment (qdpll, stack);
-      if (res)
         {
-          qdpll->trace_full_cover_set (qdpll,
-                                       (cid = ++(qdpll->cur_constraint_id)),
-                                       tmp.start, QDPLL_COUNT_STACK (tmp),
-                                       (*lit_stack)->start,
-                                       QDPLL_COUNT_STACK (**lit_stack));
-          qdpll->res_cons_id = cid;
+          /* NOTE: this branch is taken if we successfully applied
+             dynamic Bloqqer test or trivial truth, or if dynamic QBCE is
+             enabled. */
+          res = cover_by_assignment (qdpll, stack);
+          /* NOTE: returned value 'res' is relevant only for tracing in
+             traditional QCDCL when we call 'cover_by_clauses' above. It is
+             used to indicate dynamic discarding of innermost existential
+             literals, for which a separate entry in the trace file will be
+             printed. */
+          assert (!res);
         }
 
       if (qdpll->options.trace && nlits - (QDPLL_COUNT_STACK (**lit_stack)))
@@ -7357,13 +7451,14 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
 
       nlits = QDPLL_COUNT_STACK (**lit_stack);
 
-#if COLLECT_FULL_COVER_SETS
-      if  (qdpll->options.incremental_use && (qdpll->state.cnt_created_clause_groups > 0 || 
-                                              QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0))
-        store_cover_set (qdpll, *lit_stack);
-#else
+      if (qdpll->state.collect_full_cover_sets)
+        {
+          if  (qdpll->options.incremental_use && (qdpll->state.cnt_created_clause_groups > 0 || 
+                                                  QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0))
+            store_cover_set (qdpll, *lit_stack);
+        }
+      else
         assert (qdpll->cover_sets.cnt == 0);
-#endif
 
       qdpll->dm->reduce_lits (qdpll->dm, lit_stack, lit_stack_tmp, type, 1);
 
@@ -7396,7 +7491,7 @@ is_var_at_type_dec_level_adv (QDPLL * qdpll, Var * var,
   assert ((unsigned int) QDPLL_COUNT_STACK (qdpll->dec_vars) ==
           qdpll->state.decision_level);
 
-  /* BUG FIX: we do NOT force to resolve out top-level literals. Just
+  /* we do NOT force to resolve out top-level literals. Just
      keep them in working reason. The following two lines make sure that we
      continue resolution if the working reason reason contains only literals
      from top-level. */
@@ -9468,7 +9563,6 @@ qpup_compute (QDPLL *qdpll, Var *pivot, LitIDStack *resolvent_lits,
       assert (!QDPLL_LIT_POS (lit) || !qpup_res_is_var_pos_marked (v));
       qpup_res_mark_var_by_lit(v, lit);
       QDPLL_PUSH_STACK(qdpll->mm, *resolvent_lits, lit);
-      /* NOTE: can omit if-statement when permanently using qpup learning. */
       if (!qdpll->options.bump_vars_once)
         increase_var_activity (qdpll, v, v->scope);
     }
@@ -9556,7 +9650,7 @@ static void
 qpup_resolve_and_reduce (QDPLL *qdpll, Var *pivot, LitIDStack *resolvent_lits, 
                          LitID *orig_ante_lits_start, LitID *orig_ante_lits_end, const ConstraintID trace_id, const QDPLLQuantifierType type)
 {
-  assert (!qdpll->options.trace || trace_id);
+  assert (type == QDPLL_QTYPE_FORALL || !qdpll->options.trace || trace_id);
   /* For tracing only: 'qpup_constr_id' is the ID of the final constraint produced by 'qpup_compute'. */
   ConstraintID qpup_constr_id = qpup_compute (qdpll, pivot, resolvent_lits, 
                 orig_ante_lits_start, orig_ante_lits_end, trace_id, type);
@@ -9954,7 +10048,7 @@ static Constraint *
 qpup_compute_learnt_constraint (QDPLL *qdpll, LitIDStack *empty_constraint_lits, const QDPLLQuantifierType type)
 {
   assert (type == QDPLL_QTYPE_FORALL || type == QDPLL_QTYPE_EXISTS);
-  assert (!qdpll->options.trace || qdpll->res_cons_id);
+  assert (type == QDPLL_QTYPE_FORALL || !qdpll->options.trace || qdpll->res_cons_id);
   assert (!qdpll->options.traditional_qcdcl || 
           !qdpll->options.no_qpup_cdcl || !qdpll->options.no_qpup_sdcl);
   assert (!(!qdpll->options.no_lazy_qpup && qdpll->options.trace));
@@ -10116,8 +10210,11 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
 #endif
 
   get_initial_reason (qdpll, &lit_stack, &lit_stack_tmp, type);
+  /* May happen that the clause learned by trivial falsity is empty after
+     universal reduction. */
   assert (qdpll->state.decision_level == 0 || type == QDPLL_QTYPE_FORALL ||
-          QDPLL_COUNT_STACK (*lit_stack) != 0);
+          QDPLL_COUNT_STACK (*lit_stack) != 0 || 
+          qdpll->state.unsat_branch_clause);
 
 #ifndef NDEBUG
   if (QDPLL_COUNT_STACK (*lit_stack) > 0 &&  
@@ -10128,8 +10225,13 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
   if (qdpll->options.verbosity > 1)
     {
       if (type == QDPLL_QTYPE_EXISTS)
-        fprintf (stderr, "CDCL: conflicting clause (%u): ",
-                 qdpll->result_constraint->id);
+        {
+          if (qdpll->result_constraint)
+            fprintf (stderr, "CDCL: conflicting clause (%u): ",
+                     qdpll->result_constraint->id);
+          else
+            fprintf (stderr, "CDCL: conflicting clause by trivial falsity: ");
+        }
       else
         {
           fprintf (stderr, "SDCL: initial cube");
@@ -10329,7 +10431,6 @@ generate_and_add_reason (QDPLL * qdpll, const QDPLLQuantifierType type)
 
       unsigned int get_assert_level, get_assert_highest = 0;
       QDPLLDepManGeneric *dm = qdpll->dm;
-
       unsigned int offset = 0;
       LitID *stack_p, *stack_e;
       p = learnt_constraint->lits;
@@ -10599,7 +10700,7 @@ backtrack_undo_assignment (QDPLL * qdpll, Var * var, const int notify_active)
       assert (!QDPLL_EMPTY_STACK (qdpll->dec_vars));
       assert (*(qdpll->dec_vars.top - 1) == var->id);
       QDPLL_POP_STACK (qdpll->dec_vars);
-      if (qdpll->options.empty_formula_watching)
+      if (!qdpll->options.no_empty_formula_watching)
         {
           assert (var->decision_level == 
                   QDPLL_COUNT_STACK (qdpll->empty_formula_watchers_per_dec_level));
@@ -10636,7 +10737,7 @@ backtrack_undo_assignment (QDPLL * qdpll, Var * var, const int notify_active)
     {
     }
 
-  /* BUG FIX: must put candidate variables back on pqueue. */
+  /* must put candidate variables back on pqueue. */
   if (dm->is_candidate (dm, var->id)
       && var->priority_pos == QDPLL_INVALID_PQUEUE_POS)
     var_pqueue_insert (qdpll, var->id, var->priority);
@@ -10703,7 +10804,7 @@ backtrack (QDPLL * qdpll, unsigned int backtrack_level)
   assert (qdpll->old_bcp_ptr <= qdpll->bcp_ptr);
   qdpll->state.num_backtracks++;
 
-  if (qdpll->options.empty_formula_watching)
+  if (!qdpll->options.no_empty_formula_watching)
     {
       /* Reset marks of variables appearing in the clause currently being watched,
          if any (no clause is watched if we indeed detected the empty
@@ -10711,37 +10812,6 @@ backtrack (QDPLL * qdpll, unsigned int backtrack_level)
          respect to the decision level we backtrack to. */
       update_empty_formula_watcher_toggle_var_marks (qdpll, qdpll->empty_formula_watcher, 0);
     }
-
-#if COMPUTE_STATS
-#if COMPUTE_STATS_BTLEVELS_SIZE
-  unsigned int target_level = backtrack_level - 1;
-  unsigned int i;
-  if (target_level <= 0)
-    qdpll->stats.btlevels[0]++;
-  for (i = 1; i < COMPUTE_STATS_BTLEVELS_SIZE - 1; i++)
-    {
-      if (target_level <= (1U << (i - 1)))
-        qdpll->stats.btlevels[i]++;
-    }
-  /* Last entry sums up all backtrack cases. */
-  qdpll->stats.btlevels[COMPUTE_STATS_BTLEVELS_SIZE - 1]++;
-  assert (qdpll->state.num_backtracks ==
-          qdpll->stats.btlevels[COMPUTE_STATS_BTLEVELS_SIZE - 1]);
-  /* Linear stats partition: */
-  if (target_level <= 0)
-    qdpll->stats.btlevels_lin[0]++;
-  for (i = 1; i < COMPUTE_STATS_BTLEVELS_SIZE - 1; i++)
-    {
-      if (target_level <= (5 * i))
-        qdpll->stats.btlevels_lin[i]++;
-
-    }
-  /* Last entry sums up all backtrack cases. */
-  qdpll->stats.btlevels_lin[COMPUTE_STATS_BTLEVELS_SIZE - 1]++;
-  assert (qdpll->state.num_backtracks ==
-          qdpll->stats.btlevels_lin[COMPUTE_STATS_BTLEVELS_SIZE - 1]);
-#endif
-#endif
 
   VarID *p, *e, *old_bcp_ptr;
   Var *vars = qdpll->pcnf.vars;
@@ -10774,7 +10844,7 @@ backtrack (QDPLL * qdpll, unsigned int backtrack_level)
   assert (qdpll->state.decision_level != QDPLL_INVALID_DECISION_LEVEL);
   qdpll->old_bcp_ptr = qdpll->bcp_ptr = qdpll->assigned_vars_top = p + 1;
 
-  if (qdpll->options.empty_formula_watching)
+  if (!qdpll->options.no_empty_formula_watching)
     {
       assert (qdpll->empty_formula_watcher);
       /* Set marks of variables appearing in the clause currently being
@@ -11158,17 +11228,27 @@ propagate_variable_assigned (QDPLL * qdpll, Var * var,
               if (!qdpll->options.no_res_mtf)
                 learnt_constraint_mtf (qdpll, c);
 #if COMPUTE_STATS
+              assert (!c->derived_by_trivial_truth_or_falsity || 
+                      !c->derived_by_dynamic_bloqqer);
               if (c->is_cube)
                 {
                   qdpll->stats.total_sat_lcubes++;
                   if (c->is_taut)
                     qdpll->stats.total_sat_taut_lcubes++;
+                  if (c->derived_by_trivial_truth_or_falsity)
+                    qdpll->stats.trivial_truth_satisfied_cubes++;
+                  else if (c->derived_by_dynamic_bloqqer)
+                    qdpll->stats.dyn_bloqqer_satisfied_cubes++;;
                 }
               else
                 {
                   qdpll->stats.total_empty_lclauses++;
                   if (c->is_taut)
                     qdpll->stats.total_empty_taut_lclauses++;
+                  if (c->derived_by_trivial_truth_or_falsity)
+                    qdpll->stats.trivial_falsity_conflicting_clauses++;
+                  else if (c->derived_by_dynamic_bloqqer)
+                    qdpll->stats.dyn_bloqqer_conflicting_clauses++;;
                 }
 #endif
             }
@@ -11331,7 +11411,7 @@ qbcp_qbce_delete_list_entry (QDPLL *qdpll, QBCENonBlockedWitnessStack *list,
   QBCENonBlockedWitness last = QDPLL_POP_STACK (*list);
   if (qdpll->options.verbosity >= 3)
     {
-      fprintf (stderr, "WATCHING: deleting list entry, new list size %ld\n", QDPLL_COUNT_STACK (*list));
+      fprintf (stderr, "WATCHING: deleting list entry, new list size %u\n", QDPLL_COUNT_STACK (*list));
       fprintf (stderr, "WATCHING: deleting %s entry -- last item:\n", is_witness_entry ? "witness" : "maybe-blocked-clause");
       fprintf (stderr, "WATCHING:   clause: ");
       print_constraint (qdpll, last.blit_occ.constraint);
@@ -12085,9 +12165,17 @@ assert_qbcp_qbce_non_blocked_witness_integrity (QDPLL *qdpll)
                 }
               if (QDPLL_VAR_EXISTS (var) && !var->is_internal)
                 {
-                  cnt_exists_lits++;
-                  assert (qbcp_qbce_find_lit_in_list 
-                          (qdpll, &(c->qbcp_qbce_witness_clauses), lit));
+                  /* An existential literal perhaps does not have a witness if
+                     that existential was assigned as a user-given
+                     assumption. Without assumptions, QBCE is run as
+                     preprocessing before any assignments are made and hence
+                     every existential literal will have a witness. */
+                  if (!(QDPLL_VAR_ASSIGNED (var) && var->mode == QDPLL_VARMODE_ASSUMED))
+                    {
+                      cnt_exists_lits++;
+                      assert (qbcp_qbce_find_lit_in_list 
+                              (qdpll, &(c->qbcp_qbce_witness_clauses), lit));
+                    }
                 }
             }
           assert (QDPLL_COUNT_STACK (c->qbcp_qbce_witness_clauses) == 
@@ -12268,7 +12356,7 @@ qbcp_qbce_find_blocked_clauses (QDPLL *qdpll)
                    (unsigned int) QDPLL_COUNT_STACK (qdpll->qbcp_qbce_maybe_blocked_clauses));
 #if COMPUTE_STATS
           fprintf (stderr, "QBCE completed rounds: %llu\n", qdpll->stats.qbcp_qbce_rounds);
-          fprintf (stderr, "QBCE blocked clauses: %llu ( %f of CNF size, including satisfied ones)\n", qdpll->stats.qbcp_qbce_clauses_blocked, qdpll->stats.qbcp_qbce_clauses_blocked ? (qdpll->stats.qbcp_qbce_clauses_blocked / (float)qdpll->pcnf.clauses.cnt) : 0);
+          fprintf (stderr, "QBCE blocked clauses: %llu ( %f of CNF size, including satisfied ones)\n", (long long unsigned int)qdpll->stats.qbcp_qbce_current_blocked_clauses, (long long unsigned int)qdpll->stats.qbcp_qbce_current_blocked_clauses ? ((long long unsigned int)qdpll->stats.qbcp_qbce_current_blocked_clauses / (float)qdpll->pcnf.clauses.cnt) : 0);
           fprintf (stderr, "QBCE clauses seen: %llu ( %f of CNF size)\n", qdpll->stats.qbcp_qbce_clauses_seen, qdpll->stats.qbcp_qbce_clauses_seen ? (qdpll->stats.qbcp_qbce_clauses_seen / (float)qdpll->pcnf.clauses.cnt) : 0);
           fprintf (stderr, "QBCE literals seen: %llu\n", qdpll->stats.qbcp_qbce_literals_seen);
           fprintf (stderr, "QBCE seen literals per clause: %f\n", qdpll->stats.qbcp_qbce_clauses_seen ? (qdpll->stats.qbcp_qbce_literals_seen / (float)qdpll->stats.qbcp_qbce_clauses_seen) : 0);
@@ -12516,7 +12604,7 @@ qbcp_qbce_find_blocked_clauses (QDPLL *qdpll)
                               qdpll->stats.qbcp_qbce_ignored_maybe_blocking_literals_by_occ_limit++;
 #endif
                               if (qdpll->options.verbosity >= 3)
-                                fprintf (stderr, "QBCE: skipping maybe blocking literal %d -- %soccs-cnt %ld > limit %d\n", 
+                                fprintf (stderr, "QBCE: skipping maybe blocking literal %d -- %soccs-cnt %u > limit %u\n", 
                                          lit, QDPLL_LIT_NEG (lit) ? "pos-" : "neg-", 
                                          QDPLL_COUNT_STACK (*occs), qdpll->options.qbcp_qbce_find_witness_max_occs);
                               continue;
@@ -12612,7 +12700,7 @@ qbcp_qbce_find_blocked_clauses (QDPLL *qdpll)
                             }
                         }
                     }
-                  if (qdpll->options.empty_formula_watching)
+                  if (!qdpll->options.no_empty_formula_watching)
                     {
                       /* If the blocked clause is currently watched for empty
                          formula detection, then we must schedule a watcher
@@ -12806,7 +12894,7 @@ bcp (QDPLL * qdpll)
   const unsigned int qbce_inprocessing = qdpll->options.qbce_inprocessing;
   const unsigned int qbce_dynamic = !qdpll->options.no_qbce_dynamic;
   assert (!qbce_dynamic || !qbce_inprocessing);
-  const unsigned int empty_formula_watching = qdpll->options.empty_formula_watching;
+  const unsigned int empty_formula_watching = !qdpll->options.no_empty_formula_watching;
 
   /* QBCE as inprocessing: the outer do-while loop is executed as long as the
      solver is at level zero, the formula is undecided, and new blocked
@@ -13128,6 +13216,24 @@ check_resize_learnt_constraints_aux (QDPLL * qdpll, ConstraintList *constraints,
       if (!c->is_reason && !c->is_watched && 
           c != result_constraint && !(c->is_cube && !c->learnt))
         {
+#if COMPUTE_STATS
+          assert (!c->derived_by_trivial_truth_or_falsity || 
+                  !c->derived_by_dynamic_bloqqer);
+          if (c->derived_by_trivial_truth_or_falsity)
+            {
+              if (c->is_cube)
+                qdpll->stats.trivial_truth_deleted_cubes++;
+              else
+                qdpll->stats.trivial_falsity_deleted_clauses++;;
+            }
+          else if (c->derived_by_dynamic_bloqqer)
+            {
+              if (c->is_cube)
+                qdpll->stats.dyn_bloqqer_deleted_cubes++;
+              else
+                qdpll->stats.dyn_bloqqer_deleted_clauses++;
+            }
+#endif
           if (!no_spure_literals)
             unlink_and_delete_constraint (qdpll, c);
           else
@@ -13464,7 +13570,30 @@ print_config (QDPLL * qdpll)
   fprintf (stderr, "--qbce-inprocessing=%d\n", qdpll->options.qbce_inprocessing);
   fprintf (stderr, "--no-qbce-dynamic=%d\n", qdpll->options.no_qbce_dynamic);
 
-  fprintf (stderr, "--empty-formula-watching=%d\n", qdpll->options.empty_formula_watching);
+  fprintf (stderr, "--no-empty-formula-watching=%d\n", qdpll->options.no_empty_formula_watching);
+
+  fprintf (stderr, "--no-trivial-falsity=%d\n", qdpll->options.no_trivial_falsity);
+  fprintf (stderr, "--trivial-falsity-pow2-call-interval=%d\n", qdpll->options.trivial_falsity_pow2_call_interval);
+  fprintf (stderr, "--trivial-falsity-decision-limit=%d\n", qdpll->options.trivial_falsity_decision_limit);
+  fprintf (stderr, "--trivial-falsity-disable-calls-threshold=%d\n", qdpll->options.trivial_falsity_disable_calls_threshold);
+  fprintf (stderr, "--trivial-falsity-disable-time-threshold=%f\n", qdpll->options.trivial_falsity_disable_time_threshold);
+  fprintf (stderr, "--trivial-falsity-disable-cnf-threshold=%d\n", qdpll->options.trivial_falsity_disable_cnf_threshold);
+  fprintf (stderr, "--trivial-falsity-partial-mus-assumptions=%d\n", qdpll->options.trivial_falsity_partial_mus_assumptions);
+
+  fprintf (stderr, "--no-trivial-truth=%d\n", qdpll->options.no_trivial_truth);
+  fprintf (stderr, "--trivial-truth-pow2-call-interval=%d\n", qdpll->options.trivial_truth_pow2_call_interval);
+  fprintf (stderr, "--trivial-truth-disable-calls-threshold=%d\n", qdpll->options.trivial_truth_disable_calls_threshold);
+  fprintf (stderr, "--trivial-truth-disable-time-threshold=%f\n", qdpll->options.trivial_truth_disable_time_threshold);
+  fprintf (stderr, "--trivial-truth-decision-limit=%d\n", qdpll->options.trivial_truth_decision_limit);
+  fprintf (stderr, "--trivial-truth-disable-cnf-threshold=%d\n", qdpll->options.trivial_truth_disable_cnf_threshold);
+
+  fprintf (stderr, "--no-dynamic-bloqqer=%d\n", qdpll->options.no_dynamic_bloqqer);
+  fprintf (stderr, "--dyn-bloqqer-ignore-sat=%d\n", qdpll->options.dyn_bloqqer_ignore_sat);
+  fprintf (stderr, "--dyn-bloqqer-ignore-unsat=%d\n", qdpll->options.dyn_bloqqer_ignore_unsat);
+  fprintf (stderr, "--dyn-bloqqer-pow2-call-interval=%d\n", qdpll->options.dyn_bloqqer_pow2_call_interval);
+  fprintf (stderr, "--dyn-bloqqer-disable-calls-threshold=%d\n", qdpll->options.dyn_bloqqer_disable_calls_threshold);
+  fprintf (stderr, "--dyn-bloqqer-disable-time-threshold=%f\n", qdpll->options.dyn_bloqqer_disable_time_threshold);
+  fprintf (stderr, "--dyn-bloqqer-disable-cnf-threshold=%d\n", qdpll->options.dyn_bloqqer_disable_cnf_threshold);
 
   fprintf (stderr, "----------------------------\n\n");
 }
@@ -13908,7 +14037,8 @@ check_and_delete_cubes_incremental (QDPLL *qdpll)
   QDPLL_ABORT_QDPLL (qdpll->state.clauses_added_since_cube_check == 0, 
                      "Unexpected call of cube checking.");
 
-  check_and_import_cover_sets (qdpll);
+  if (qdpll->state.collect_full_cover_sets)
+    check_and_import_cover_sets (qdpll);
 
   /* The flag 'qdpll->state.pending_cubes_check' is set to true 
      each time a new clause is added. */
@@ -14183,7 +14313,7 @@ cleanup_popped_off_vars (QDPLL *qdpll)
 
   /* Clean up clauses with occurrences of popped off variables. */
   cleanup_popped_off_clauses (qdpll, &qdpll->pcnf.clauses, 1);
-  if (qdpll->options.empty_formula_watching)
+  if (!qdpll->options.no_empty_formula_watching)
     {
       /* Update BLitsOccs for empty formula watching. Original clauses may have
          been deleted. */
@@ -14249,6 +14379,12 @@ cleanup_popped_off_vars (QDPLL *qdpll)
 #endif
 }
 
+static void
+qbcp_qbce_reset_data_structures (QDPLL *qdpll);
+
+static void
+qbcp_qbce_init_data_structures (QDPLL *qdpll);
+
 
 static void
 qdpll_gc_aux (QDPLL *qdpll, const int called_by_user)
@@ -14258,6 +14394,24 @@ qdpll_gc_aux (QDPLL *qdpll, const int called_by_user)
   if (qdpll->options.verbosity >= 1 && qdpll->state.popped_off_orig_clause_cnt > 0)
     fprintf (stderr, "Cleanup %d popped off clauses, %d original clauses.\n", 
              qdpll->state.popped_off_orig_clause_cnt, qdpll->pcnf.clauses.cnt);
+
+  /* With incremental mode and QBCE variants, must reset and
+     re-init QBCE data structures. */
+  unsigned int qbce_reset = 0;
+  if (qdpll->options.incremental_use && 
+      (qdpll->options.qbce_preprocessing || 
+       qdpll->options.qbce_inprocessing || 
+       !qdpll->options.no_qbce_dynamic))
+    {
+      /* Avoid resetting if there is nothing to be cleaned up in
+         'cleanup_popped_off_vars'. */
+      if (QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0)
+        {
+          qbcp_qbce_reset_data_structures (qdpll);
+          qbce_reset = 1;
+        }
+    }
+
   cleanup_popped_off_vars (qdpll);
 
   /* Fix: must import user-given variables (if necessary), because otherwise
@@ -14272,6 +14426,17 @@ qdpll_gc_aux (QDPLL *qdpll, const int called_by_user)
   clean_up_formula (qdpll, called_by_user);
   assert (qdpll->state.popped_off_orig_clause_cnt == 0);
   assert (QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) == 0);
+
+  if (qdpll->options.incremental_use && 
+      (qdpll->options.qbce_preprocessing || 
+       qdpll->options.qbce_inprocessing || 
+       !qdpll->options.no_qbce_dynamic))
+    {
+      /* Avoid initializing if there is nothing to be cleaned up in
+         'cleanup_popped_off_vars'. */
+      if (qbce_reset)
+        qbcp_qbce_init_data_structures (qdpll);
+    }
 }
 
 static void
@@ -14305,7 +14470,6 @@ qbcp_qbce_reschedule_for_missing_witnesses (QDPLL *qdpll,
 {
   if (qdpll->options.verbosity >= 2)
     fprintf (stderr, " rescheduling for missing witnesses\n");
-  assert (blocking_lit);
   /* Mark literals which have a witness set for 'blocking_clause'. */
   QBCENonBlockedWitness *wp, *we;
   for (wp = blocked_clause->qbcp_qbce_witness_clauses.start, 
@@ -14576,22 +14740,16 @@ qbcp_qbce_check_blocked_clauses_after_clause_addition (QDPLL *qdpll)
 #endif
 }
 
-
-/* Solver's core loop. */
-static QDPLLResult
-solve (QDPLL * qdpll)
+/* Call dynamic QBCE for the first time before actual solving as
+   preprocessing. Additionally, in incremental mode, check if there
+   are any blocked clauses that need to be rescheduled for the
+   blocked-checked.
+   NOTE: this call assumes that QBCE data structures have been
+   properly set up before, e.g. see function
+   'import_original_clause'. */
+static void
+qbcp_qbce_first_call_before_solving (QDPLL *qdpll)
 {
-  QDPLL_ABORT_QDPLL (!qdpll->state.assumptions_given && count_assigned_vars(qdpll) != 0, 
-                     "Unexpected assignments of variables; solver must be in reset state!");
-  /* Do not support full pure literals any more since it is much worse than
-     spurious pure literals in any experiments so far. */
-  QDPLL_ABORT_QDPLL(qdpll->options.no_spure_literals, 
-                    "Full pure literals no longer supported.");
-
-  assert (!(qdpll->options.long_dist_res && !qdpll->options.depman_simple));
-  QDPLL_ABORT_QDPLL(qdpll->options.long_dist_res && !qdpll->options.depman_simple, 
-                    "(temporary restriction) Must combine '--long-dist-res' with '--dep-man=simple'!");
-
   if (qdpll->options.qbce_preprocessing || 
       qdpll->options.qbce_inprocessing || 
       !qdpll->options.no_qbce_dynamic)
@@ -14600,7 +14758,7 @@ solve (QDPLL * qdpll)
         {
           qbcp_qbce_check_blocked_clauses_after_clause_addition (qdpll);
         }
-
+      
       /* Call QBCE here BEFORE watcher initialization to avoid watching blocked
          clauses. Pairs of clauses and maybe blocking
          literals have been pushed on the working queue in
@@ -14620,6 +14778,624 @@ solve (QDPLL * qdpll)
       assert (!QDPLL_COUNT_STACK (qdpll->qbcp_qbce_marked_clauses.start[0])); 
     }
   assert (QDPLL_COUNT_STACK (qdpll->qbcp_qbce_relevant_vars_in_new_input_clauses) == 0);
+}
+
+/* Reset ALL data structures related to QBCE. This is necessary only
+   in incremental mode before the formula is cleaned up dynamically
+   (removing deleted clauses). */
+static void
+qbcp_qbce_reset_data_structures (QDPLL *qdpll)
+{
+  if (qdpll->options.verbosity >= 3)
+    fprintf (stderr, "Resetting QBCE data structures before cleaning up popped-off variables\n");
+
+  /* Data structures in solver object. */
+  QDPLL_RESET_STACK (qdpll->qbcp_qbce_maybe_blocked_clauses);
+  assert (qdpll->state.decision_level == 0);
+  assert (QDPLL_COUNT_STACK (qdpll->qbcp_qbce_blocked_clauses) == 1);
+  QDPLL_RESET_STACK (qdpll->qbcp_qbce_blocked_clauses.start[0]);
+  assert (QDPLL_COUNT_STACK (qdpll->qbcp_qbce_marked_clauses) == 1);
+  QDPLL_RESET_STACK (qdpll->qbcp_qbce_marked_clauses.start[0]);
+  QDPLL_RESET_STACK (qdpll->qbcp_qbce_relevant_vars_in_new_input_clauses);
+
+  /* Data structures in constraint objects. */
+  Constraint *c;
+  for (c = qdpll->pcnf.clauses.first; c; c = c->link.next)
+    {
+      c->qbcp_qbce_multi_purpose_mark = 0;
+      c->qbcp_qbce_blocked = 0;
+      c->qbcp_qbce_mark = 0;
+      c->qbcp_qbce_blocking_lit = 0;
+      QDPLL_RESET_STACK (c->qbcp_qbce_notify_maybe_blocked_clauses);
+      QDPLL_RESET_STACK (c->qbcp_qbce_witness_clauses);
+      QDPLL_RESET_STACK (c->qbcp_qbce_offset_of_witness_in_watched_occs);
+    }
+
+  /* Data structures in variable objects. */
+  Var *v, *ve;
+  for (v = qdpll->pcnf.vars, ve = qdpll->pcnf.vars + qdpll->pcnf.size_vars; v < ve; v++)
+    {
+      QDPLL_RESET_STACK (v->qbcp_qbce_offset_of_neg_lit_in_watched_occ);
+      QDPLL_RESET_STACK (v->qbcp_qbce_offset_of_pos_lit_in_watched_occ);
+      QDPLL_RESET_STACK (v->qbcp_qbce_watched_neg_occ_clauses);
+      QDPLL_RESET_STACK (v->qbcp_qbce_watched_pos_occ_clauses);
+      v->longest_pos_occ_size = 0;
+      v->longest_neg_occ_size = 0;
+      QDPLL_RESET_STACK (v->qbcp_qbce_prepro_pos_blocking_lit_clauses);
+      QDPLL_RESET_STACK (v->qbcp_qbce_prepro_neg_blocking_lit_clauses);
+      v->pos_lit_in_new_input_clause = 0;
+      v->neg_lit_in_new_input_clause = 0;
+    }
+
+#if COMPUTE_STATS
+  qdpll->stats.qbcp_qbce_current_blocked_clauses = 0;
+#endif
+}
+
+/* Initialize ALL data structures related to QBCE. Calling this
+   function has the same effect as the initialization of QBCE done in
+   'import_original_clause', for example. Initializing explicitly is
+   necessary only in incremental mode after the formula has been
+   cleaned up dynamically (removing deleted clauses). */
+static void
+qbcp_qbce_init_data_structures (QDPLL *qdpll)
+{
+  if (qdpll->options.verbosity >= 3)
+    fprintf (stderr, "Initializing QBCE data structures after cleaning up popped-off variables\n");
+
+  assert (qdpll->options.qbce_preprocessing || 
+          qdpll->options.qbce_inprocessing || 
+          !qdpll->options.no_qbce_dynamic);
+  assert (QDPLL_COUNT_STACK (qdpll->qbcp_qbce_blocked_clauses));
+  assert (!QDPLL_COUNT_STACK (qdpll->qbcp_qbce_blocked_clauses.start[0]));
+
+  Constraint *c;
+  for (c = qdpll->pcnf.clauses.first; c; c = c->link.next)
+    {
+      assert (!c->is_cube);
+      qbcp_qbce_setup_first_call_aux (qdpll, c);
+      LitID *p, *end;
+      for (p = c->lits, end = p + c->num_lits; p < end; p++)
+        {
+          LitID lit = *p;
+          assert ((VarID) LIT2VARID (lit) < qdpll->pcnf.size_vars);
+          Var *var = LIT2VARPTR (qdpll->pcnf.vars, lit);
+          if (QDPLL_LIT_NEG (lit))
+            {
+              if (c->num_lits > var->longest_neg_occ_size)
+                var->longest_neg_occ_size = c->num_lits;
+            }
+          else
+            {
+              assert (QDPLL_LIT_POS (lit));
+              if (c->num_lits > var->longest_pos_occ_size)
+                var->longest_pos_occ_size = c->num_lits;
+            }
+        }
+    }
+}
+
+/* Makes use of PicoSAT failed assumption API. */
+static Constraint *
+trivial_falsity_try_remove_innermost_existentials (QDPLL *qdpll, 
+                                                   Constraint *unsat_branch_clause, 
+                                                   unsigned int cnt_universals)
+{
+  assert (cnt_universals > 0);
+  assert (cnt_universals <= unsat_branch_clause->num_lits);
+  assert (picosat_res (qdpll->trivial_falsity_solver) == PICOSAT_UNSATISFIABLE);
+
+#ifndef NDEBUG
+  {
+    LitID *p, *e;
+    for (p = unsat_branch_clause->lits, e = p + unsat_branch_clause->size_lits; p < e; p++)
+      assert (!LIT2VARPTR (qdpll->pcnf.vars, *p)->mark_tf_redundant);
+  }
+#endif
+
+#if COMPUTE_STATS
+  qdpll->stats.trivial_falsity_remove_inner_existentials_calls++;
+#endif
+
+  /* Set pointer to last irredundant existential literal. */
+  LitID *last_irred_exist_lit = unsat_branch_clause->lits + 
+    unsat_branch_clause->num_lits - 1;
+  while (unsat_branch_clause->lits <= last_irred_exist_lit)
+    {
+      LitID last_lit = *last_irred_exist_lit;
+      Var *last_var = LIT2VARPTR (qdpll->pcnf.vars, last_lit);
+      /* Initially, all literals in clause are failed assumptions. */
+      assert (picosat_failed_assumption (qdpll->trivial_falsity_solver, -last_lit));
+      if (QDPLL_VAR_EXISTS (last_var))
+        break;
+      last_irred_exist_lit--;
+    }
+#if COMPUTE_STATS
+  unsigned int cur_rounds = 0;
+#endif
+  unsigned int removed_existential = 0;
+
+  /* Try to remove innermost existential literals. Enter a new round if all
+     innermost existentials can be removed and then innermost universals are
+     removed by universal reduction. */
+  unsigned int changed = 1;
+  while (changed && cnt_universals > 0/* unsat_branch_clause->lits <= last_irred_exist_lit*/)
+    {
+#if COMPUTE_STATS
+      cur_rounds++;
+#endif
+      changed = 0;
+      LitID *p, *e, lit;
+      Var *var;
+      /* Check all literals in innermost existential block for removal. */
+      for (e = unsat_branch_clause->lits, p = last_irred_exist_lit;
+           e <= p && 
+             (lit = *p, var = LIT2VARPTR (qdpll->pcnf.vars, lit), 
+              QDPLL_VAR_EXISTS(var)) && !var->mark_tf_redundant; p--)
+        {
+          /* Check if 'lit' can be removed. Assume all other literals and call
+             SAT solver again. */
+          assert (e == unsat_branch_clause->lits);
+          LitID *p2;
+          for (p2 = e + unsat_branch_clause->size_lits - 1; e <= p2; p2--)
+            {
+              LitID lit2 = *p2;
+              Var *var2 = LIT2VARPTR (qdpll->pcnf.vars, lit2);
+              if (lit2 != lit && 
+                  (!var2->mark_tf_redundant || 
+                   (QDPLL_VAR_FORALL (var2) && last_irred_exist_lit < p2)))
+                picosat_assume (qdpll->trivial_falsity_solver, -lit2);
+            }
+#if COMPUTE_STATS
+          qdpll->stats.trivial_falsity_remove_inner_existentials_sat_calls++;
+#endif
+          int sat_result = picosat_sat (qdpll->trivial_falsity_solver, 
+                                        qdpll->options.trivial_falsity_decision_limit > 0 ? 
+                                        (int) qdpll->options.trivial_falsity_decision_limit : -1);
+          if (sat_result == PICOSAT_UNSATISFIABLE)
+            {
+#if COMPUTE_STATS
+              qdpll->stats.trivial_falsity_remove_inner_existentials_removed++;
+#endif
+              removed_existential = 1;
+              /* Set redundancy flag of variable of 'lit'. */
+              var->mark_tf_redundant = 1;   
+              /* Mark all redundant literals in clause up to
+                 'last_irred_exist_lit' (literals to the right of
+                 'last_irred_exist_lit' are either reducible universals or
+                 existentials already marked as redundant) based on non-failed
+                 assumptions. */
+              LitID *p3;
+              for (p3 = last_irred_exist_lit; e <= p3; p3--)
+                {
+                  LitID lit3 = *p3;
+                  Var *var3 = LIT2VARPTR (qdpll->pcnf.vars, lit3);
+                  if (!picosat_failed_assumption (qdpll->trivial_falsity_solver, -lit3))
+                    {
+                      if (!var3->mark_tf_redundant && 
+                          QDPLL_VAR_FORALL (var3))
+                        {
+                          assert (cnt_universals > 0);
+                          cnt_universals--;
+                        }
+                      var3->mark_tf_redundant = 1;
+                    }
+                }
+            }
+        }
+      /* Update pointer 'last_irred_exist_lit'. */
+      while (unsat_branch_clause->lits <= last_irred_exist_lit)
+        {
+          LitID last_lit = *last_irred_exist_lit;
+          Var *last_var = LIT2VARPTR (qdpll->pcnf.vars, last_lit);
+          /* Check if we can eliminate universals by reduction. If so then
+             enter another round. */
+          if (QDPLL_VAR_FORALL (last_var))
+            {
+              changed = 1;
+#if COMPUTE_STATS
+              qdpll->stats.trivial_falsity_remove_inner_existentials_reduced_univs++;
+#endif
+              if (!last_var->mark_tf_redundant)
+                {
+                  assert (cnt_universals > 0);
+                  cnt_universals--;
+                }
+            }
+          else
+            if (!last_var->mark_tf_redundant)
+              break;
+          last_irred_exist_lit--;
+        }
+    }
+
+#if COMPUTE_STATS
+  qdpll->stats.trivial_falsity_remove_inner_existentials_rounds += cur_rounds;
+  if (cur_rounds > qdpll->stats.trivial_falsity_remove_inner_existentials_max_rounds)
+    qdpll->stats.trivial_falsity_remove_inner_existentials_max_rounds = cur_rounds;
+#endif
+
+  if (removed_existential)
+    {
+      LitIDStack stack_tmp;
+      QDPLL_INIT_STACK (stack_tmp);
+
+      /* Copy irredundant literals to auxiliary stack. */
+      unsigned int num_lits = 0;
+      LitID *p, *e;
+      for (p = unsat_branch_clause->lits, e = p + unsat_branch_clause->size_lits; p < e; p++)
+        {
+          LitID lit = *p;
+          Var *var = LIT2VARPTR (qdpll->pcnf.vars, lit);
+          /* Copy also redundant reducible universals. */
+          if (!var->mark_tf_redundant || 
+              (QDPLL_VAR_FORALL(var) && last_irred_exist_lit < p))
+            {
+              QDPLL_PUSH_STACK (qdpll->mm, stack_tmp, lit);
+              num_lits++;
+            }
+          var->mark_tf_redundant = 0;
+        }
+
+      Constraint * new_unsat_branch_clause = create_constraint (qdpll, num_lits, 0); 
+      delete_constraint (qdpll, unsat_branch_clause);
+      unsat_branch_clause = new_unsat_branch_clause;
+
+      /* Copy literals from stack. */
+      LitID *to = unsat_branch_clause->lits;
+      for (p = stack_tmp.start, e = stack_tmp.top; p < e; p++)
+        {
+          assert (to < unsat_branch_clause->lits + unsat_branch_clause->num_lits);
+          *to++ = *p;
+        }
+      QDPLL_DELETE_STACK (qdpll->mm, stack_tmp);
+    }
+
+#ifndef NDEBUG
+  assert_lits_sorted (qdpll, unsat_branch_clause->lits, 
+                      unsat_branch_clause->lits + unsat_branch_clause->num_lits);
+#endif
+  top_level_reduce_constraint_simple (qdpll, unsat_branch_clause, 
+                                      unsat_branch_clause->is_cube ? 
+                                      QDPLL_QTYPE_FORALL : QDPLL_QTYPE_EXISTS);
+
+  return unsat_branch_clause;
+}
+
+
+#ifndef NDEBUG
+/* Given a clause learned by trivial falsity, the assignment defined by that
+   clause is not necessarily a QCDCL assignment. That is, the variables are not
+   necessarily assigned in prefix ordering. HOWEVER, the QBF under that
+   assignment must be UNSAT although we skip over outer existential and universal
+   variables. */
+static void
+assert_trivial_falsity_assumption_unsat_test (QDPLL *qdpll, Constraint *trivial_falsity_clause)
+{
+  QDPLL *test_solver = qdpll_create ();
+  qdpll_configure (test_solver, "--dep-man=simple");
+  /* must disable trivial falsity calls in 'test_solver' since
+     otherwise it will call this function recursively until stack overflow. */
+  qdpll_configure (test_solver, "--no-trivial-falsity");
+  /* must disable empty formula watching in test solver since
+     assertion may fail in 'update_empty_formula_watching' if a clause is
+     falsified by having all of its literals set to false. */
+  qdpll_configure (test_solver, "--no-empty-formula-watching");
+
+  /* For out-of-order assumptions, move variables to the front of the
+     prefix. Otherwise, deriving learned clauses will fail. */
+  Nesting cur_nesting = 0, prev_nesting = UINT_MAX;
+  LitID *p, *e;
+  for (p = trivial_falsity_clause->lits, 
+         e = p + trivial_falsity_clause->num_lits; p < e; p++)
+    {
+      LitID lit = *p;
+      Var *var = LIT2VARPTR (qdpll->pcnf.vars, lit);
+      cur_nesting = var->scope->nesting;
+      if (cur_nesting != prev_nesting)
+        {
+          /* Close previously opened scope. */
+          if (prev_nesting != UINT_MAX)
+            qdpll_add (test_solver, 0);
+          /* Open new scope. */
+          qdpll_new_scope (test_solver, var->scope->type);
+          prev_nesting = cur_nesting;
+        }
+      qdpll_add (test_solver, var->id);
+    }
+  /* Close previously opened scope. */
+  if (prev_nesting != UINT_MAX)
+    qdpll_add (test_solver, 0);
+
+  /* Add prefix without variables in trivial falsity clause. */
+  LitID *start = trivial_falsity_clause->lits;
+  LitID *end = start + trivial_falsity_clause->num_lits;
+  Scope *s;
+  for (s = qdpll->pcnf.scopes.first; s; s = s->link.next)
+    {
+      if (s->nesting == QDPLL_DEFAULT_SCOPE_NESTING)
+        continue;
+      qdpll_new_scope (test_solver, s->type);
+      VarID *vp, *ve;
+      for (vp = s->vars.start, ve = s->vars.top; vp < ve; vp++)
+        {
+          VarID vid = *vp;
+          assert (vid);
+          if (!qpup_res_find_lit (start, end, -vid) && 
+              !qpup_res_find_lit (start, end, vid))
+            qdpll_add (test_solver, vid);
+        }
+      qdpll_add (test_solver, 0);
+    }
+
+  Constraint *c;
+  for (c = qdpll->pcnf.clauses.first; c; c = c->link.next)
+    {
+      LitID *p, *e;
+      for (p = c->lits, e = p + c->num_lits; p < e; p++)
+        qdpll_add (test_solver, *p);
+      qdpll_add (test_solver, 0);
+    }
+    
+  /* Assume negation of literals in clause learned by trivial falsity. Note
+     that we may skip over variables in the prefix, which however should
+     preserve satisfiability. */
+  for (p = trivial_falsity_clause->lits, e = p + trivial_falsity_clause->num_lits; p < e; p++)
+    qdpll_assume (test_solver, -(*p));
+
+  assert (qdpll_sat (test_solver) == QDPLL_RESULT_UNSAT);
+
+  qdpll_delete (test_solver);
+}
+#endif
+
+static Constraint *
+handle_trivial_falsity (QDPLL *qdpll)
+{
+  unsigned int cnt, cnt_universals = 0;
+  const int *failed_assumptions;
+  const int *p;
+  if (qdpll->options.verbosity >= 2)
+    fprintf (stderr, "TRIVIAL FALSITY at dec-level %d with failed assumptions:\n ", qdpll->state.decision_level);
+  cnt = 0;
+  failed_assumptions = picosat_failed_assumptions (qdpll->trivial_falsity_solver);
+  for (p = failed_assumptions; *p; p++)
+    {
+      assert ((VarID)LIT2VARID(*p) <= qdpll_get_max_declared_var_id (qdpll));
+      cnt++;
+      if (QDPLL_VAR_FORALL (LIT2VARPTR (qdpll->pcnf.vars, *p)))
+        cnt_universals++;
+      if (qdpll->options.verbosity >= 2)
+        fprintf (stderr, "%d ", *p);
+    }
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "0\n");
+      fprintf (stderr, "  total %d failed assumptions, %d assigned variables, total variables %d\n", cnt, 
+               (int)(qdpll->assigned_vars_top - qdpll->assigned_vars), qdpll->pcnf.used_vars);
+    }
+
+#if COMPUTE_STATS
+  qdpll->stats.trivial_falsity_assumptions_failed += cnt;
+#endif
+
+  Constraint *unsat_branch_clause = create_constraint (qdpll, cnt, 0);
+  LitID *litp = unsat_branch_clause->lits;
+  for (p = failed_assumptions; *p; p++)
+    {
+      assert ((VarID)LIT2VARID(*p) <= qdpll_get_max_declared_var_id (qdpll));
+      *litp++ = -*p;
+    }
+  QDPLL_SORT (qdpll, int, compare_lits_by_user_variable_nesting, 
+              unsat_branch_clause->lits, unsat_branch_clause->num_lits);
+  const unsigned int lits_before = unsat_branch_clause->num_lits;
+
+  /* Apply simple universal/existential reduction. */
+  top_level_reduce_constraint_simple (qdpll, unsat_branch_clause, 
+                                      unsat_branch_clause->is_cube ? 
+                                      QDPLL_QTYPE_FORALL : QDPLL_QTYPE_EXISTS);
+  assert (lits_before >= unsat_branch_clause->num_lits);
+  assert (!qdpll->options.trivial_falsity_partial_mus_assumptions || 
+          cnt_universals >= (lits_before - unsat_branch_clause->num_lits));
+  cnt_universals -= (lits_before - unsat_branch_clause->num_lits); 
+  assert (!qdpll->options.trivial_falsity_partial_mus_assumptions || 
+          cnt_universals <= unsat_branch_clause->num_lits);
+
+  /* Try to remove innermost existentials. */
+  if (qdpll->options.trivial_falsity_partial_mus_assumptions && cnt_universals > 0)
+    {
+#if COMPUTE_STATS
+      double start_time = time_stamp ();
+#endif
+      unsat_branch_clause = trivial_falsity_try_remove_innermost_existentials 
+        (qdpll, unsat_branch_clause, cnt_universals);
+#if COMPUTE_STATS
+      qdpll->stats.trivial_falsity_mus_assumptions_time += (time_stamp() - start_time);
+#endif
+    }
+
+  if (qdpll->options.verbosity >= 2)
+    {
+      fprintf (stderr, "Trivial falsity clause: ");
+      print_constraint (qdpll, unsat_branch_clause);
+      fprintf (stderr, "  ...has %d literals compared to %d failed assumptions\n", 
+               unsat_branch_clause->num_lits, cnt);
+    }
+#if COMPUTE_STATS
+  qdpll->stats.trivial_falsity_lits_in_falsity_clause += unsat_branch_clause->num_lits;
+#endif
+
+  if (qdpll->options.trace)
+    { 
+      ConstraintID next_id = 0;
+      assert (unsat_branch_clause->num_lits <= unsat_branch_clause->size_lits);
+      if (unsat_branch_clause->num_lits < unsat_branch_clause->size_lits)
+        {
+          next_id = ++(qdpll->cur_constraint_id);
+          /* Trace constraint with full literal list including reduced universal
+             literals. */
+          qdpll->trace_constraint (next_id, unsat_branch_clause->lits, 
+                                   unsat_branch_clause->size_lits, 0, 0);
+          /* Must assign new idea to final clause resulting from universal reduction. */
+          unsat_branch_clause->id = ++(qdpll->cur_constraint_id);
+        }
+      /* Trace final constraint without reduced universal literals. */
+      qdpll->trace_constraint (unsat_branch_clause->id, 
+                               unsat_branch_clause->lits, 
+                               unsat_branch_clause->num_lits, 
+                               next_id, 0);
+    }
+
+  return unsat_branch_clause;
+}
+
+static void
+trivial_falsity_set_up_sat_solver (QDPLL *qdpll)
+{
+  /* For multiple calls of 'qdpll_sat', if user has not added or removed any
+     clauses but maybe under assumptions, there is no need to re-initialize
+     trivial-falsity solver. */
+  if (qdpll->state.num_sat_calls > 1)
+    return;
+
+  Constraint *c;
+  for (c = qdpll->pcnf.clauses.first; c; c = c->link.next)
+    {
+      LitID *p, *e;
+      for (p = c->lits, e = p + c->num_lits; p < e; p++)
+        picosat_add (qdpll->trivial_falsity_solver, *p);
+      picosat_add (qdpll->trivial_falsity_solver, 0);
+    }
+}
+
+static void
+trivial_truth_set_up_sat_solver (QDPLL *qdpll)
+{
+  /* For multiple calls of 'qdpll_sat', if user has not added or removed any
+     clauses but maybe under assumptions, there is no need to re-initialize
+     trivial-truth solver.  */
+  if (qdpll->state.num_sat_calls > 1)
+    return;
+
+  VarID next_selector_id = qdpll_get_max_declared_var_id (qdpll) + 1;
+  assert (next_selector_id > 0);
+
+  /* Add CNF to SAT solver. */
+  Constraint *c;
+  for (c = qdpll->pcnf.clauses.first; c; c = c->link.next)
+    {
+      LitID *p, *e;
+      for (p = c->lits, e = p + c->num_lits; p < e; p++)
+        {
+          LitID lit = *p;
+          Var *v = LIT2VARPTR (qdpll->pcnf.vars, lit);
+          /* Add existential literals to SAT solver, replace universal ones by
+             their selector variable. */
+          if (QDPLL_VAR_FORALL (v))
+            {
+
+            }
+          else
+            picosat_add (qdpll->trivial_truth_solver, lit);
+        }
+          /* Add fresh selector variable to disable clause if it is blocked or
+             satisfied by the current QBF solver assignment. */
+          assert (!c->trivial_truth_selector);
+          c->trivial_truth_selector = next_selector_id++;
+          picosat_add (qdpll->trivial_truth_solver, c->trivial_truth_selector);
+      picosat_add (qdpll->trivial_truth_solver, 0);
+    }
+}
+
+/* TODO: this function should be moved to Bloqqer module. */
+static Constraint *
+dynamic_bloqqer_get_unsat_branch_clause (QDPLL *qdpll)
+{
+  unsigned int cnt = (qdpll->assigned_vars_top - qdpll->assigned_vars);
+  assert (cnt <= qdpll_get_max_declared_var_id (qdpll));
+  Constraint *unsat_branch_clause = create_constraint (qdpll, cnt, 0);
+  /* Create clause by negating literals in current assignment. */
+  LitID *litp = unsat_branch_clause->lits;
+  VarID *vp, *ve;
+  for (vp = qdpll->assigned_vars, ve = qdpll->assigned_vars_top; vp < ve; vp++)
+    {
+      assert (litp < unsat_branch_clause->lits + unsat_branch_clause->num_lits);
+      VarID vid = *vp;
+      Var *var = VARID2VARPTR (qdpll->pcnf.vars, vid);
+      assert (QDPLL_VAR_ASSIGNED (var));
+      /* Must ignore existential pure literals as they are never
+         responsible for unsatisfiability. */
+      if (!(QDPLL_VAR_EXISTS (var) && var->mode == QDPLL_VARMODE_PURE))
+        {
+          if (QDPLL_VAR_ASSIGNED_FALSE (var))
+            *litp++ = vid;
+          else
+            *litp++ = -vid;
+        }
+      else
+        unsat_branch_clause->num_lits--;
+    }
+  QDPLL_SORT (qdpll, int, compare_lits_by_user_variable_nesting, 
+              unsat_branch_clause->lits, unsat_branch_clause->num_lits);
+  /* Apply simple universal/existential reduction. */
+  top_level_reduce_constraint_simple (qdpll, unsat_branch_clause, 
+                                      unsat_branch_clause->is_cube ? 
+                                      QDPLL_QTYPE_FORALL : QDPLL_QTYPE_EXISTS);
+  return unsat_branch_clause;
+}
+
+/* Solver's core loop. */
+static QDPLLResult
+solve (QDPLL * qdpll)
+{
+  assert (QDPLL_COUNT_STACK (qdpll->qbcp_qbce_blocked_clauses));
+  QDPLL_ABORT_QDPLL (!qdpll->state.assumptions_given && count_assigned_vars(qdpll) != 0, 
+                     "Unexpected assignments of variables; solver must be in reset state!");
+  /* Do not support full pure literals any more since it is much worse than
+     spurious pure literals in any experiments so far. */
+  QDPLL_ABORT_QDPLL(qdpll->options.no_spure_literals, 
+                    "Full pure literals no longer supported.");
+
+  QDPLL_ABORT_QDPLL (!qdpll->options.no_trivial_falsity && 
+                     qdpll->options.incremental_use, 
+                     "temporary restriction: must not combine incremental mode with trivial falsity");
+  QDPLL_ABORT_QDPLL (!qdpll->options.no_trivial_truth && 
+                     qdpll->options.incremental_use, 
+                     "temporary restriction: must not combine incremental mode with trivial truth");
+  QDPLL_ABORT_QDPLL (!qdpll->options.no_dynamic_bloqqer && 
+                     qdpll->options.incremental_use, 
+                     "temporary restriction: must not combine incremental mode with dynamic bloqqer");
+
+  /* Disable trivial falsity calls if limit on number of clauses in original CNF exceeded. */
+  if (!qdpll->options.no_trivial_falsity && 
+      !qdpll->state.trivial_falsity_disabled &&
+      qdpll->options.trivial_falsity_disable_cnf_threshold > 0 && 
+      qdpll->pcnf.clauses.cnt >= qdpll->options.trivial_falsity_disable_cnf_threshold)
+    {
+      qdpll->state.trivial_falsity_disabled = 1;
+      if (qdpll->options.verbosity >= 1)
+        fprintf (stderr, "Disabling trivial falsity calls: CNF size is %d, %d threshold\n", 
+                 qdpll->pcnf.clauses.cnt, qdpll->options.trivial_falsity_disable_cnf_threshold);
+    }
+
+  /* Disable trivial truth calls if limit on number of clauses in original CNF exceeded. */
+  if (!qdpll->options.no_trivial_truth && 
+      !qdpll->state.trivial_truth_disabled &&
+      qdpll->options.trivial_truth_disable_cnf_threshold > 0 && 
+      qdpll->pcnf.clauses.cnt >= qdpll->options.trivial_truth_disable_cnf_threshold)
+    {
+      qdpll->state.trivial_truth_disabled = 1;
+      if (qdpll->options.verbosity >= 1)
+        fprintf (stderr, "Disabling trivial truth calls: CNF size is %d, %d threshold\n", 
+                 qdpll->pcnf.clauses.cnt, qdpll->options.trivial_truth_disable_cnf_threshold);
+    }
+
+  /* Set up trivial falsity solver. */
+  if (!qdpll->options.no_trivial_falsity && !qdpll->state.trivial_falsity_disabled)
+    trivial_falsity_set_up_sat_solver (qdpll);
+  /* Set up trivial truth solver. */
+  if (!qdpll->options.no_trivial_truth && !qdpll->state.trivial_truth_disabled)
+    trivial_truth_set_up_sat_solver (qdpll);
 
   qdpll->state.solving_start_time = time_stamp();
 
@@ -14657,8 +15433,6 @@ solve (QDPLL * qdpll)
         qdpll->options.lcubes_init_size = qdpll->options.lcubes_max_init_size;
     }
 
-  /* For incremental solving / under assumptions: just keep current sizes of
-     learnt clauses and cubes.  */
   if (qdpll->state.lclauses_size == 0)
     qdpll->state.lclauses_size = qdpll->options.lclauses_init_size;
   if (qdpll->pcnf.learnt_cubes.cnt == 0)
@@ -14693,31 +15467,45 @@ solve (QDPLL * qdpll)
       qdpll->state.clauses_added_since_cube_check = 0;
     }
 
-  if (qdpll->state.cnt_created_clause_groups > 0 || 
-      QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0)
-    {
-#if CLEANUP_POPPED_OFF_VARS
-      QDPLL_ABORT_QDPLL ((qdpll->options.qbce_preprocessing || 
-                          qdpll->options.qbce_inprocessing || 
-                          !qdpll->options.no_qbce_dynamic), 
-                         "reached unexpected branch -- incremental QBCE disabled");
-      /* Clean up if the number of popped off clauses exceeds 25% of the
-         number of original ones. */
-      if (qdpll->state.popped_off_orig_clause_cnt > (qdpll->pcnf.clauses.cnt >> 2))
-        qdpll_gc_aux (qdpll, 0);
-#endif
-      /* For incremental solving: assign selector variables to enable/disable
-         clauses associated to currently and previously used frames. */
-      assign_frame_selector_variables (qdpll);
-    }
-
-  /* Assign user-given assumptions after possible cleanup of deleted clauses
-     and resulting no-occ-vars by calling 'qdpll_gc_aux ()' above. No-occ vars
+  /* NOTE: assign user-given assumptions AFTER possible cleanup of deleted clauses
+     and resulting no-occ-vars by calling 'qdpll_gc_aux ()' below. No-occ vars
      will not be assigned as assumptions. This is necessary to handle
      situations where the user adds assumptions of variables which actually
      have no occurrences left after this INTERNAL cleanup step. The user does
-     not know when the solver triggers that cleanup step. */
-  assign_user_given_assumptions (qdpll);
+     not know when the solver triggers that cleanup step. 
+     FURTHER NOTE: we must assign user assumptions BEFORE initial call of QBCE
+     since the formula may be unsatisfiable under assumptions which, however,
+     we may not detect properly if clauses are blocked. */
+
+  if (qdpll->options.incremental_use)
+    {
+      if (qdpll->state.cnt_created_clause_groups > 0 || 
+	  QDPLL_COUNT_STACK(qdpll->state.popped_off_internal_vars) != 0)
+	{
+	  /* Clean up if the number of popped off clauses exceeds 25% of the
+	     number of original ones. */
+	  if (qdpll->state.popped_off_orig_clause_cnt > (qdpll->pcnf.clauses.cnt >> 2))
+	    qdpll_gc_aux (qdpll, 0);
+
+          assign_user_given_assumptions (qdpll);
+	  /* Call QBCE for preprocessing and check for necessary rescheduling
+	     of blocked clauses after user has added clauses. */
+	  qbcp_qbce_first_call_before_solving (qdpll);
+	  /* For incremental solving: assign selector variables to enable/disable
+	     clauses associated to currently and previously used frames. */
+	  assign_frame_selector_variables (qdpll);
+	}
+      else
+        {
+          assign_user_given_assumptions (qdpll);
+          qbcp_qbce_first_call_before_solving (qdpll);
+        }
+    }
+  else
+    {
+      assign_user_given_assumptions (qdpll);
+      qbcp_qbce_first_call_before_solving (qdpll);
+    }
 
   if (!qdpll->dm->is_init (qdpll->dm))
     {
@@ -14770,23 +15558,299 @@ solve (QDPLL * qdpll)
 
       state = bcp (qdpll);
 
+      if (state == QDPLL_SOLVER_STATE_UNDEF)
+        {
+          QDPLL_ABORT_QDPLL (qdpll->state.cnt_state_undetermined_after_qbcp == UINT_MAX, 
+                             "reached UINT_MAX");
+          qdpll->state.cnt_state_undetermined_after_qbcp++;
+        }
+
+#if COMPUTE_STATS
+      unsigned int dynamic_bloqqer_test_success = 0;
+      unsigned int trivial_truth_or_falsity_success = 0;
+#endif
+
+      if (!qdpll->options.no_dynamic_bloqqer && 
+          state == QDPLL_SOLVER_STATE_UNDEF &&
+          (qdpll->state.cnt_state_undetermined_after_qbcp & 
+           (((unsigned int)1 << qdpll->options.dyn_bloqqer_pow2_call_interval) - 1)) == 0)
+        {
+          BloqqerResult bloqqer_res = dynamic_bloqqer_test (qdpll);
+          if (qdpll->options.verbosity >= 2)
+            fprintf (stderr, "Dynamic Bloqqer test: %s at decision level %d, " \
+                     "%d assigned vars of %d total vars\n", 
+                     bloqqer_res == BLOQQER_RESULT_SAT ? "SATISFIABLE" : 
+                     (bloqqer_res == BLOQQER_RESULT_UNSAT ? "UNSATISFIABLE" : "UNKNOWN"), 
+                     qdpll->state.decision_level, (unsigned int)
+                     (qdpll->assigned_vars_top - qdpll->assigned_vars), qdpll->pcnf.used_vars);
+          if (bloqqer_res == BLOQQER_RESULT_SAT && 
+              !qdpll->options.dyn_bloqqer_ignore_sat)
+            {
+              /* Set state variable in order to learn a cube from the
+                 current assignment. */
+              state = QDPLL_SOLVER_STATE_SAT;
+              assert (!qdpll->state.sat_branch_detected);
+              qdpll->state.sat_branch_detected = 1;
+#if COMPUTE_STATS
+              assert (!dynamic_bloqqer_test_success);
+              dynamic_bloqqer_test_success = 1;
+#endif
+            }
+          else if (bloqqer_res == BLOQQER_RESULT_UNSAT && 
+                   !qdpll->options.dyn_bloqqer_ignore_unsat)
+            {
+              assert (!qdpll->state.unsat_branch_clause);
+              qdpll->state.unsat_branch_clause = 
+                dynamic_bloqqer_get_unsat_branch_clause (qdpll);
+              if (qdpll->options.verbosity >= 2)
+                {
+                  fprintf (stderr, "Bloqqer test unsat branch clause: ");
+                  print_constraint (qdpll, qdpll->state.unsat_branch_clause);
+                  fprintf (stderr, "  ...has %d literals, %d currently assigned variables\n", 
+                           qdpll->state.unsat_branch_clause->num_lits, (int)(qdpll->assigned_vars_top - 
+									qdpll->assigned_vars));
+                }
+
+              /* Set solver state to UNSAT so that we enter the respective
+                 branch below. There, a new clause will be learned using
+                 the clause learned by the dynamic Bloqqer test as a start
+                 point. If the start clause is already asserting then it
+                 will be learned. */
+              state = QDPLL_SOLVER_STATE_UNSAT;
+#if COMPUTE_STATS
+              assert (!dynamic_bloqqer_test_success);
+              dynamic_bloqqer_test_success = 1;
+#endif
+            }
+        }
+
+      /* Check for trivial falsity by SAT solver. */
+      if (!qdpll->options.no_trivial_falsity &&
+          !qdpll->state.trivial_falsity_disabled && 
+          state == QDPLL_SOLVER_STATE_UNDEF && 
+          (/* NOTE: '-1' to make sure to test trivial falsity before the very first decision */
+           (qdpll->state.cnt_state_undetermined_after_qbcp - 1) & 
+           (((unsigned int)1 << qdpll->options.trivial_falsity_pow2_call_interval) - 1)) == 0)
+        {
+#if COMPUTE_STATS
+          unsigned int assumptions_passed_in_success = 0;
+#endif
+          double start_time = time_stamp ();
+          qdpll->state.trivial_falsity_tried++;
+          VarID *vp, *ve;
+          for (vp = qdpll->assigned_vars, ve = qdpll->assigned_vars_top; vp < ve; vp++)
+            {
+              Var *v = VARID2VARPTR (qdpll->pcnf.vars, *vp);
+              assert (QDPLL_VAR_ASSIGNED (v));
+              if (!(QDPLL_VAR_EXISTS (v) && v->mode == QDPLL_VARMODE_PURE))
+                {
+#if COMPUTE_STATS
+                  assumptions_passed_in_success++;
+#endif
+                  picosat_assume (qdpll->trivial_falsity_solver, QDPLL_VAR_ASSIGNED_TRUE (v) ? v->id : -v->id);
+                }
+            }
+
+#if COMPUTE_STATS
+          unsigned long long int trivial_falsity_previous_decisions = 
+            picosat_decisions (qdpll->trivial_falsity_solver);
+#endif
+          int sat_result = picosat_sat (qdpll->trivial_falsity_solver, 
+                                        qdpll->options.trivial_falsity_decision_limit > 0 ? 
+                                        (int) qdpll->options.trivial_falsity_decision_limit : -1);
+#if COMPUTE_STATS
+          unsigned long long int trivial_falsity_current_decisions = 
+            picosat_decisions (qdpll->trivial_falsity_solver) - trivial_falsity_previous_decisions;
+          if (trivial_falsity_current_decisions > qdpll->stats.trivial_falsity_max_decisions_per_call)
+            qdpll->stats.trivial_falsity_max_decisions_per_call = trivial_falsity_current_decisions;
+#endif
+          if (sat_result == PICOSAT_UNSATISFIABLE)
+            {
+#if COMPUTE_STATS
+              assert (!trivial_truth_or_falsity_success);
+              trivial_truth_or_falsity_success = 1;
+              qdpll->stats.trivial_falsity_detected++;
+              qdpll->stats.trivial_falsity_assumptions_passed += assumptions_passed_in_success;
+#endif
+              assert (!qdpll->state.unsat_branch_clause);
+              qdpll->state.unsat_branch_clause = handle_trivial_falsity (qdpll);
+#ifndef NDEBUG
+              assert_trivial_falsity_assumption_unsat_test 
+                (qdpll, qdpll->state.unsat_branch_clause);
+#endif
+              /* Set solver state to UNSAT so that we enter the respective
+                 branch below. There, a new clause will be learned using
+                 the clause learned by trivial falsity as a start
+                 point. If the start clause is already asserting then it
+                 will be learned. */
+#if COMPUTE_STATS
+              if (qdpll->state.unsat_branch_clause->num_lits == 0)
+                qdpll->stats.trivial_falsity_empty_clauses_learned++;
+              else if (qdpll->state.unsat_branch_clause->num_lits == 1)
+                qdpll->stats.trivial_falsity_unit_clauses_learned++;
+              else if (qdpll->state.unsat_branch_clause->num_lits == 2)
+                qdpll->stats.trivial_falsity_binary_clauses_learned++;
+              else if (qdpll->state.unsat_branch_clause->num_lits == 3)
+                qdpll->stats.trivial_falsity_ternary_clauses_learned;
+#endif
+              state = QDPLL_SOLVER_STATE_UNSAT;
+            }
+          else
+            {
+
+            }
+          qdpll->state.trivial_falsity_time += (time_stamp () - start_time);
+
+          if (qdpll->options.trivial_falsity_disable_calls_threshold > 0 && 
+              qdpll->state.trivial_falsity_tried >= qdpll->options.trivial_falsity_disable_calls_threshold && 
+              (qdpll->state.trivial_falsity_time / qdpll->state.trivial_falsity_tried) >= 
+              qdpll->options.trivial_falsity_disable_time_threshold)
+            {
+              assert (!qdpll->state.trivial_falsity_disabled);
+              qdpll->state.trivial_falsity_disabled = 1;
+              if (qdpll->options.verbosity >= 1)
+                fprintf (stderr, "Disabling trivial falsity calls: average time is %f, %d calls\n", 
+                         qdpll->state.trivial_falsity_time / qdpll->state.trivial_falsity_tried, 
+                         qdpll->state.trivial_falsity_tried);
+            }
+        }
+
+      /* Check for trivial truth by SAT solver. */
+      if (!qdpll->options.no_trivial_truth &&
+          !qdpll->state.trivial_truth_disabled &&
+          !qdpll->state.no_scheduled_trivial_truth && 
+          state == QDPLL_SOLVER_STATE_UNDEF &&
+          (/* NOTE: '-1' to make sure to test trivial truth before the very first decision */
+           (qdpll->state.cnt_state_undetermined_after_qbcp - 1) & 
+           (((unsigned int)1 << qdpll->options.trivial_truth_pow2_call_interval) - 1)) == 0)
+        {
+          double start_time = time_stamp ();
+          /* Set of most recent failed assumptions used to skip redundant
+             trivial truth tests must have been reset. */
+          qdpll->state.trivial_truth_tried++;
+
+          VarID *vp, *ve;
+          for (vp = qdpll->assigned_vars, ve = qdpll->assigned_vars_top; vp < ve; vp++)
+            {
+              Var *v = VARID2VARPTR (qdpll->pcnf.vars, *vp);
+              assert (QDPLL_VAR_ASSIGNED (v));
+              if (QDPLL_VAR_FORALL (v))
+                {
+
+                }
+              else
+                picosat_assume (qdpll->trivial_truth_solver, 
+                                QDPLL_VAR_ASSIGNED_TRUE (v) ? v->id : -v->id);
+            }
+
+          /* Assign selector variables to disable currently blocked or
+             satisfied clauses in the SAT solver. Selector variables of
+             non-blocked or non-satisfied clauses are set to false. Note that
+             we need to make sure that clauses satisfied by universal literals
+             are also satisfied in the SAT solver by setting the selector
+             variables accordingly. 
+             NOTE: may be costly if we carry out the trivial truth test frequently. */
+              Constraint *c;
+              for (c = qdpll->pcnf.clauses.first; c; c = c->link.next)
+                {
+                  assert (c->trivial_truth_selector);
+                  if (c->qbcp_qbce_blocked || is_clause_satisfied (qdpll, c))
+                    picosat_assume (qdpll->trivial_truth_solver, c->trivial_truth_selector);
+                  else
+                    picosat_assume (qdpll->trivial_truth_solver, -c->trivial_truth_selector);
+                }
+
+#if COMPUTE_STATS
+          unsigned long long int trivial_truth_previous_decisions = 
+            picosat_decisions (qdpll->trivial_truth_solver);
+#endif
+          int sat_result = picosat_sat (qdpll->trivial_truth_solver, 
+					qdpll->options.trivial_truth_decision_limit > 0 ? 
+                                        (int) qdpll->options.trivial_truth_decision_limit : -1);
+#if COMPUTE_STATS
+          unsigned long long int trivial_truth_current_decisions = 
+            picosat_decisions (qdpll->trivial_truth_solver) - trivial_truth_previous_decisions;
+          if (trivial_truth_current_decisions > qdpll->stats.trivial_truth_max_decisions_per_call)
+            qdpll->stats.trivial_truth_max_decisions_per_call = trivial_truth_current_decisions;
+#endif
+          if (sat_result == PICOSAT_SATISFIABLE)
+            {
+#if COMPUTE_STATS
+              assert (!trivial_truth_or_falsity_success);
+              trivial_truth_or_falsity_success = 1;
+              qdpll->stats.trivial_truth_detected++;
+#endif
+              if (qdpll->options.verbosity >= 2)
+                fprintf (stderr, "TRIVIAL TRUTH at decision level %d, %d assigned vars of %d total vars\n", 
+                         qdpll->state.decision_level, (unsigned int)
+                         (qdpll->assigned_vars_top - qdpll->assigned_vars), qdpll->pcnf.used_vars);
+              state = QDPLL_SOLVER_STATE_SAT;
+              assert (!qdpll->state.sat_branch_detected);
+              qdpll->state.sat_branch_detected = 1;
+            }
+          else if (sat_result == PICOSAT_UNSATISFIABLE)
+            {
+
+            }
+          qdpll->state.trivial_truth_time += (time_stamp () - start_time);
+
+          if (qdpll->options.trivial_truth_disable_calls_threshold > 0 && 
+              qdpll->state.trivial_truth_tried >= qdpll->options.trivial_truth_disable_calls_threshold && 
+              (qdpll->state.trivial_truth_time / qdpll->state.trivial_truth_tried) >= 
+              qdpll->options.trivial_truth_disable_time_threshold)
+            {
+              assert (!qdpll->state.trivial_truth_disabled);
+              qdpll->state.trivial_truth_disabled = 1;
+              if (qdpll->options.verbosity >= 1)
+                fprintf (stderr, "Disabling trivial truth calls: average time is %f, %d calls\n", 
+                         qdpll->state.trivial_truth_time / qdpll->state.trivial_truth_tried, 
+                         qdpll->state.trivial_truth_tried);
+            }
+        }
+
       qdpll->state.restarting = 0;
 
       if (state == QDPLL_SOLVER_STATE_UNSAT)
         {
           /* Conflict: analyze conflict and backtrack. */
-          assert (qdpll->result_constraint
-                  && !qdpll->result_constraint->is_cube);
-          assert (is_clause_empty (qdpll, qdpll->result_constraint));
-          assert (!is_clause_satisfied (qdpll, qdpll->result_constraint));
+          assert ((qdpll->result_constraint
+                   && !qdpll->result_constraint->is_cube) || 
+                  qdpll->state.unsat_branch_clause);
+          assert ((qdpll->state.unsat_branch_clause && 
+                   is_clause_empty (qdpll, qdpll->state.unsat_branch_clause)) || 
+                  (!qdpll->state.unsat_branch_clause && 
+                   is_clause_empty (qdpll, qdpll->result_constraint)));
+          assert ((qdpll->state.unsat_branch_clause && 
+                   !is_clause_satisfied (qdpll, qdpll->state.unsat_branch_clause)) || 
+                  (!qdpll->state.unsat_branch_clause && 
+                   !is_clause_satisfied (qdpll, qdpll->result_constraint)));
 
           check_resize_learnt_constraints (qdpll, QDPLL_QTYPE_EXISTS);
 
 #if QDPLL_ASSERT_SOLVE_STATE
-          assert (is_formula_false (qdpll));
-          assert (!is_formula_true (qdpll));
+          assert (qdpll->state.unsat_branch_clause || 
+                  is_formula_false (qdpll));
+          assert (qdpll->state.unsat_branch_clause || 
+                  !is_formula_true (qdpll));
 #endif
           backtrack_level = analyze_conflict (qdpll);
+          if (qdpll->state.unsat_branch_clause)
+            {
+              delete_constraint (qdpll, qdpll->state.unsat_branch_clause);
+              qdpll->state.unsat_branch_clause = 0;
+#if COMPUTE_STATS
+              assert (trivial_truth_or_falsity_success || dynamic_bloqqer_test_success);
+              if (qdpll->state.forced_assignment.antecedent)
+                {
+                  assert (!qdpll->state.forced_assignment.antecedent->derived_by_trivial_truth_or_falsity);
+                  assert (!qdpll->state.forced_assignment.antecedent->derived_by_dynamic_bloqqer);
+                  if (trivial_truth_or_falsity_success)
+                    qdpll->state.forced_assignment.antecedent->derived_by_trivial_truth_or_falsity = 1;
+                  else if (dynamic_bloqqer_test_success)
+                    qdpll->state.forced_assignment.antecedent->derived_by_dynamic_bloqqer = 1;
+                }
+#endif
+            }
 #if COMPUTE_STATS
           qdpll->stats.unsat_results++;
           qdpll->stats.total_unsat_results_dlevels +=
@@ -14820,7 +15884,8 @@ solve (QDPLL * qdpll)
             }
 
           /* Conflict must be fixed now. */
-          assert (!is_clause_empty (qdpll, qdpll->result_constraint));
+          assert (!qdpll->result_constraint || 
+                  !is_clause_empty (qdpll, qdpll->result_constraint));
           qdpll->result_constraint = 0;
         }
       else if (state == QDPLL_SOLVER_STATE_SAT)
@@ -14837,9 +15902,27 @@ solve (QDPLL * qdpll)
           /* Empty formula: analyze solution and backtrack. */
 #if QDPLL_ASSERT_SOLVE_STATE
           assert (!is_formula_false (qdpll));
-          assert (is_formula_true (qdpll));
+          assert (qdpll->state.sat_branch_detected || 
+                  is_formula_true (qdpll));
 #endif
           backtrack_level = analyze_solution (qdpll);
+
+#if COMPUTE_STATS
+          if (qdpll->state.sat_branch_detected)
+            {
+              assert (trivial_truth_or_falsity_success || dynamic_bloqqer_test_success);
+              if (qdpll->state.forced_assignment.antecedent)
+                {
+                  assert (!qdpll->state.forced_assignment.antecedent->derived_by_trivial_truth_or_falsity);
+                  assert (!qdpll->state.forced_assignment.antecedent->derived_by_dynamic_bloqqer);
+                  if (trivial_truth_or_falsity_success)
+                    qdpll->state.forced_assignment.antecedent->derived_by_trivial_truth_or_falsity = 1;
+                  else if (dynamic_bloqqer_test_success)
+                    qdpll->state.forced_assignment.antecedent->derived_by_dynamic_bloqqer = 1;
+                }
+            }
+#endif
+          qdpll->state.sat_branch_detected = 0;
 #if COMPUTE_STATS
           qdpll->stats.sat_results++;
           qdpll->stats.total_sat_results_dlevels +=
@@ -14925,7 +16008,6 @@ solve (QDPLL * qdpll)
   return result;
 }
 
-
 static int
 isnumstr (char *str)
 {
@@ -14942,7 +16024,6 @@ isnumstr (char *str)
   return 1;
 }
 
-
 static void
 reset_clean_up_assignments (QDPLL *qdpll)
 {
@@ -14954,6 +16035,18 @@ reset_clean_up_assignments (QDPLL *qdpll)
                      "dependency manager is not initialized!");
   VarID *p, *e, *old_bcp_ptr = qdpll->old_bcp_ptr;
   Var *vars = qdpll->pcnf.vars;
+
+  VarPtrStack user_assumptions;
+  QDPLL_INIT_STACK (user_assumptions);
+  assert (QDPLL_EMPTY_STACK (qdpll->reschedule_qbce_marked_clauses));
+#ifndef NDEBUG
+  /* To reschedule QBCE after assumptions: we use mark
+     'constraint->qbcp_qbce_multi_purpose_mark', check that it has been fully
+     reset. */
+  Constraint *c;
+  for (c = qdpll->pcnf.clauses.first; c; c = c->link.next)
+    assert (!c->qbcp_qbce_multi_purpose_mark);
+#endif
 
   if (qdpll->assigned_vars != qdpll->assigned_vars_top)
     {
@@ -15000,6 +16093,14 @@ reset_clean_up_assignments (QDPLL *qdpll)
                     (qdpll, &qdpll->qbcp_qbce_marked_clauses, 0, assigned_var->decision_level);
                 }
             }
+	  else if (assigned_var->mode == QDPLL_VARMODE_ASSUMED && 
+		   !assigned_var->is_internal)
+	    {
+	      if (qdpll->options.qbce_preprocessing || 
+		  qdpll->options.qbce_inprocessing || 
+		  !qdpll->options.no_qbce_dynamic)
+                QDPLL_PUSH_STACK (qdpll->mm, user_assumptions, assigned_var);
+	    }
           assigned_var->mode = QDPLL_VARMODE_UNDEF;
           assigned_var->assignment = QDPLL_ASSIGNMENT_UNDEF;
           assigned_var->decision_level = QDPLL_INVALID_DECISION_LEVEL;
@@ -15049,6 +16150,15 @@ reset_clean_up_assignments (QDPLL *qdpll)
 
   assert (qdpll->state.decision_level != QDPLL_INVALID_DECISION_LEVEL);
   qdpll->old_bcp_ptr = qdpll->bcp_ptr = qdpll->assigned_vars_top = qdpll->assigned_vars;
+
+  /* When using QBCE and user assumptions: reset and reinitialize QBCE
+     data structures. */
+  if (QDPLL_COUNT_STACK (user_assumptions))
+    {
+      qbcp_qbce_reset_data_structures (qdpll);
+      qbcp_qbce_init_data_structures (qdpll);
+    }
+  QDPLL_DELETE_STACK (qdpll->mm, user_assumptions);
 }
 
 static void
@@ -15912,11 +17022,31 @@ qdpll_create ()
                      "expecting value greater than zero for elim-univ dynamic switch delay!");
 #endif
 
-  /* Switch on dynamic QBCE by default. */
-  qdpll->options.no_qbce_dynamic = 0;
+  /* Empty formula watching enabled by default, must schedule update. */
+  qdpll->state.empty_formula_watcher_scheduled_update = 1;
+  /* Dynamic QBCE enabled by default. */
+  assert (!qdpll->options.no_qbce_dynamic);
   /* Set QBCE default cutoff values. */
   qdpll->options.qbcp_qbce_max_clause_size = 50;
   qdpll->options.qbcp_qbce_find_witness_max_occs = 50;
+  /* Set default trivial truth options. */
+  qdpll->options.trivial_truth_pow2_call_interval = 10; 
+  qdpll->options.trivial_truth_decision_limit = 1000000; 
+  qdpll->options.trivial_truth_disable_calls_threshold = 1; 
+  qdpll->options.trivial_truth_disable_time_threshold = 5.000; 
+  qdpll->options.trivial_truth_disable_cnf_threshold = 500000; 
+  /* Set default trivial falsity options. */
+  qdpll->options.trivial_falsity_pow2_call_interval = 10; 
+  qdpll->options.trivial_falsity_decision_limit = 1000000; 
+  qdpll->options.trivial_falsity_disable_calls_threshold = 1; 
+  qdpll->options.trivial_falsity_disable_time_threshold = 5.000; 
+  qdpll->options.trivial_falsity_disable_cnf_threshold = 500000; 
+  qdpll->options.trivial_falsity_partial_mus_assumptions = 1; 
+  /* Set default dynamic bloqqer options. */
+  qdpll->options.dyn_bloqqer_pow2_call_interval = 11; 
+  qdpll->options.dyn_bloqqer_disable_calls_threshold = 5; 
+  qdpll->options.dyn_bloqqer_disable_time_threshold = 0.125; 
+  qdpll->options.dyn_bloqqer_disable_cnf_threshold = 500000; 
 
   /* NEW: decision heuristics 'QTYPE' turned out to perform MUCH better than
      the old default one 'SDCL'. */
@@ -15992,6 +17122,10 @@ qdpll_create ()
   QDPLL_PUSH_STACK (qdpll->mm, qdpll->qbcp_qbce_marked_clauses, cstack);
   assert (QDPLL_COUNT_STACK (qdpll->qbcp_qbce_marked_clauses) == 
           qdpll->state.decision_level + 1);
+
+  qdpll->trivial_falsity_solver = picosat_init ();
+  qdpll->trivial_truth_solver = picosat_init ();
+
   return qdpll;
 }
 
@@ -16022,6 +17156,8 @@ qdpll_delete (QDPLL * qdpll)
   QDPLL_DELETE_STACK (mm, qdpll->empty_formula_watching_blit_occs);
   QDPLL_DELETE_STACK (mm, qdpll->qbcp_qbce_maybe_blocked_clauses);
   QDPLL_DELETE_STACK (mm, qdpll->qbcp_qbce_relevant_vars_in_new_input_clauses);
+  QDPLL_DELETE_STACK (mm, qdpll->qdo_dummy_assigned_vars);
+  QDPLL_DELETE_STACK (mm, qdpll->reschedule_qbce_marked_clauses);
   ConstraintPtrStack *csp, *cse;
   /* NOTE: must go until stack.end, not just stack.top, because we did not
      free the stacks after pop. */
@@ -16075,7 +17211,8 @@ qdpll_delete (QDPLL * qdpll)
   /* Delete learnt cubes. */
   qdpll_delete_constraint_list (qdpll, &(qdpll->pcnf.learnt_cubes));
   /* Delete cover sets, if any. */
-  qdpll_delete_constraint_list (qdpll, &(qdpll->cover_sets));
+  if (qdpll->state.collect_full_cover_sets)
+    qdpll_delete_constraint_list (qdpll, &(qdpll->cover_sets));
 
   qdpll_free (mm, qdpll->var_pqueue, qdpll->size_var_pqueue * sizeof (VarID));
   qdpll_free (mm, qdpll->assigned_vars,
@@ -16089,6 +17226,9 @@ qdpll_delete (QDPLL * qdpll)
      IMPORTANT NOTE: all heap-memory managed by DepMan must already have been
      deleted before! */
   qdpll_qdag_dep_man_delete ((QDPLLDepManQDAG *) qdpll->dm);
+
+  picosat_reset (qdpll->trivial_falsity_solver);
+  picosat_reset (qdpll->trivial_truth_solver);
 
   qdpll_free (mm, qdpll, sizeof (QDPLL));
   qdpll_delete_mem_man (mm);
@@ -16192,10 +17332,229 @@ qdpll_configure (QDPLL * qdpll, char *configure_str)
     {
       qdpll->options.no_qbce_dynamic = 1;
     }
-  else if (!strcmp (configure_str, "--empty-formula-watching"))
+  else if (!strcmp (configure_str, "--no-empty-formula-watching"))
     {
-      qdpll->options.empty_formula_watching = 1;
-      qdpll->state.empty_formula_watcher_scheduled_update = 1;
+      qdpll->options.no_empty_formula_watching = 1;
+      qdpll->state.empty_formula_watcher_scheduled_update = 0;
+    }
+  else if (!strcmp (configure_str, "--no-trivial-falsity"))
+    {
+      qdpll->options.no_trivial_falsity = 1;
+    }
+  else if (!strncmp
+           (configure_str, "--trivial-falsity-pow2-call-interval=", 
+            strlen ("--trivial-falsity-pow2-call-interval=")))
+    {
+      configure_str += strlen ("--trivial-falsity-pow2-call-interval=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          if (res < 0)
+            qdpll->options.trivial_falsity_pow2_call_interval = 0;
+          else if (res > 31)
+            qdpll->options.trivial_falsity_pow2_call_interval = 31;
+          else
+            qdpll->options.trivial_falsity_pow2_call_interval = res;
+        }
+      else
+        result = "Expecting number after '--trivial-falsity-pow2-call-interval='";
+    }
+  else if (!strncmp
+           (configure_str, "--dyn-bloqqer-pow2-call-interval=", 
+            strlen ("--dyn-bloqqer-pow2-call-interval=")))
+    {
+      configure_str += strlen ("--dyn-bloqqer-pow2-call-interval=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          if (res < 0)
+            qdpll->options.dyn_bloqqer_pow2_call_interval = 0;
+          else if (res > 31)
+            qdpll->options.dyn_bloqqer_pow2_call_interval = 31;
+          else
+            qdpll->options.dyn_bloqqer_pow2_call_interval = res;
+        }
+      else
+        result = "Expecting number after '--dyn-bloqqer-pow2-call-interval='";
+    }
+  else if (!strncmp
+           (configure_str, "--dyn-bloqqer-disable-calls-threshold=", 
+            strlen ("--dyn-bloqqer-disable-calls-threshold=")))
+    {
+      configure_str += strlen ("--dyn-bloqqer-disable-calls-threshold=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          qdpll->options.dyn_bloqqer_disable_calls_threshold = res;
+        }
+      else
+        result = "Expecting number after '--dyn-bloqqer-disable-calls-threshold='";
+    }
+  else if (!strncmp (configure_str, "--dyn-bloqqer-disable-time-threshold=", 
+                  strlen ("--dyn-bloqqer-disable-time-threshold=")))
+    {
+      configure_str += strlen ("--dyn-bloqqer-disable-time-threshold=");
+      if (isnumstr (configure_str))
+        qdpll->options.dyn_bloqqer_disable_time_threshold = strtod (configure_str, 0);
+      else
+        result = "Expecting real number after '--dyn-bloqqer-disable-time-threshold='";
+    }
+  else if (!strncmp
+           (configure_str, "--dyn-bloqqer-disable-cnf-threshold=", 
+            strlen ("--dyn-bloqqer-disable-cnf-threshold=")))
+    {
+      configure_str += strlen ("--dyn-bloqqer-disable-cnf-threshold=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          qdpll->options.dyn_bloqqer_disable_cnf_threshold = res;
+        }
+      else
+        result = "Expecting number after '--dyn-bloqqer-disable-cnf-threshold='";
+    }
+  else if (!strncmp
+           (configure_str, "--trivial-falsity-disable-cnf-threshold=", 
+            strlen ("--trivial-falsity-disable-cnf-threshold=")))
+    {
+      configure_str += strlen ("--trivial-falsity-disable-cnf-threshold=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          qdpll->options.trivial_falsity_disable_cnf_threshold = res;
+        }
+      else
+        result = "Expecting number after '--trivial-falsity-disable-cnf-threshold='";
+    }
+  else if (!strncmp
+           (configure_str, "--trivial-falsity-disable-calls-threshold=", 
+            strlen ("--trivial-falsity-disable-calls-threshold=")))
+    {
+      configure_str += strlen ("--trivial-falsity-disable-calls-threshold=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          qdpll->options.trivial_falsity_disable_calls_threshold = res;
+        }
+      else
+        result = "Expecting number after '--trivial-falsity-disable-calls-threshold='";
+    }
+  else
+    if (!strncmp (configure_str, "--trivial-falsity-disable-time-threshold=", 
+                  strlen ("--trivial-falsity-disable-time-threshold=")))
+    {
+      configure_str += strlen ("--trivial-falsity-disable-time-threshold=");
+      if (isnumstr (configure_str))
+        qdpll->options.trivial_falsity_disable_time_threshold = strtod (configure_str, 0);
+      else
+        result = "Expecting real number after '--trivial-falsity-disable-time-threshold='";
+    }
+  else if (!strncmp
+           (configure_str, "--trivial-falsity-decision-limit=", 
+            strlen ("--trivial-falsity-decision-limit=")))
+    {
+      configure_str += strlen ("--trivial-falsity-decision-limit=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          qdpll->options.trivial_falsity_decision_limit = res;
+        }
+      else
+        result = "Expecting number after '--trivial-falsity-decision-limit='";
+    }
+  else if (!strcmp (configure_str, "--trivial-falsity-partial-mus-assumptions"))
+    {
+      qdpll->options.trivial_falsity_partial_mus_assumptions = 1;
+    }
+  else if (!strcmp (configure_str, "--no-trivial-truth"))
+    {
+      qdpll->options.no_trivial_truth = 1;
+    }
+  else if (!strncmp
+           (configure_str, "--trivial-truth-pow2-call-interval=", 
+            strlen ("--trivial-truth-pow2-call-interval=")))
+    {
+      configure_str += strlen ("--trivial-truth-pow2-call-interval=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          if (res < 0)
+            qdpll->options.trivial_truth_pow2_call_interval = 0;
+          else if (res > 31)
+            qdpll->options.trivial_truth_pow2_call_interval = 31;
+          else
+            qdpll->options.trivial_truth_pow2_call_interval = res;
+        }
+      else
+        result = "Expecting number after '--trivial-truth-pow2-call-interval='";
+    }
+  else if (!strncmp
+           (configure_str, "--trivial-truth-disable-calls-threshold=", 
+            strlen ("--trivial-truth-disable-calls-threshold=")))
+    {
+      configure_str += strlen ("--trivial-truth-disable-calls-threshold=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          qdpll->options.trivial_truth_disable_calls_threshold = res;
+        }
+      else
+        result = "Expecting number after '--trivial-truth-disable-calls-threshold='";
+    }
+  else
+    if (!strncmp (configure_str, "--trivial-truth-disable-time-threshold=", 
+                  strlen ("--trivial-truth-disable-time-threshold=")))
+    {
+      configure_str += strlen ("--trivial-truth-disable-time-threshold=");
+      if (isnumstr (configure_str))
+        qdpll->options.trivial_truth_disable_time_threshold = strtod (configure_str, 0);
+      else
+        result = "Expecting real number after '--trivial-truth-disable-time-threshold='";
+    }
+  else if (!strncmp
+           (configure_str, "--trivial-truth-decision-limit=", 
+            strlen ("--trivial-truth-decision-limit=")))
+    {
+      configure_str += strlen ("--trivial-truth-decision-limit=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          qdpll->options.trivial_truth_decision_limit = res;
+        }
+      else
+        result = "Expecting number after '--trivial-truth-decision-limit='";
+    }
+  else if (!strncmp
+           (configure_str, "--trivial-truth-disable-cnf-threshold=", 
+            strlen ("--trivial-truth-disable-cnf-threshold=")))
+    {
+      configure_str += strlen ("--trivial-truth-disable-cnf-threshold=");
+      if (isnumstr (configure_str))
+        {
+          int res = atoi (configure_str);
+          qdpll->options.trivial_truth_disable_cnf_threshold = res;
+        }
+      else
+        result = "Expecting number after '--trivial-truth-disable-cnf-threshold='";
+    }
+  else if (!strcmp (configure_str, "--no-dynamic-bloqqer"))
+    {
+      qdpll->options.no_dynamic_bloqqer = 1;
+    }
+  else if (!strcmp (configure_str, "--dyn-bloqqer-ignore-sat"))
+    {
+      qdpll->options.dyn_bloqqer_ignore_sat = 1;
+    }
+  else if (!strcmp (configure_str, "--dyn-bloqqer-ignore-unsat"))
+    {
+      qdpll->options.dyn_bloqqer_ignore_unsat = 1;
+    }
+  else
+    if (!strncmp
+        (configure_str, "--bloqqer-option=", strlen ("--bloqqer-option=")))
+    {
+      QDPLL_ABORT_QDPLL (1, "not yet supported: passing options to Bloqqer");
+      configure_str += strlen ("--bloqqer-option=");
+      bloqqer_set_option (configure_str);
     }
   else if (!strcmp (configure_str, "--traditional-qcdcl"))
     {
@@ -16214,8 +17573,12 @@ qdpll_configure (QDPLL * qdpll, char *configure_str)
   else if (!strcmp (configure_str, "--incremental-use"))
     {
       qdpll->options.incremental_use = 1;
-      /* Any QBCE variant must be disabled in incremental use. */
-      qdpll->options.no_qbce_dynamic = 1;
+      /* Empty formula watching, dynamic bloqqer tests, trivial falsity, and
+         trivial truth tests must be disabled in incremental use. */
+      qdpll->options.no_empty_formula_watching = 1;
+      qdpll->options.no_dynamic_bloqqer = 1;
+      qdpll->options.no_trivial_falsity = 1;
+      qdpll->options.no_trivial_truth = 1;
     }
   else if (!strcmp (configure_str, "--no-lazy-qpup"))
     {
@@ -17399,10 +18762,6 @@ qdpll_sat (QDPLL * qdpll)
                      "Number of calls of 'qdpll_sat()' has reached UINT_MAX.");
   qdpll->state.num_sat_calls++;
 
-  assert (!(qdpll->options.long_dist_res && !qdpll->options.depman_simple));
-  QDPLL_ABORT_QDPLL(qdpll->options.long_dist_res && !qdpll->options.depman_simple, 
-                    "(temporary restriction) Must combine '--long-dist-res' with '--dep-man=simple'!");
-
   QDPLL_ABORT_QDPLL (qdpll->state.num_sat_calls > 1 && qdpll->state.pending_cubes_check && 
                      !qdpll->options.incremental_use, 
                      "Must configure by '--incremental-use' to enable incremental use!");
@@ -17433,22 +18792,54 @@ qdpll_sat (QDPLL * qdpll)
                      "must enable at most one of dynamic, inprocessing, or preprocessing QBCE!");
 
   QDPLL_ABORT_QDPLL (qdpll->options.incremental_use && 
-                     (qdpll->options.qbce_preprocessing || 
-                      qdpll->options.qbce_inprocessing || 
-                      !qdpll->options.no_qbce_dynamic), "temporarily disabled: QBCE in incremental mode");
-
-  QDPLL_ABORT_QDPLL (qdpll->options.incremental_use && 
-                     qdpll->options.empty_formula_watching, 
+                     !qdpll->options.no_empty_formula_watching, 
                      "temporarily disabled: empty-formula-watching in incremental mode");
 
-  QDPLL_ABORT_QDPLL ((!qdpll->options.no_qbce_dynamic || qdpll->options.qbce_preprocessing || 
-                      qdpll->options.qbce_inprocessing) && qdpll->options.trace, 
-                     "Trace mode must not be combined with QBCE: must disable any variant of QBCE");
+  QDPLL_ABORT_QDPLL (qdpll->options.incremental_use && !qdpll->options.depman_simple, 
+                     "must use '--dep-man=simple' with incremental mode!");
 
-  QDPLL_ABORT_QDPLL (qdpll->options.incremental_use && COLLECT_FULL_COVER_SETS && 
+  if (qdpll->options.trace && 
+      (!qdpll->options.no_qbce_dynamic || 
+       qdpll->options.qbce_preprocessing || 
+       qdpll->options.qbce_inprocessing || 
+       !qdpll->options.no_trivial_falsity || 
+       !qdpll->options.no_trivial_truth || 
+       !qdpll->options.no_dynamic_bloqqer))
+    fprintf (stderr, "WARNING: tracing is not yet fully compatible with generalized axioms.\n");
+
+  /* In incremental mode: when using QBCE then stored cover sets may not cover
+     clauses which were blocked at the time when the cover sets are
+     produced. Hence never collect cover sets. Further set QBCE limits to
+     zero, i.e. disabling the limits. */
+  if (qdpll->options.incremental_use && !qdpll->options.qbce_preprocessing && 
+      !qdpll->options.qbce_inprocessing && qdpll->options.no_qbce_dynamic)
+    qdpll->state.collect_full_cover_sets = 1;
+  else if (qdpll->options.incremental_use)
+    {
+      qdpll->options.qbcp_qbce_max_clause_size = 0;
+      qdpll->options.qbcp_qbce_find_witness_max_occs = 0;
+    }
+
+  QDPLL_ABORT_QDPLL (qdpll->options.incremental_use && 
                      (qdpll->options.qbce_preprocessing || 
-                      qdpll->options.qbce_inprocessing || !qdpll->options.no_qbce_dynamic), 
-                     "temporarily disabled: collecting cover sets cannot be combined with QBCE");
+                      qdpll->options.qbce_inprocessing || 
+                      !qdpll->options.no_qbce_dynamic) && 
+                     (qdpll->options.qbcp_qbce_max_clause_size || 
+                      qdpll->options.qbcp_qbce_find_witness_max_occs), 
+                     "QBCE limits temporarily disabled in incremental mode, must set them to 0");
+
+  if (qdpll->options.verbosity >= 3)
+    {
+      fprintf (stderr, "Set state 'collect_full_cover_sets': %u\n", 
+	       qdpll->state.collect_full_cover_sets);
+      fprintf (stderr, "Set state 'qbcp_qbce_max_clause_size': %u\n", 
+	       qdpll->options.qbcp_qbce_max_clause_size);
+      fprintf (stderr, "Set state 'qbcp_qbce_find_witness_max_occs': %u\n", 
+	       qdpll->options.qbcp_qbce_find_witness_max_occs);
+    }
+
+  QDPLL_ABORT_QDPLL (!qdpll->options.no_dynamic_bloqqer && qdpll->options.incremental_use, 
+                     "temporarily disabled: dynamic Bloqqer and incremental use");
 
   QDPLL_ABORT_QDPLL((!qdpll->options.no_lazy_qpup && !qdpll->options.traditional_qcdcl) && 
                     qdpll->options.trace, 
@@ -17568,6 +18959,7 @@ qdpll_get_value (QDPLL * qdpll, VarID id)
                  matter for reconstruction. */
               if (qdo_has_outer_scope_unassigned_vars (qdpll, outer, qdpll->result))
                 {
+                  assert (QDPLL_COUNT_STACK (qdpll->qdo_dummy_assigned_vars) == 0);
                   VarID *p, *e;
                   for (p = outer->vars.start, e = outer->vars.top; p < e; p++)
                     {
@@ -17581,6 +18973,7 @@ qdpll_get_value (QDPLL * qdpll, VarID id)
                           var->assignment = QDPLL_ASSIGNMENT_FALSE;
                           var->decision_level = qdpll->state.decision_level;
                           var->mode = QDPLL_VARMODE_PURE;
+                          QDPLL_PUSH_STACK (qdpll->mm, qdpll->qdo_dummy_assigned_vars, var->id);
                         }
                     }
                 }
@@ -18517,26 +19910,132 @@ qdpll_print_stats (QDPLL * qdpll)
            (qdpll->stats.elim_univ_vars_clauses_seen / (float)qdpll->pcnf.clauses.cnt) : 0, qdpll->pcnf.clauses.cnt);
   float clauses_per_tried = univ_tried ? 
            (qdpll->stats.elim_univ_vars_clauses_seen / (float) univ_tried) : 0;
-  fprintf (stderr, "Total cover-by-assignment elim-univ clauses seen per tried:  %f which is %f of input CNF size %d\n", 
+  fprintf (stderr, "Total cover-by-assignment elim-univ clauses seen per tried:  %f which is %f of input CNF size %d\n\n", 
            clauses_per_tried, 
            qdpll->pcnf.clauses.cnt ? (clauses_per_tried / qdpll->pcnf.clauses.cnt) : 0, qdpll->pcnf.clauses.cnt);
 #endif
 
-#if COMPUTE_STATS_BTLEVELS_SIZE
-  fprintf (stderr, "Cumulative backtrack level stats:\n");
-  fprintf (stderr, "<= %4d: %lld\n", 0, qdpll->stats.btlevels[0]);
-  unsigned int i;
-  for (i = 1; i < COMPUTE_STATS_BTLEVELS_SIZE - 1; i++)
-    fprintf (stderr, "<= %4d: %lld\n", 1 << (i - 1),
-             qdpll->stats.btlevels[i]);
-  fprintf (stderr, "total: %lld\n",
-           qdpll->stats.btlevels[COMPUTE_STATS_BTLEVELS_SIZE - 1]);
+  fprintf (stderr, "Total trivial falsity disabled: %s\n", qdpll->state.trivial_falsity_disabled ? "yes" : "no");
+  fprintf (stderr, "Total trivial falsity time: %f (per try: %f )\n", qdpll->state.trivial_falsity_time, 
+           qdpll->state.trivial_falsity_tried ? (qdpll->state.trivial_falsity_time / qdpll->state.trivial_falsity_tried) : 0);
+  fprintf (stderr, "Total trivial falsity tried: %d\n", qdpll->state.trivial_falsity_tried);
+  fprintf (stderr, "Total trivial falsity detected: %llu\n", qdpll->stats.trivial_falsity_detected);
+  fprintf (stderr, "Total trivial falsity effective empty: %u\n", qdpll->stats.trivial_falsity_empty_clauses_learned);
+  fprintf (stderr, "Total trivial falsity effective unit: %u\n", qdpll->stats.trivial_falsity_unit_clauses_learned);
+  fprintf (stderr, "Total trivial falsity effective binary: %u\n", qdpll->stats.trivial_falsity_binary_clauses_learned);
+  fprintf (stderr, "Total trivial falsity effective ternary: %u\n", qdpll->stats.trivial_falsity_ternary_clauses_learned);
+  fprintf (stderr, "Total trivial falsity propagations: %llu (per try: %f )\n", picosat_propagations (qdpll->trivial_falsity_solver), 
+           qdpll->state.trivial_falsity_tried ? (picosat_propagations (qdpll->trivial_falsity_solver) / (float)qdpll->state.trivial_falsity_tried) : 0);
+  fprintf (stderr, "Total trivial falsity decisions: %llu (per try: %f max per try: %llu )\n", picosat_decisions (qdpll->trivial_falsity_solver), 
+           qdpll->state.trivial_falsity_tried ? (picosat_decisions (qdpll->trivial_falsity_solver) / (float)qdpll->state.trivial_falsity_tried) : 0, 
+           qdpll->stats.trivial_falsity_max_decisions_per_call);
+  fprintf (stderr, "Total trivial falsity conflicts: %u (per try: %f )\n", picosat_conflicts (qdpll->trivial_falsity_solver), 
+           qdpll->state.trivial_falsity_tried ? (picosat_conflicts (qdpll->trivial_falsity_solver) / (float)qdpll->state.trivial_falsity_tried) : 0);
+  fprintf (stderr, "Total trivial falsity assumptions (per detected): passed %llu ( %f ), failed %llu ( %f ), lits in clause %llu ( %f )\n", qdpll->stats.trivial_falsity_assumptions_passed, 
+           qdpll->stats.trivial_falsity_detected ? (qdpll->stats.trivial_falsity_assumptions_passed / (float) qdpll->stats.trivial_falsity_detected) : 0, qdpll->stats.trivial_falsity_assumptions_failed, 
+           qdpll->stats.trivial_falsity_detected ? (qdpll->stats.trivial_falsity_assumptions_failed / (float) qdpll->stats.trivial_falsity_detected) : 0, qdpll->stats.trivial_falsity_lits_in_falsity_clause, 
+           qdpll->stats.trivial_falsity_detected ? (qdpll->stats.trivial_falsity_lits_in_falsity_clause / (float) qdpll->stats.trivial_falsity_detected) : 0);
+  fprintf (stderr, "Total trivial falsity MUS assumptions time: %f\n", qdpll->stats.trivial_falsity_mus_assumptions_time);
+  fprintf (stderr, "Total trivial falsity failed assumptions before MUS %llu after MUS %llu ( avg: %f )\n", 
+           qdpll->stats.trivial_falsity_assumptions_failed_before_mus, 
+           qdpll->stats.trivial_falsity_assumptions_failed_after_mus, 
+           qdpll->stats.trivial_falsity_assumptions_failed_before_mus ? 
+           (qdpll->stats.trivial_falsity_assumptions_failed_after_mus / 
+            (float) qdpll->stats.trivial_falsity_assumptions_failed_before_mus) : 0);
 
-  fprintf (stderr, "<= %4d: %lld\n", 0, qdpll->stats.btlevels_lin[0]);
-  for (i = 1; i < COMPUTE_STATS_BTLEVELS_SIZE - 1; i++)
-    fprintf (stderr, "<= %4d: %lld\n", 5 * i, qdpll->stats.btlevels_lin[i]);
-  fprintf (stderr, "\n");
-#endif
+  fprintf (stderr, "Total trivial falsity partial MUS remove existentials calls %llu removed %llu (avg. %f ) reduced-univs %llu (avg. %f ) sat-solver-calls %llu (avg. %f )\n", 
+           qdpll->stats.trivial_falsity_remove_inner_existentials_calls, 
+           qdpll->stats.trivial_falsity_remove_inner_existentials_removed, 
+           qdpll->stats.trivial_falsity_remove_inner_existentials_calls ? 
+           (qdpll->stats.trivial_falsity_remove_inner_existentials_removed / 
+            (float) qdpll->stats.trivial_falsity_remove_inner_existentials_calls) : 0, 
+           qdpll->stats.trivial_falsity_remove_inner_existentials_reduced_univs, 
+           qdpll->stats.trivial_falsity_remove_inner_existentials_calls ? 
+           (qdpll->stats.trivial_falsity_remove_inner_existentials_reduced_univs / 
+            (float) qdpll->stats.trivial_falsity_remove_inner_existentials_calls) : 0, 
+           qdpll->stats.trivial_falsity_remove_inner_existentials_sat_calls, 
+           qdpll->stats.trivial_falsity_remove_inner_existentials_calls ? 
+           (qdpll->stats.trivial_falsity_remove_inner_existentials_sat_calls / 
+            (float) qdpll->stats.trivial_falsity_remove_inner_existentials_calls) : 0);
+
+  fprintf (stderr, "Total trivial falsity partial MUS rounds %llu (avg. per call %f ) max %llu\n", 
+    qdpll->stats.trivial_falsity_remove_inner_existentials_rounds, 
+    qdpll->stats.trivial_falsity_remove_inner_existentials_calls ? 
+    (qdpll->stats.trivial_falsity_remove_inner_existentials_rounds / 
+     (float) qdpll->stats.trivial_falsity_remove_inner_existentials_calls) : 0, 
+           qdpll->stats.trivial_falsity_remove_inner_existentials_max_rounds);
+
+  fprintf (stderr, "Total trivial falsity unit clauses: %llu (avg per detected: %f )\n", 
+           qdpll->stats.trivial_falsity_unit_clauses, qdpll->stats.trivial_falsity_detected ? 
+           (qdpll->stats.trivial_falsity_unit_clauses / (float) qdpll->stats.trivial_falsity_detected) : 0);
+  fprintf (stderr, "Total trivial falsity empty clauses: %llu (avg per detected: %f )\n", 
+           qdpll->stats.trivial_falsity_conflicting_clauses, qdpll->stats.trivial_falsity_detected ? 
+           (qdpll->stats.trivial_falsity_conflicting_clauses / (float) qdpll->stats.trivial_falsity_detected) : 0);
+  fprintf (stderr, "Total trivial falsity deleted clauses: %llu (avg per detected: %f )\n\n", 
+           qdpll->stats.trivial_falsity_deleted_clauses, qdpll->stats.trivial_falsity_detected ? 
+           (qdpll->stats.trivial_falsity_deleted_clauses / (float) qdpll->stats.trivial_falsity_detected) : 0);
+
+
+  fprintf (stderr, "Total trivial truth disabled: %s\n", qdpll->state.trivial_truth_disabled ? "yes" : "no");
+  fprintf (stderr, "Total trivial truth time: %f (per try: %f )\n", qdpll->state.trivial_truth_time, 
+           qdpll->state.trivial_truth_tried ? (qdpll->state.trivial_truth_time / qdpll->state.trivial_truth_tried) : 0);
+  fprintf (stderr, "Total trivial truth tried: %d\n", qdpll->state.trivial_truth_tried);
+  fprintf (stderr, "Total trivial truth detected: %llu\n", qdpll->stats.trivial_truth_detected);
+  fprintf (stderr, "Total trivial truth propagations: %llu (per try: %f )\n", 
+	   picosat_propagations (qdpll->trivial_truth_solver), 
+           qdpll->state.trivial_truth_tried ? (picosat_propagations (qdpll->trivial_truth_solver) / 
+					       (float)qdpll->state.trivial_truth_tried) : 0);
+  fprintf (stderr, "Total trivial truth decisions: %llu (per try: %f max per try: %llu )\n", 
+	   picosat_decisions (qdpll->trivial_truth_solver), 
+           qdpll->state.trivial_truth_tried ? (picosat_decisions (qdpll->trivial_truth_solver) / 
+					       (float)qdpll->state.trivial_truth_tried) : 0, 
+           qdpll->stats.trivial_truth_max_decisions_per_call);
+  fprintf (stderr, "Total trivial truth conflicts: %u (per try: %f )\n", picosat_conflicts (qdpll->trivial_truth_solver), 
+           qdpll->state.trivial_truth_tried ? (picosat_conflicts (qdpll->trivial_truth_solver) / (float)qdpll->state.trivial_truth_tried) : 0);
+
+  fprintf (stderr, "Total trivial truth unit cubes: %llu (avg per detected: %f )\n", 
+           qdpll->stats.trivial_truth_unit_cubes, qdpll->stats.trivial_truth_detected ? 
+           (qdpll->stats.trivial_truth_unit_cubes / (float) qdpll->stats.trivial_truth_detected) : 0);
+  fprintf (stderr, "Total trivial truth empty cubes: %llu (avg per detected: %f )\n", 
+           qdpll->stats.trivial_truth_satisfied_cubes, qdpll->stats.trivial_truth_detected ? 
+           (qdpll->stats.trivial_truth_satisfied_cubes / (float) qdpll->stats.trivial_truth_detected) : 0);
+  fprintf (stderr, "Total trivial truth deleted cubes: %llu (avg per detected: %f )\n\n", 
+           qdpll->stats.trivial_truth_deleted_cubes, qdpll->stats.trivial_truth_detected ? 
+           (qdpll->stats.trivial_truth_deleted_cubes / (float) qdpll->stats.trivial_truth_detected) : 0);
+
+  fprintf (stderr, "Total dynamic Bloqqer calls disabled: %s\n", qdpll->state.dyn_bloqqer_disabled ? "yes" : "no");
+  fprintf (stderr, "Total dynamic Bloqqer calls: %u\n", qdpll->state.dyn_bloqqer_calls);
+  fprintf (stderr, "Total dynamic Bloqqer result sat: %u\n", qdpll->stats.dyn_bloqqer_result_sat);
+  fprintf (stderr, "Total dynamic Bloqqer result unsat: %u\n", qdpll->stats.dyn_bloqqer_result_unsat);
+  fprintf (stderr, "Total dynamic Bloqqer max. result unknown streak: %u\n", qdpll->stats.dyn_bloqqer_max_result_unknown_streak);
+
+  unsigned int bloqqer_success = 
+    qdpll->stats.dyn_bloqqer_result_sat + qdpll->stats.dyn_bloqqer_result_unsat;
+  fprintf (stderr, "Total dynamic Bloqqer success dlevels: %llu ( %f per success)\n", 
+           qdpll->stats.dyn_bloqqer_success_dlevels, bloqqer_success ? 
+           qdpll->stats.dyn_bloqqer_success_dlevels / (float)bloqqer_success : 0);
+
+  fprintf (stderr, "Total dynamic Bloqqer time: %f ( %f per call)\n", qdpll->state.dyn_bloqqer_time, 
+           qdpll->state.dyn_bloqqer_calls ? qdpll->state.dyn_bloqqer_time / qdpll->state.dyn_bloqqer_calls : 0);
+  fprintf (stderr, "Total dynamic Bloqqer unit cubes: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_bloqqer_unit_cubes, qdpll->stats.dyn_bloqqer_result_sat ? 
+           (qdpll->stats.dyn_bloqqer_unit_cubes / (float) qdpll->stats.dyn_bloqqer_result_sat) : 0);
+  fprintf (stderr, "Total dynamic Bloqqer empty cubes: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_bloqqer_satisfied_cubes, qdpll->stats.dyn_bloqqer_result_sat ? 
+           (qdpll->stats.dyn_bloqqer_satisfied_cubes / (float) qdpll->stats.dyn_bloqqer_result_sat) : 0);
+  fprintf (stderr, "Total dynamic Bloqqer deleted cubes: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_bloqqer_deleted_cubes, qdpll->stats.dyn_bloqqer_result_sat ? 
+           (qdpll->stats.dyn_bloqqer_deleted_cubes / (float) qdpll->stats.dyn_bloqqer_result_sat) : 0);
+
+  fprintf (stderr, "Total dynamic Bloqqer unit clauses: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_bloqqer_unit_clauses, qdpll->stats.dyn_bloqqer_result_unsat ? 
+           (qdpll->stats.dyn_bloqqer_unit_clauses / (float) qdpll->stats.dyn_bloqqer_result_unsat) : 0);
+  fprintf (stderr, "Total dynamic Bloqqer empty clauses: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_bloqqer_conflicting_clauses, qdpll->stats.dyn_bloqqer_result_unsat ? 
+           (qdpll->stats.dyn_bloqqer_conflicting_clauses / (float) qdpll->stats.dyn_bloqqer_result_unsat) : 0);
+  fprintf (stderr, "Total dynamic Bloqqer deleted clauses: %llu (avg per detected: %f )\n\n", 
+           qdpll->stats.dyn_bloqqer_deleted_clauses, qdpll->stats.dyn_bloqqer_result_unsat ? 
+           (qdpll->stats.dyn_bloqqer_deleted_clauses / (float) qdpll->stats.dyn_bloqqer_result_unsat) : 0);
 
   fprintf (stderr, "---------------------------------------\n\n");
 #endif
@@ -18622,6 +20121,20 @@ qdpll_reset (QDPLL * qdpll)
       qdpll->qdo_assignment_table = 0;
     }
 
+  VarID *p, *e;
+  for (p = qdpll->qdo_dummy_assigned_vars.start, 
+         e = qdpll->qdo_dummy_assigned_vars.top; p < e; p++)
+    {
+      Var *var = VARID2VARPTR (qdpll->pcnf.vars, *p);
+      assert (var->assignment != QDPLL_ASSIGNMENT_UNDEF);
+      assert (var->mode != QDPLL_VARMODE_UNDEF);
+      assert (var->decision_level != QDPLL_INVALID_DECISION_LEVEL);
+      var->assignment = QDPLL_ASSIGNMENT_UNDEF;
+      var->mode = QDPLL_VARMODE_UNDEF;
+      var->decision_level = QDPLL_INVALID_DECISION_LEVEL;
+    }
+  QDPLL_RESET_STACK (qdpll->qdo_dummy_assigned_vars);
+
   qdpll->state.qdo_no_schedule_model_reconstruction = 0;
 
   qdpll->result = QDPLL_RESULT_UNKNOWN;
@@ -18631,6 +20144,21 @@ qdpll_reset (QDPLL * qdpll)
       delete_constraint (qdpll, qdpll->assumption_lits_constraint);
       qdpll->assumption_lits_constraint = 0;
     }
+
+  /* Must reset stack of clauses pending to be checked by QBCE. For each
+     decision level, we apply QBCE until saturation under the current
+     assignment, unless there is a conflict or empty formula detected
+     earlier. Must also reset offsets of pairs on working queue. 
+     NOTE: we must do this BEFORE rescheduling QBCE in function
+     'reset_clean_up_assignments' below. */
+  while (!QDPLL_EMPTY_STACK (qdpll->qbcp_qbce_maybe_blocked_clauses))
+    {
+      QBCENonBlockedWitness pair = 
+        QDPLL_POP_STACK (qdpll->qbcp_qbce_maybe_blocked_clauses);
+      if (pair.offset.witness_in_witness_list != QDPLL_INVALID_WATCHER_POS)
+        qbcp_qbce_reset_offset_in_working_queue (qdpll, pair);
+    }
+
   reset_clean_up_assignments (qdpll);
 
   QDPLL_RESET_STACK(qdpll->user_given_assumptions); 
@@ -18640,18 +20168,22 @@ qdpll_reset (QDPLL * qdpll)
 
   /* Reset QBCE related data structures. */
 
-  /* Must reset stack of clauses pending to be checked by QBCE. For each
-     decision level, we apply QBCE until saturation under the current
-     assignment, unless there is a conflict or empty formula detected
-     earlier. Must also reset offsets of pairs on working queue. */
-  while (!QDPLL_EMPTY_STACK (qdpll->qbcp_qbce_maybe_blocked_clauses))
-    {
-      QBCENonBlockedWitness pair = 
-        QDPLL_POP_STACK (qdpll->qbcp_qbce_maybe_blocked_clauses);
-      if (pair.offset.witness_in_witness_list != QDPLL_INVALID_WATCHER_POS)
-        qbcp_qbce_reset_offset_in_working_queue (qdpll, pair);
-    }
+#if QBCP_QBCE_DYNAMIC_ASSIGNMENT_ELIM_UNIV_VARS
+  /* When resetting solver, make sure to enable elimination of universal
+     literals from learned cubes again, as it may have been disabled dynamically
+     in the previous call. */
+  qdpll->state.elim_univ_dynamic_disabled = 0;
+  qdpll->state.elim_univ_tried = 0;
+  qdpll->state.elim_univ_eliminated = 0;
+  qdpll->state.univ_vars_cur_collected = 0;
+#endif
 
+  qdpll->state.cnt_state_undetermined_after_qbcp = 0;
+
+  /* Enable checks for generalized axioms again. */
+  qdpll->state.trivial_falsity_disabled = 0;
+  qdpll->state.trivial_truth_disabled = 0;
+  qdpll->state.dyn_bloqqer_disabled = 0;
 }
 
 
@@ -18672,6 +20204,16 @@ void qdpll_assume (QDPLL * qdpll, LitID id)
   QDPLL_ABORT_QDPLL(!qdpll_is_var_declared (qdpll, LIT2VARID(id)), 
                     "Variable is not declared!");
   QDPLL_PUSH_STACK(qdpll->mm, qdpll->user_given_assumptions, id);
+  /* Reschedule blocked clauses found in preprocessing, if any. */
+  if ((qdpll->options.qbce_preprocessing || qdpll->options.qbce_inprocessing || 
+       !qdpll->options.no_qbce_dynamic) && 
+      QDPLL_COUNT_STACK (qdpll->qbcp_qbce_blocked_clauses.start[0]))
+    {
+      Var *var = LIT2VARPTR(qdpll->pcnf.vars, id); 
+      QDPLL_ABORT_QDPLL (var->is_internal, "Unexpected ID of internal variable!");
+      if (QDPLL_VAR_EXISTS (var))
+        qbcp_qbce_reschedule_from_exists_var (qdpll, var, id);
+    }
 }
 
 
@@ -18771,7 +20313,6 @@ void qdpll_reset_stats (QDPLL * qdpll)
 #endif
 }
 
-
 /* Discard all learned constraints and cover sets. */
 void qdpll_reset_learned_constraints (QDPLL * qdpll)
 {
@@ -18779,11 +20320,9 @@ void qdpll_reset_learned_constraints (QDPLL * qdpll)
   /* Discard all learned cubes. */
   check_resize_learnt_constraints_aux (qdpll, &qdpll->pcnf.learnt_cubes, 
                                        UINT_MAX, QDPLL_QTYPE_FORALL);
-
   /* Discard all learned clauses. */
   check_resize_learnt_constraints_aux (qdpll, &qdpll->pcnf.learnt_clauses, 
                                        UINT_MAX, QDPLL_QTYPE_EXISTS);
-
   /* Discard all collected cover sets. */
   discard_all_collected_cover_sets (qdpll);
 }

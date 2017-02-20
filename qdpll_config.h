@@ -2,12 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
-
- Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
- Florian Lonsing, Johannes Kepler University, Linz, Austria and 
- Vienna University of Technology, Vienna, Austria.
-
- Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
+ Copyright 2013, 2014, 2015, 2016, 2017 Florian Lonsing,
+   Vienna University of Technology, Vienna, Austria.
+ Copyright 2010, 2011, 2012 Florian Lonsing,
+   Johannes Kepler University, Linz, Austria.
+ Copyright 2012 Aina Niemetz,
+   Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -89,11 +89,6 @@
    cubes. */
 #define ELIM_UNIV_DYNAMIC_SWITCH_DELAY_INIT_VAL 1000
 
-/* When generating initial cubes, make sure that first we collect an
-assignment which satisfies all the clauses WITHOUT reducing innermost
-existential literals on the fly. */
-#define COLLECT_FULL_COVER_SETS 1
-
 /* Allow to collect as many cover sets as 'COLLECT_FULL_COVER_SETS_MULT_LIMIT'
    times the current maximal number of learned cubes. */
 #define COLLECT_FULL_COVER_SETS_MULT_LIMIT (1)
@@ -102,13 +97,6 @@ existential literals on the fly. */
    original quantifier prefix and 'QDPLL_DEPMAN_TYPE_QDAG' causes the solver to
    use the standard dependency scheme. */
 #define DEFAULT_DEPMANTYPE QDPLL_DEPMAN_TYPE_QDAG
-
-#define COMPUTE_STATS_BTLEVELS_LOG 10
-#if 0
-#define COMPUTE_STATS_BTLEVELS_SIZE (COMPUTE_STATS_BTLEVELS_LOG + 3)
-#else
-#define COMPUTE_STATS_BTLEVELS_SIZE 0
-#endif
 
 #define IRESTART_DIST_INIT_VAL 100
 #define IRESTART_DIST_INC_INIT_VAL 10

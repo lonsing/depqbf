@@ -23,17 +23,21 @@
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef QDPLL_EXIT_H_INCLUDED
-#define QDPLL_EXIT_H_INCLUDED
+#ifndef QDPLL_DYNAMIC_BLOQQER_H_INCLUDED
+#define QDPLL_DYNAMIC_BLOQQER_H_INCLUDED
 
-enum QDPLLExitCodes
+#include "qdpll.h"
+#include "./bloqqer35/bloqqer.h"
+
+enum BloqqerResult
 {
-  QDPLL_EXIT_SUCC = 0,
-  QDPLL_EXIT_ERR = 1,
-  QDPLL_EXIT_SAT = 10,
-  QDPLL_EXIT_UNSAT = 20
+  BLOQQER_RESULT_UNKNOWN = 0,
+  BLOQQER_RESULT_SAT = 10,
+  BLOQQER_RESULT_UNSAT = 20
 };
 
-typedef enum QDPLLExitCodes QDPLLExitCodes;
+typedef enum BloqqerResult BloqqerResult;
+
+BloqqerResult dynamic_bloqqer_test (QDPLL *qdpll);
 
 #endif

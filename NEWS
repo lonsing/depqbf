@@ -3,6 +3,11 @@
 NEWS
 ----
 
+February 20 2017:
+
+release of version 6.0
+  - includes SAT solver PicoSAT and Bloqqer as external libraries
+
 September 09 2016:
 
 release of version 5.01

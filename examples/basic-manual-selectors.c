@@ -98,8 +98,6 @@ int main (int argc, char** argv)
   qdpll_assume (depqbf, -200);
   qdpll_assume (depqbf, 300);
 
-  qdpll_print (depqbf, stdout);
-
   res = qdpll_sat (depqbf);
   assert (res == QDPLL_RESULT_SAT);
   printf ("result after disabling the clause '300 1 2 0' is: %d\n", res);

@@ -2,12 +2,12 @@
  This file is part of DepQBF.
 
  DepQBF, a solver for quantified boolean formulae (QBF).        
-
- Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 
- Florian Lonsing, Johannes Kepler University, Linz, Austria and 
- Vienna University of Technology, Vienna, Austria.
-
- Copyright 2012 Aina Niemetz, Johannes Kepler University, Linz, Austria.
+ Copyright 2013, 2014, 2015, 2016, 2017 Florian Lonsing,
+   Vienna University of Technology, Vienna, Austria.
+ Copyright 2010, 2011, 2012 Florian Lonsing,
+   Johannes Kepler University, Linz, Austria.
+ Copyright 2012 Aina Niemetz,
+   Johannes Kepler University, Linz, Austria.
 
  DepQBF is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -37,18 +37,16 @@
 #include "qdpll.h"
 #include "qdpll_internals.h"
 
-
 #define VERSION                                                         \
-  "DepQBF 5.01\n"                                                        \
-  "Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 Florian Lonsing,\n"     \
-  "  Johannes Kepler University, Linz, Austria and\n"                   \
+  "DepQBF 6.0\n"                                                        \
+  "Copyright 2013, 2014, 2015, 2016, 2017 Florian Lonsing,\n"           \
   "  Vienna University of Technology, Vienna, Austria.\n"               \
-  "Copyright 2012 Aina Niemetz, "                                       \
-  "Johannes Kepler University, Linz, Austria.\n"                        \
+  "Copyright 2010, 2011, 2012 Florian Lonsing,\n"                       \
+  "  Johannes Kepler University, Linz, Austria.\n"                       \
+  "Copyright 2012 Aina Niemetz,\n"                                       \
+  "  Johannes Kepler University, Linz, Austria.\n"                        \
   "This is free software; see COPYING for copying conditions.\n"        \
   "There is NO WARRANTY, to the extent permitted by law.\n"
-
-
 
 #define USAGE1 \
 "usage: depqbf [ <option> ... ] [ <in-file> ]\n"\
@@ -77,7 +75,7 @@
 "                                    which was applied in previous versions of DepQBF.\n"\
 "                                    In this version, by default lazy QPUP-based QCDCL is applied.\n"\
 "  --long-dist-res                 Apply long-distance resolution in constraint learning. \n"\
-"                                    Must be combined with '--dep-man=simple'.\n"\
+"                                    Should be combined with '--dep-man=simple'.\n"\
 "                                    Optionally, '--traditional-qcdcl' may be specified which enables\n"\
 "                                    long-distance resolution where intermediate resolutions are carried\n"\
 "                                    out starting from the empty clause.\n" \
@@ -102,10 +100,9 @@
 "  --no-sdcl                       disable solution-driven cube learning and\n"\
 "                                    backtrack chronologically from solutions\n"\
 "  --no-pure-literals              disable pure literal detection\n"\
-"  --no-spure-literals             include ALL constraints for pure literal detection (expensive!) \n"\
+"  --no-spure-literals             DEPRECATED: include ALL constraints for pure literal detection\n"\
 "  --no-unit-mtf                   no move-to-front (MTF) of learnt constraints which became unit\n"\
 "  --no-res-mtf                    no move-to-front (MTF) of learnt constraints which became empty\n"\
-"  --max-dec=<val>                 stop after <val> decisions have been made\n"\
 "  --lclauses-init-size=<val>      initially allow <val> clauses to be learned before resizing the clause list\n"\
 "  --lcubes-init-size=<val>        initially allow <val> cubes to be learned before resizing the cube list\n"\
 "  --lclauses-resize-value=<val>   increase capacity of learned clauses list by <val>\n"\
@@ -118,16 +115,20 @@
 "  --max-btracks=<val>             Abort after <val> backtracks.\n"\
 "  --max-secs=<val>                Abort after <val> seconds.\n"\
 "\n"\
-"Options that control QBCE:"\
+"Options that control QBCE and applications of generalized axioms:"\
 "\n"\
 "  --no-qbce-dynamic               disable dynamic QBCE (enabled by default)\n"\
 "  --qbce-preprocessing            enable QBCE preprocessing (must be preceded by '--no-qbce-dynamic')\n"\
 "  --qbce-inprocessing             enable QBCE inprocessing (must be preceded by '--no-qbce-dynamic')\n"\
 "  --qbce-witness-max-occs=<val>   maximum number <val> of occurrences considered in QBCE (default: 50)\n"\
 "  --qbce-max-clause-size=<val>    maximum length <val> of clauses considered in QBCE (default: 50)\n"\
+"  --no-empty-formula-watching     disable empty formula watching (default: enabled)\n"\
+"  --no-dynamic-bloqqer            disable dynamic bloqqer tests (default: enabled)\n"\
+"  --dyn-bloqqer-ignore-unsat      ignore unsatisfiable branch detected by bloqqer\n"\
+"  --dyn-bloqqer-ignore-sat        ignore satisfiable branch detected by bloqqer\n"\
+"  --no-trivial-falsity            disable trivial falsity tests (default: enabled)\n"\
+"  --no-trivial-truth              disable trivial truth tests (default: enabled)\n"\
 "\n"
-
-
 
 
 
