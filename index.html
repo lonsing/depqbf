@@ -28,8 +28,8 @@
         <div class="downloads">
           <span>Download the latest release:</span>
           <ul>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-5.01.zip" class="button">ZIP</a></li>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-5.01.tar.gz" class="button">TAR</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-6.0.zip" class="button">ZIP</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-6.0.tar.gz" class="button">TAR</a></li>
           </ul>
         </div>
       </div><!-- end banner -->
@@ -45,7 +45,16 @@
 
 <h2>News</h2>
 <ul>
-<li><b>2016-09-09: Source code of DepQBF 5.01 released.</b> This release fixes
+<li><b>2017-02-20: Source code of DepQBF 6.0 released.</b> This release implements conflict-driven clause and solution-driven cube
+learning (QCDCL) with generalized axioms. To this end, DepQBF applies
+the SAT solver PicoSAT and the QBF preprocessor Bloqqer as oracles to
+check the satisfiability of formulas that arise in the context of
+axiom applications. The approach is described in our SAT 2016
+  paper. <p><b><font color="red">PLEASE NOTE:</font></b> The installation
+    process has changed. Run the script 'compile.sh' instead of 'make'. See
+    also the README file that is part of the distribution.</p></li>
+
+<li>2016-09-09: Source code of DepQBF 5.01 released. This release fixes
   a bug in the generation of QDIMACS output.</li>
 <li>2016-08-12: DepQBF achieved a 3rd place in the Prenex CNF track and a 3rd
 place in the 2QBF track of the <a href="http://www.qbflib.org/qbfeval16.php">QBFEVAL'16</a> competition.
@@ -115,7 +124,7 @@ Bronze medal in the Applications Track of the <a href="http://qbf.satisfiability
 
 <ul>
 <li>
-Version 5.01 (<a href="https://github.com/lonsing/depqbf/archive/version-5.01.tar.gz">source code</a>), see the
+Version 6.0 (<a href="https://github.com/lonsing/depqbf/archive/version-6.0.tar.gz">source code</a>), see the
 <a href="README.txt">README</a> file for release notes.
 </li>
 </ul>
@@ -127,6 +136,9 @@ Version 5.01 (<a href="https://github.com/lonsing/depqbf/archive/version-5.01.ta
   release above (unless stated otherwise).</em></p>
 
 <ul>
+<li>
+Version 5.01 (<a href="https://github.com/lonsing/depqbf/archive/version-5.01.tar.gz">source code</a>).
+</li>
 <li>
 Version 5.0 (<a href="https://github.com/lonsing/depqbf/archive/version-5.0.tar.gz">source code</a>).
 </li>
@@ -330,6 +342,15 @@ contact <a href="http://www.kr.tuwien.ac.at/staff/lonsing/">Florian Lonsing</a>.
 <h2>Publications</h2>
 
 <ul>
+
+<li>
+Paper at SAT 2016 on QCDCL with generalized axioms: F. Lonsing, U. Egly, and M. Seidl: 
+<a href="http://dx.doi.org/10.1007/978-3-319-40970-2_27">Q-Resolution with Generalized Axioms</a>. In <i>Proc.&nbsp;19th
+Intl.&nbsp;Conf.&nbsp;on Theory and Applications of Satisfiability
+Testing (<a href="http://sat2016.labri.fr/">SAT 2016</a>), LNCS,
+    Springer, 2016</i>. Preprint of
+  proceedings version with appendix (<a href="http://arxiv.org/pdf/1604.05994">PDF</a>).
+</li>
 
 <li>
 Paper at LPAR 2015 on dynamic blocked clause elimination (QBCE): F. Lonsing, F. Bacchus, A. Biere, U. Egly, and M. Seidl: Enhancing Search-Based QBF Solving by Dynamic Blocked Clause Elimination. In <i>Proc.&nbsp;20th International Conference on Logic for
