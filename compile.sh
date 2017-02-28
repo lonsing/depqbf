@@ -53,20 +53,23 @@ fi
 if (($NOBLOQQER))
 then
     echo "Modifying DepQBF makefile to avoid linking Bloqqer library."
-    ls makefile-original 2>/dev/null
+    ls makefile-original >/dev/null 2>&1
     if (($?))
     then
 	# backup original makefile 
 	cp makefile makefile-original
+        # must clean up previously compiled version since we set preprocessor flags
+        make clean
     fi
-    #cp makefile makefile-original
     sed '/LFLAGS/s/-L.\/bloqqer35//; /LFLAGS/s/-lbloqqer//; /CFLAGS=\(.*\)/s/$/ -DNBLOQQER/; s/.\/bloqqer35\/libbloqqer.o//' makefile-original > makefile
 else
-    ls makefile-original 2>/dev/null
+    ls makefile-original >/dev/null 2>&1
     if ((!$?))
     then
 	# restore original makefile 
 	cp makefile-original makefile
+        # must clean up previously compiled version since we set preprocessor flags
+        make clean
     fi
 fi
 
