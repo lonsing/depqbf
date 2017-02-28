@@ -37,12 +37,12 @@ then
 	wget http://fmv.jku.at/bloqqer/bloqqer-035-f899eab-141029.tar.gz
 	tar -xvzf bloqqer-035-f899eab-141029.tar.gz
 	mv bloqqer-035-f899eab-141029 bloqqer35
+    #fix memory error in bloqqer35 (error has been fixed in more recent version 37 of bloqqer already)
+        patch bloqqer35/bloqqer.c bloqqer35-fix.patch
     else
 	echo "Found bloqqer directory 'bloqqer35'"
     fi
     
-    #fix memory error in bloqqer35 (error has been fixed in more recent version 37 of bloqqer already)
-    patch bloqqer35/bloqqer.c bloqqer35-fix.patch
     cd bloqqer35
     ./configure
     make
