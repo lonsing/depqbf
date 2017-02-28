@@ -28,8 +28,8 @@
         <div class="downloads">
           <span>Download the latest release:</span>
           <ul>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-6.0.zip" class="button">ZIP</a></li>
-            <li><a href="https://github.com/lonsing/depqbf/archive/version-6.0.tar.gz" class="button">TAR</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-6.01.zip" class="button">ZIP</a></li>
+            <li><a href="https://github.com/lonsing/depqbf/archive/version-6.01.tar.gz" class="button">TAR</a></li>
           </ul>
         </div>
       </div><!-- end banner -->
@@ -45,7 +45,21 @@
 
 <h2>News</h2>
 <ul>
-<li><b>2017-02-20: Source code of DepQBF 6.0 released.</b> This release implements conflict-driven clause and solution-driven cube
+
+<li>
+<b>2017-02-28: Source code of DepQBF 6.01 released.</b> This release fixes a
+memory error and allows for the compilation without using
+the preprocessor Bloqqer as a library. To compile without Bloqqer, run
+'./compile.sh nobloqqer' in the DepQBF directory.
+</li>
+
+<p>
+Version 6.0 is described in the following <em>technical report</em>: Florian Lonsing and
+Uwe Egly: <a href="https://arxiv.org/abs/1702.08256">DepQBF 6.0: A Search-Based
+    QBF Solver Beyond Traditional QCDCL</a>. Available from CoRR/arXiv: https://arxiv.org/abs/1702.08256 
+</p>
+
+<li>2017-02-20: Source code of DepQBF 6.0 released. This release implements conflict-driven clause and solution-driven cube
 learning (QCDCL) with generalized axioms. To this end, DepQBF applies
 the SAT solver PicoSAT and the QBF preprocessor Bloqqer as oracles to
 check the satisfiability of formulas that arise in the context of
@@ -124,7 +138,7 @@ Bronze medal in the Applications Track of the <a href="http://qbf.satisfiability
 
 <ul>
 <li>
-Version 6.0 (<a href="https://github.com/lonsing/depqbf/archive/version-6.0.tar.gz">source code</a>), see the
+Version 6.01 (<a href="https://github.com/lonsing/depqbf/archive/version-6.01.tar.gz">source code</a>), see the
 <a href="README.txt">README</a> file for release notes.
 </li>
 </ul>
@@ -136,6 +150,10 @@ Version 6.0 (<a href="https://github.com/lonsing/depqbf/archive/version-6.0.tar.
   release above (unless stated otherwise).</em></p>
 
 <ul>
+
+<li>
+Version 6.0 (<a href="https://github.com/lonsing/depqbf/archive/version-6.0.tar.gz">source code</a>).
+</li>
 <li>
 Version 5.01 (<a href="https://github.com/lonsing/depqbf/archive/version-5.01.tar.gz">source code</a>).
 </li>
