@@ -32,7 +32,10 @@
 #include "qdpll_internals.h"
 #include "qdpll_pcnf.h"
 #include "qdpll_config.h"
+
+#ifndef NBLOQQER
 #include "./bloqqer35/bloqqer.h"
+/* Handle case where bloqqer is linked. */
 
 /* Get process time. Can be used for performance statistics. 
    TODO: code also appears in 'qdpll.c', should be put in separate module. */
@@ -125,7 +128,7 @@ import_cnf_under_current_assignment (QDPLL *qdpll)
                  assigned. These literals do not satisfy the clause (otherwise we
                  would not have entered this loop). */
               if (!QDPLL_VAR_ASSIGNED (var)) {
-                bloqqer_add (lit);  
+		bloqqer_add (lit);
               } else
                 {
                   assert ((QDPLL_LIT_NEG (lit) && QDPLL_VAR_ASSIGNED_TRUE (var)) || 
@@ -159,11 +162,19 @@ dynamic_bloqqer_reset ()
   bloqqer_reset ();
 }
 
+/* end: if not defined NBLOQQER */
+#endif
 /* ---------- START: public functions ---------- */
 
 BloqqerResult 
 dynamic_bloqqer_test (QDPLL *qdpll)
 {
+  BloqqerResult result = BLOQQER_RESULT_UNKNOWN;
+#ifdef NBLOQQER
+  /* Bloqqer is not linked hence we should have never called this function. */
+  fprintf (stderr, "ERROR: unexpected dynamic Bloqqer calls (Bloqqer not linked)");
+  abort ();
+#else
   /* Return immediately if calls of Bloqqer have been disabled dynamically by
      number of calls and average calling time. */
   if (qdpll->state.dyn_bloqqer_disabled)
@@ -192,7 +203,7 @@ dynamic_bloqqer_test (QDPLL *qdpll)
 
   bloqqer_init(qdpll_get_max_declared_var_id (qdpll), qdpll->pcnf.clauses.cnt);
   import_qbf_under_current_assignment (qdpll);
-  BloqqerResult result = run_bloqqer ();
+  result = run_bloqqer ();
   qdpll->state.dyn_bloqqer_time += (time_stamp () - start_time); 
 #if COMPUTE_STATS
   if (result == BLOQQER_RESULT_SAT)
@@ -230,6 +241,8 @@ dynamic_bloqqer_test (QDPLL *qdpll)
                  qdpll->state.dyn_bloqqer_time / qdpll->state.dyn_bloqqer_calls, qdpll->state.dyn_bloqqer_calls);
     }
 
+/* end: if not defined NBLOQQER */
+#endif
   return result;
 }
 

@@ -17048,6 +17048,11 @@ qdpll_create ()
   qdpll->options.dyn_bloqqer_disable_time_threshold = 0.125; 
   qdpll->options.dyn_bloqqer_disable_cnf_threshold = 500000; 
 
+#ifdef NBLOQQER
+  /* Must not attempt to call Bloqqer if Bloqqer not linked. */
+  qdpll->options.no_dynamic_bloqqer = 1;
+#endif
+
   /* NEW: decision heuristics 'QTYPE' turned out to perform MUCH better than
      the old default one 'SDCL'. */
   qdpll->options.dh = QDPLL_DH_QTYPE;
@@ -19929,6 +19934,8 @@ qdpll_print_stats (QDPLL * qdpll)
   fprintf (stderr, "Total trivial falsity decisions: %llu (per try: %f max per try: %llu )\n", picosat_decisions (qdpll->trivial_falsity_solver), 
            qdpll->state.trivial_falsity_tried ? (picosat_decisions (qdpll->trivial_falsity_solver) / (float)qdpll->state.trivial_falsity_tried) : 0, 
            qdpll->stats.trivial_falsity_max_decisions_per_call);
+  fprintf (stderr, "Total trivial falsity conflicts: %u (per try: %f )\n", picosat_conflicts (qdpll->trivial_falsity_solver), 
+           qdpll->state.trivial_falsity_tried ? (picosat_conflicts (qdpll->trivial_falsity_solver) / (float)qdpll->state.trivial_falsity_tried) : 0);
   fprintf (stderr, "Total trivial falsity assumptions (per detected): passed %llu ( %f ), failed %llu ( %f ), lits in clause %llu ( %f )\n", qdpll->stats.trivial_falsity_assumptions_passed, 
            qdpll->stats.trivial_falsity_detected ? (qdpll->stats.trivial_falsity_assumptions_passed / (float) qdpll->stats.trivial_falsity_detected) : 0, qdpll->stats.trivial_falsity_assumptions_failed, 
            qdpll->stats.trivial_falsity_detected ? (qdpll->stats.trivial_falsity_assumptions_failed / (float) qdpll->stats.trivial_falsity_detected) : 0, qdpll->stats.trivial_falsity_lits_in_falsity_clause, 
@@ -19988,6 +19995,8 @@ qdpll_print_stats (QDPLL * qdpll)
            qdpll->state.trivial_truth_tried ? (picosat_decisions (qdpll->trivial_truth_solver) / 
 					       (float)qdpll->state.trivial_truth_tried) : 0, 
            qdpll->stats.trivial_truth_max_decisions_per_call);
+  fprintf (stderr, "Total trivial truth conflicts: %u (per try: %f )\n", picosat_conflicts (qdpll->trivial_truth_solver), 
+           qdpll->state.trivial_truth_tried ? (picosat_conflicts (qdpll->trivial_truth_solver) / (float)qdpll->state.trivial_truth_tried) : 0);
 
   fprintf (stderr, "Total trivial truth unit cubes: %llu (avg per detected: %f )\n", 
            qdpll->stats.trivial_truth_unit_cubes, qdpll->stats.trivial_truth_detected ? 
