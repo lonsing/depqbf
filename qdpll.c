@@ -17559,7 +17559,9 @@ qdpll_configure (QDPLL * qdpll, char *configure_str)
     {
       QDPLL_ABORT_QDPLL (1, "not yet supported: passing options to Bloqqer");
       configure_str += strlen ("--bloqqer-option=");
+#ifndef NBLOQQER
       bloqqer_set_option (configure_str);
+#endif
     }
   else if (!strcmp (configure_str, "--traditional-qcdcl"))
     {

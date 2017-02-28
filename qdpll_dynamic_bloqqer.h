@@ -27,7 +27,9 @@
 #define QDPLL_DYNAMIC_BLOQQER_H_INCLUDED
 
 #include "qdpll.h"
+#ifndef NBLOQQER
 #include "./bloqqer35/bloqqer.h"
+#endif
 
 enum BloqqerResult
 {
