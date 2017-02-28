@@ -68,6 +68,7 @@ else
     then
 	# restore original makefile 
 	cp makefile-original makefile
+        rm makefile-original
         # must clean up previously compiled version since we set preprocessor flags
         make clean
     fi
