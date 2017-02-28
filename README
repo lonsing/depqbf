@@ -5,13 +5,25 @@ February 2017
 GENERAL INFORMATION
 -------------------
 
-IMPORTANT NOTE: with version 6.0 the compilation process has
-changed. Instead of 'make', run the script 'compile.sh'.
+IMPORTANT NOTE regarding version 6.0 or later: 
+
+With version 6.0 the compilation process has changed. Instead of 'make', run
+the script 'compile.sh'. By default, the preprocessor Bloqqer will be
+downloaded, compiled, and linked to DepQBF.
+
+If you want to compile the solver without Bloqqer then run 
+'compile.sh nobloqqer'. This way, the Bloqqer library is not 
+linked to DepQBF, which may have a negative impact on its performance.
+
+Version 6.01 fixes a memory error in the legacy version 35 of Bloqqer (in its
+more recent version 37 that error is fixed). See the file
+'bloqqer35-fix.patch' that is used to implement the fix in the compilation
+process (script 'compile.sh'). Many thanks for the feedback!
 
 IMPORTANT NOTE: please see the guidelines on preprocessing,
 incremental solving and API usage below.
 
-This is version 6.0 of the search-based QBF solver DepQBF. This recent
+This is version 6.01 of the search-based QBF solver DepQBF. This recent
 version implements conflict-driven clause and solution-driven cube
 learning (QCDCL) with generalized axioms. To this end, DepQBF applies
 the SAT solver PicoSAT and the QBF preprocessor Bloqqer as oracles to
