@@ -1,37 +1,35 @@
 
-February 2017
+March 2017
 
 -------------------
 GENERAL INFORMATION
 -------------------
 
-IMPORTANT NOTE regarding version 6.0 or later: 
+IMPORTANT NOTE regarding version 6.0 or later:
 
 With version 6.0 the compilation process has changed. Instead of 'make', run
-the script 'compile.sh'. By default, the preprocessor Bloqqer will be
+the script 'compile.sh'. By default, the QBF solver Nenofex will be
 downloaded, compiled, and linked to DepQBF.
 
-If you want to compile the solver without Bloqqer then run 
-'compile.sh nobloqqer'. This way, the Bloqqer library is not 
-linked to DepQBF, which may have a negative impact on its performance.
+Nenofex source code: https://github.com/lonsing/nenofex
 
-Version 6.01 fixes a memory error in the legacy version 35 of Bloqqer (in its
-more recent version 37 that error is fixed). See the file
-'bloqqer35-fix.patch' that is used to implement the fix in the compilation
-process (script 'compile.sh'). Many thanks for the feedback!
+IMPORTANT NOTE: please see the guidelines on preprocessing, incremental
+solving and API usage below.
 
-IMPORTANT NOTE: please see the guidelines on preprocessing,
-incremental solving and API usage below.
+This is version 6.02 of the search-based QBF solver DepQBF. This recent
+version implements conflict-driven clause and solution-driven cube learning
+(QCDCL) with generalized axioms. To this end, DepQBF applies the SAT solver
+PicoSAT and the expansion-based QBF solver Nenofex as oracles to check the
+satisfiability of formulas that arise in the context of axiom
+applications. The approach is described in the following paper:
 
-This is version 6.01 of the search-based QBF solver DepQBF. This recent
-version implements conflict-driven clause and solution-driven cube
-learning (QCDCL) with generalized axioms. To this end, DepQBF applies
-the SAT solver PicoSAT and the QBF preprocessor Bloqqer as oracles to
-check the satisfiability of formulas that arise in the context of
-axiom applications. The approach is described in the following paper:
+Florian Lonsing, Uwe Egly, Martina Seidl: "Q-Resolution with Generalized
+Axioms". In Proceedings of SAT 2016, LNCS, Springer, 2016.
 
-Florian Lonsing, Uwe Egly, Martina Seidl: "Q-Resolution with
-Generalized Axioms". In Proceedings of SAT 2016, LNCS, Springer, 2016.
+In version 6.02, the solver Nenofex replaces the QBF preprocessor Bloqqer
+which was used in the previous versions 6.0 and 6.01. The replacement was
+necessary since Bloqqer (version 37) is not reentrant, which may cause
+problems when running multiple instances of DepQBF. 
 
 Since version 5.0 DepQBF includes blocked clause elimination (QBCE) as
 a pre- and inprocessing technique and as a novel dynamic approach
@@ -173,12 +171,12 @@ https://www.gnu.org/copyleft/gpl.html
 See also the file COPYING.
 
 IMPORTANT NOTE: since version 6.0, DepQBF requires the SAT solver
-PicoSAT and the QBF preprocessor Bloqqer as external libraries.
+PicoSAT and the QBF solver Nenofex as external libraries.
 
-Bloqqer: http://fmv.jku.at/bloqqer/
+Nenofex: https://github.com/lonsing/nenofex
 PicoSAT  http://fmv.jku.at/picosat/
 
-Please see the individual licenses that come with PicoSAT and Bloqqer.
+Please see the individual licenses that come with PicoSAT and Nenofex.
 
 ------------
 INSTALLATION
@@ -187,7 +185,7 @@ INSTALLATION
 The latest release is available from http://lonsing.github.io/depqbf/
 
 Unpack the archive and run the script './compile.sh', which will first
-download and compile PicoSAT and Bloqqer and then compile DepQBF.
+download and compile PicoSAT and Nenofex and then compile DepQBF.
 
 The build process produces optimized code without assertions
 (default).
