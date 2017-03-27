@@ -31,7 +31,7 @@ endif
 	$(CC) $(CFLAGS) -c $< -o $@
 
 depqbf: $(TARGETS)
-	$(CC) $(CFLAGS) qdpll_main.o qdpll_app.o -L. -lqdpll $(LFLAGS) -o depqbf
+	$(CC) $(CFLAGS) qdpll_main.o qdpll_app.o -L. -lqdpll -o depqbf
 
 qdpll_main.o: qdpll_main.c qdpll.h
 
@@ -66,7 +66,7 @@ qdpll_dep_man_generic.h qdpll_dep_man_qdag.h qdpll_config.h \
 qdpll.h qdpll_dep_man_qdag_types.h qdpll_stack.h \
 qdpll_internals.h
 
-libqdpll.a: qdpll.o qdpll_pqueue.o qdpll_mem.o qdpll_dep_man_qdag.o qdpll_dynamic_nenofex.o ./nenofex/libnenofex.a ./picosat/picosat.o
+libqdpll.a: qdpll.o qdpll_pqueue.o qdpll_mem.o qdpll_dep_man_qdag.o qdpll_dynamic_nenofex.o ./nenofex/nenofex.o ./nenofex/stack.o ./nenofex/queue.o ./nenofex/mem.o ./nenofex/atpg.o  ./picosat/picosat.o
 	ar rc $@ $^
 	ranlib $@
 

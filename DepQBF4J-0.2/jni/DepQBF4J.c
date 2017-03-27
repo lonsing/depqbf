@@ -20,7 +20,7 @@
  along with DepQBF4J. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "depqbf/qdpll.h"
+#include "../../qdpll.h"
 #include "depqbf4j_DepQBF4J.h"
 #include <stdlib.h>
 

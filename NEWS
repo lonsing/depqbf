@@ -3,7 +3,22 @@
 NEWS
 ----
 
-February 20 2017:
+March 27 2017:
+
+release of version 6.02:
+  - replaces Bloqqer by the QBF solver Nenofex. The replacement was necessary
+    since Bloqqer is not reentrant, which may cause problems when creating
+    multiple instances of DepQBF
+  - updated DepQBF4J to link against most recent version of DepQBF
+  - fixed bug in QDIMACS output generation
+
+February 28 2017:
+
+release of version 6.01:
+  - fixes a memory error in legacy version 35 of Bloqqer
+  - optional linking of Bloqqer
+
+February 16 2017:
 
 release of version 6.0
   - includes SAT solver PicoSAT and Bloqqer as external libraries
