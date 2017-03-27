@@ -23,23 +23,12 @@
  along with DepQBF.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef QDPLL_DYNAMIC_BLOQQER_H_INCLUDED
-#define QDPLL_DYNAMIC_BLOQQER_H_INCLUDED
+#ifndef QDPLL_DYNAMIC_NENOFEX_H_INCLUDED
+#define QDPLL_DYNAMIC_NENOFEX_H_INCLUDED
 
 #include "qdpll.h"
-#ifndef NBLOQQER
-#include "./bloqqer35/bloqqer.h"
-#endif
+#include "./nenofex/nenofex.h"
 
-enum BloqqerResult
-{
-  BLOQQER_RESULT_UNKNOWN = 0,
-  BLOQQER_RESULT_SAT = 10,
-  BLOQQER_RESULT_UNSAT = 20
-};
-
-typedef enum BloqqerResult BloqqerResult;
-
-BloqqerResult dynamic_bloqqer_test (QDPLL *qdpll);
+NenofexResult dynamic_nenofex_test (QDPLL *qdpll);
 
 #endif

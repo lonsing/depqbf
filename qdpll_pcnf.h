@@ -196,7 +196,6 @@ struct Var
 #if COMPUTE_STATS
   unsigned int mark_stats_type_reduce_lits:1;
 #endif
-
   /* If variable is internal: the ID of the active (i.e. not deleted) clause group 
      where that variable is used as selector variable. If a group is deleted
      then this value has no meaning. Otherwise, the value indicates the
@@ -350,7 +349,7 @@ struct Constraint
      clause/cube which was learned due to an application of trivial
      truth/falsity. */
   unsigned int derived_by_trivial_truth_or_falsity:1;
-  unsigned int derived_by_dynamic_bloqqer:1;
+  unsigned int derived_by_dynamic_nenofex:1;
 #endif 
 
   /* NOTE: only for '--no-spure-literals'; marks constraints to be cleaned up. */

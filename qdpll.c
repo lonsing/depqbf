@@ -39,8 +39,8 @@
 #include "qdpll_dep_man_generic.h"
 #include "qdpll_dep_man_qdag.h"
 #include "qdpll_config.h"
-#include "qdpll_dynamic_bloqqer.h"
-#include "./picosat-960/picosat.h"
+#include "qdpll_dynamic_nenofex.h"
+#include "./picosat/picosat.h"
 
 #define QDPLL_ABORT_QDPLL(cond,msg)					\
   do {									\
@@ -3840,7 +3840,7 @@ handle_detected_unit_constraint (QDPLL * qdpll, LitID lit, Var * var,
         learnt_constraint_mtf (qdpll, constraint);
 #if COMPUTE_STATS
       assert (!constraint->derived_by_trivial_truth_or_falsity || 
-              !constraint->derived_by_dynamic_bloqqer);
+              !constraint->derived_by_dynamic_nenofex);
       if (constraint->is_cube)
         {
           qdpll->stats.total_unit_lcubes++;
@@ -3848,8 +3848,8 @@ handle_detected_unit_constraint (QDPLL * qdpll, LitID lit, Var * var,
             qdpll->stats.total_unit_taut_lcubes++;
           if (constraint->derived_by_trivial_truth_or_falsity)
             qdpll->stats.trivial_truth_unit_cubes++;
-          else if (constraint->derived_by_dynamic_bloqqer)
-            qdpll->stats.dyn_bloqqer_unit_cubes++;
+          else if (constraint->derived_by_dynamic_nenofex)
+            qdpll->stats.dyn_nenofex_unit_cubes++;
         }
       else
         {
@@ -3858,8 +3858,8 @@ handle_detected_unit_constraint (QDPLL * qdpll, LitID lit, Var * var,
             qdpll->stats.total_unit_taut_lclauses++;
           if (constraint->derived_by_trivial_truth_or_falsity)
             qdpll->stats.trivial_falsity_unit_clauses++;
-          else if (constraint->derived_by_dynamic_bloqqer)
-            qdpll->stats.dyn_bloqqer_unit_clauses++;
+          else if (constraint->derived_by_dynamic_nenofex)
+            qdpll->stats.dyn_nenofex_unit_clauses++;
         }
 #endif
     }
@@ -7334,7 +7334,7 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
     {
       assert (!qdpll->state.sat_branch_detected);
       /* We enter this branch when learning a clause by trivial falsity or
-         dynamic bloqqer. This
+         dynamic nenofex. This
          clause will be used as the start point for the derivation of further
          clauses, unless it is already asserting or empty. */
       assert (res_cons || qdpll->state.unsat_branch_clause);
@@ -7430,7 +7430,7 @@ get_initial_reason (QDPLL * qdpll, LitIDStack ** lit_stack,
       else
         {
           /* NOTE: this branch is taken if we successfully applied
-             dynamic Bloqqer test or trivial truth, or if dynamic QBCE is
+             dynamic Nenofex test or trivial truth, or if dynamic QBCE is
              enabled. */
           res = cover_by_assignment (qdpll, stack);
           /* NOTE: returned value 'res' is relevant only for tracing in
@@ -11229,7 +11229,7 @@ propagate_variable_assigned (QDPLL * qdpll, Var * var,
                 learnt_constraint_mtf (qdpll, c);
 #if COMPUTE_STATS
               assert (!c->derived_by_trivial_truth_or_falsity || 
-                      !c->derived_by_dynamic_bloqqer);
+                      !c->derived_by_dynamic_nenofex);
               if (c->is_cube)
                 {
                   qdpll->stats.total_sat_lcubes++;
@@ -11237,8 +11237,8 @@ propagate_variable_assigned (QDPLL * qdpll, Var * var,
                     qdpll->stats.total_sat_taut_lcubes++;
                   if (c->derived_by_trivial_truth_or_falsity)
                     qdpll->stats.trivial_truth_satisfied_cubes++;
-                  else if (c->derived_by_dynamic_bloqqer)
-                    qdpll->stats.dyn_bloqqer_satisfied_cubes++;;
+                  else if (c->derived_by_dynamic_nenofex)
+                    qdpll->stats.dyn_nenofex_satisfied_cubes++;;
                 }
               else
                 {
@@ -11247,8 +11247,8 @@ propagate_variable_assigned (QDPLL * qdpll, Var * var,
                     qdpll->stats.total_empty_taut_lclauses++;
                   if (c->derived_by_trivial_truth_or_falsity)
                     qdpll->stats.trivial_falsity_conflicting_clauses++;
-                  else if (c->derived_by_dynamic_bloqqer)
-                    qdpll->stats.dyn_bloqqer_conflicting_clauses++;;
+                  else if (c->derived_by_dynamic_nenofex)
+                    qdpll->stats.dyn_nenofex_conflicting_clauses++;;
                 }
 #endif
             }
@@ -13218,7 +13218,7 @@ check_resize_learnt_constraints_aux (QDPLL * qdpll, ConstraintList *constraints,
         {
 #if COMPUTE_STATS
           assert (!c->derived_by_trivial_truth_or_falsity || 
-                  !c->derived_by_dynamic_bloqqer);
+                  !c->derived_by_dynamic_nenofex);
           if (c->derived_by_trivial_truth_or_falsity)
             {
               if (c->is_cube)
@@ -13226,12 +13226,12 @@ check_resize_learnt_constraints_aux (QDPLL * qdpll, ConstraintList *constraints,
               else
                 qdpll->stats.trivial_falsity_deleted_clauses++;;
             }
-          else if (c->derived_by_dynamic_bloqqer)
+          else if (c->derived_by_dynamic_nenofex)
             {
               if (c->is_cube)
-                qdpll->stats.dyn_bloqqer_deleted_cubes++;
+                qdpll->stats.dyn_nenofex_deleted_cubes++;
               else
-                qdpll->stats.dyn_bloqqer_deleted_clauses++;
+                qdpll->stats.dyn_nenofex_deleted_clauses++;
             }
 #endif
           if (!no_spure_literals)
@@ -13587,13 +13587,13 @@ print_config (QDPLL * qdpll)
   fprintf (stderr, "--trivial-truth-decision-limit=%d\n", qdpll->options.trivial_truth_decision_limit);
   fprintf (stderr, "--trivial-truth-disable-cnf-threshold=%d\n", qdpll->options.trivial_truth_disable_cnf_threshold);
 
-  fprintf (stderr, "--no-dynamic-bloqqer=%d\n", qdpll->options.no_dynamic_bloqqer);
-  fprintf (stderr, "--dyn-bloqqer-ignore-sat=%d\n", qdpll->options.dyn_bloqqer_ignore_sat);
-  fprintf (stderr, "--dyn-bloqqer-ignore-unsat=%d\n", qdpll->options.dyn_bloqqer_ignore_unsat);
-  fprintf (stderr, "--dyn-bloqqer-pow2-call-interval=%d\n", qdpll->options.dyn_bloqqer_pow2_call_interval);
-  fprintf (stderr, "--dyn-bloqqer-disable-calls-threshold=%d\n", qdpll->options.dyn_bloqqer_disable_calls_threshold);
-  fprintf (stderr, "--dyn-bloqqer-disable-time-threshold=%f\n", qdpll->options.dyn_bloqqer_disable_time_threshold);
-  fprintf (stderr, "--dyn-bloqqer-disable-cnf-threshold=%d\n", qdpll->options.dyn_bloqqer_disable_cnf_threshold);
+  fprintf (stderr, "--no-dynamic-nenofex=%d\n", qdpll->options.no_dynamic_nenofex);
+  fprintf (stderr, "--dyn-nenofex-ignore-sat=%d\n", qdpll->options.dyn_nenofex_ignore_sat);
+  fprintf (stderr, "--dyn-nenofex-ignore-unsat=%d\n", qdpll->options.dyn_nenofex_ignore_unsat);
+  fprintf (stderr, "--dyn-nenofex-pow2-call-interval=%d\n", qdpll->options.dyn_nenofex_pow2_call_interval);
+  fprintf (stderr, "--dyn-nenofex-disable-calls-threshold=%d\n", qdpll->options.dyn_nenofex_disable_calls_threshold);
+  fprintf (stderr, "--dyn-nenofex-disable-time-threshold=%f\n", qdpll->options.dyn_nenofex_disable_time_threshold);
+  fprintf (stderr, "--dyn-nenofex-disable-cnf-threshold=%d\n", qdpll->options.dyn_nenofex_disable_cnf_threshold);
 
   fprintf (stderr, "----------------------------\n\n");
 }
@@ -15307,9 +15307,8 @@ trivial_truth_set_up_sat_solver (QDPLL *qdpll)
     }
 }
 
-/* TODO: this function should be moved to Bloqqer module. */
 static Constraint *
-dynamic_bloqqer_get_unsat_branch_clause (QDPLL *qdpll)
+dynamic_nenofex_get_unsat_branch_clause (QDPLL *qdpll)
 {
   unsigned int cnt = (qdpll->assigned_vars_top - qdpll->assigned_vars);
   assert (cnt <= qdpll_get_max_declared_var_id (qdpll));
@@ -15362,9 +15361,9 @@ solve (QDPLL * qdpll)
   QDPLL_ABORT_QDPLL (!qdpll->options.no_trivial_truth && 
                      qdpll->options.incremental_use, 
                      "temporary restriction: must not combine incremental mode with trivial truth");
-  QDPLL_ABORT_QDPLL (!qdpll->options.no_dynamic_bloqqer && 
+  QDPLL_ABORT_QDPLL (!qdpll->options.no_dynamic_nenofex && 
                      qdpll->options.incremental_use, 
-                     "temporary restriction: must not combine incremental mode with dynamic bloqqer");
+                     "temporary restriction: must not combine incremental mode with dynamic nenofex");
 
   /* Disable trivial falsity calls if limit on number of clauses in original CNF exceeded. */
   if (!qdpll->options.no_trivial_falsity && 
@@ -15396,8 +15395,6 @@ solve (QDPLL * qdpll)
   /* Set up trivial truth solver. */
   if (!qdpll->options.no_trivial_truth && !qdpll->state.trivial_truth_disabled)
     trivial_truth_set_up_sat_solver (qdpll);
-
-  qdpll->state.solving_start_time = time_stamp();
 
   assert (!qdpll->state.restarting);
 
@@ -15556,6 +15553,9 @@ solve (QDPLL * qdpll)
           break;
         }
 
+      /* Reset flag for QDIMACS output values from trivial truth solver. */
+      qdpll->state.qdo_trivial_truth_success = 0;
+
       state = bcp (qdpll);
 
       if (state == QDPLL_SOLVER_STATE_UNDEF)
@@ -15566,25 +15566,25 @@ solve (QDPLL * qdpll)
         }
 
 #if COMPUTE_STATS
-      unsigned int dynamic_bloqqer_test_success = 0;
+      unsigned int dynamic_nenofex_test_success = 0;
       unsigned int trivial_truth_or_falsity_success = 0;
 #endif
 
-      if (!qdpll->options.no_dynamic_bloqqer && 
+      if (!qdpll->options.no_dynamic_nenofex && 
           state == QDPLL_SOLVER_STATE_UNDEF &&
           (qdpll->state.cnt_state_undetermined_after_qbcp & 
-           (((unsigned int)1 << qdpll->options.dyn_bloqqer_pow2_call_interval) - 1)) == 0)
+           (((unsigned int)1 << qdpll->options.dyn_nenofex_pow2_call_interval) - 1)) == 0)
         {
-          BloqqerResult bloqqer_res = dynamic_bloqqer_test (qdpll);
+          NenofexResult nenofex_res = dynamic_nenofex_test (qdpll);
           if (qdpll->options.verbosity >= 2)
-            fprintf (stderr, "Dynamic Bloqqer test: %s at decision level %d, " \
+            fprintf (stderr, "Dynamic Nenofex test: %s at decision level %d, " \
                      "%d assigned vars of %d total vars\n", 
-                     bloqqer_res == BLOQQER_RESULT_SAT ? "SATISFIABLE" : 
-                     (bloqqer_res == BLOQQER_RESULT_UNSAT ? "UNSATISFIABLE" : "UNKNOWN"), 
+                     nenofex_res == NENOFEX_RESULT_SAT ? "SATISFIABLE" : 
+                     (nenofex_res == NENOFEX_RESULT_UNSAT ? "UNSATISFIABLE" : "UNKNOWN"), 
                      qdpll->state.decision_level, (unsigned int)
                      (qdpll->assigned_vars_top - qdpll->assigned_vars), qdpll->pcnf.used_vars);
-          if (bloqqer_res == BLOQQER_RESULT_SAT && 
-              !qdpll->options.dyn_bloqqer_ignore_sat)
+          if (nenofex_res == NENOFEX_RESULT_SAT && 
+              !qdpll->options.dyn_nenofex_ignore_sat)
             {
               /* Set state variable in order to learn a cube from the
                  current assignment. */
@@ -15592,19 +15592,19 @@ solve (QDPLL * qdpll)
               assert (!qdpll->state.sat_branch_detected);
               qdpll->state.sat_branch_detected = 1;
 #if COMPUTE_STATS
-              assert (!dynamic_bloqqer_test_success);
-              dynamic_bloqqer_test_success = 1;
+              assert (!dynamic_nenofex_test_success);
+              dynamic_nenofex_test_success = 1;
 #endif
             }
-          else if (bloqqer_res == BLOQQER_RESULT_UNSAT && 
-                   !qdpll->options.dyn_bloqqer_ignore_unsat)
+          else if (nenofex_res == NENOFEX_RESULT_UNSAT && 
+                   !qdpll->options.dyn_nenofex_ignore_unsat)
             {
               assert (!qdpll->state.unsat_branch_clause);
               qdpll->state.unsat_branch_clause = 
-                dynamic_bloqqer_get_unsat_branch_clause (qdpll);
+                dynamic_nenofex_get_unsat_branch_clause (qdpll);
               if (qdpll->options.verbosity >= 2)
                 {
-                  fprintf (stderr, "Bloqqer test unsat branch clause: ");
+                  fprintf (stderr, "Nenofex test unsat branch clause: ");
                   print_constraint (qdpll, qdpll->state.unsat_branch_clause);
                   fprintf (stderr, "  ...has %d literals, %d currently assigned variables\n", 
                            qdpll->state.unsat_branch_clause->num_lits, (int)(qdpll->assigned_vars_top - 
@@ -15613,13 +15613,13 @@ solve (QDPLL * qdpll)
 
               /* Set solver state to UNSAT so that we enter the respective
                  branch below. There, a new clause will be learned using
-                 the clause learned by the dynamic Bloqqer test as a start
+                 the clause learned by the dynamic Nenofex test as a start
                  point. If the start clause is already asserting then it
                  will be learned. */
               state = QDPLL_SOLVER_STATE_UNSAT;
 #if COMPUTE_STATS
-              assert (!dynamic_bloqqer_test_success);
-              dynamic_bloqqer_test_success = 1;
+              assert (!dynamic_nenofex_test_success);
+              dynamic_nenofex_test_success = 1;
 #endif
             }
         }
@@ -15787,6 +15787,8 @@ solve (QDPLL * qdpll)
               state = QDPLL_SOLVER_STATE_SAT;
               assert (!qdpll->state.sat_branch_detected);
               qdpll->state.sat_branch_detected = 1;
+              assert (!qdpll->state.qdo_trivial_truth_success);
+              qdpll->state.qdo_trivial_truth_success = 1;
             }
           else if (sat_result == PICOSAT_UNSATISFIABLE)
             {
@@ -15839,15 +15841,15 @@ solve (QDPLL * qdpll)
               delete_constraint (qdpll, qdpll->state.unsat_branch_clause);
               qdpll->state.unsat_branch_clause = 0;
 #if COMPUTE_STATS
-              assert (trivial_truth_or_falsity_success || dynamic_bloqqer_test_success);
+              assert (trivial_truth_or_falsity_success || dynamic_nenofex_test_success);
               if (qdpll->state.forced_assignment.antecedent)
                 {
                   assert (!qdpll->state.forced_assignment.antecedent->derived_by_trivial_truth_or_falsity);
-                  assert (!qdpll->state.forced_assignment.antecedent->derived_by_dynamic_bloqqer);
+                  assert (!qdpll->state.forced_assignment.antecedent->derived_by_dynamic_nenofex);
                   if (trivial_truth_or_falsity_success)
                     qdpll->state.forced_assignment.antecedent->derived_by_trivial_truth_or_falsity = 1;
-                  else if (dynamic_bloqqer_test_success)
-                    qdpll->state.forced_assignment.antecedent->derived_by_dynamic_bloqqer = 1;
+                  else if (dynamic_nenofex_test_success)
+                    qdpll->state.forced_assignment.antecedent->derived_by_dynamic_nenofex = 1;
                 }
 #endif
             }
@@ -15910,15 +15912,15 @@ solve (QDPLL * qdpll)
 #if COMPUTE_STATS
           if (qdpll->state.sat_branch_detected)
             {
-              assert (trivial_truth_or_falsity_success || dynamic_bloqqer_test_success);
+              assert (trivial_truth_or_falsity_success || dynamic_nenofex_test_success);
               if (qdpll->state.forced_assignment.antecedent)
                 {
                   assert (!qdpll->state.forced_assignment.antecedent->derived_by_trivial_truth_or_falsity);
-                  assert (!qdpll->state.forced_assignment.antecedent->derived_by_dynamic_bloqqer);
+                  assert (!qdpll->state.forced_assignment.antecedent->derived_by_dynamic_nenofex);
                   if (trivial_truth_or_falsity_success)
                     qdpll->state.forced_assignment.antecedent->derived_by_trivial_truth_or_falsity = 1;
-                  else if (dynamic_bloqqer_test_success)
-                    qdpll->state.forced_assignment.antecedent->derived_by_dynamic_bloqqer = 1;
+                  else if (dynamic_nenofex_test_success)
+                    qdpll->state.forced_assignment.antecedent->derived_by_dynamic_nenofex = 1;
                 }
             }
 #endif
@@ -17042,16 +17044,11 @@ qdpll_create ()
   qdpll->options.trivial_falsity_disable_time_threshold = 5.000; 
   qdpll->options.trivial_falsity_disable_cnf_threshold = 500000; 
   qdpll->options.trivial_falsity_partial_mus_assumptions = 1; 
-  /* Set default dynamic bloqqer options. */
-  qdpll->options.dyn_bloqqer_pow2_call_interval = 11; 
-  qdpll->options.dyn_bloqqer_disable_calls_threshold = 5; 
-  qdpll->options.dyn_bloqqer_disable_time_threshold = 0.125; 
-  qdpll->options.dyn_bloqqer_disable_cnf_threshold = 500000; 
-
-#ifdef NBLOQQER
-  /* Must not attempt to call Bloqqer if Bloqqer not linked. */
-  qdpll->options.no_dynamic_bloqqer = 1;
-#endif
+  /* Set default dynamic nenofex options. */
+  qdpll->options.dyn_nenofex_pow2_call_interval = 11; 
+  qdpll->options.dyn_nenofex_disable_calls_threshold = 5; 
+  qdpll->options.dyn_nenofex_disable_time_threshold = 0.125; 
+  qdpll->options.dyn_nenofex_disable_cnf_threshold = 500000; 
 
   /* NEW: decision heuristics 'QTYPE' turned out to perform MUCH better than
      the old default one 'SDCL'. */
@@ -17131,6 +17128,15 @@ qdpll_create ()
   qdpll->trivial_falsity_solver = picosat_init ();
   qdpll->trivial_truth_solver = picosat_init ();
 
+  qdpll->nenofex_oracle = nenofex_create ();
+  /* Push default configuration strings used to bound execution time of
+     Nenofex. Each time a new instance of Nenofex is created, these configuration
+     strings will be added. */
+  QDPLL_PUSH_STACK (qdpll->mm, qdpll->nenofex_option_strings, 
+                    "--abs-graph-size-cutoff=1.5");
+  QDPLL_PUSH_STACK (qdpll->mm, qdpll->nenofex_option_strings, 
+                    "--sat-solver-dec-limit=1000");
+
   return qdpll;
 }
 
@@ -17163,6 +17169,7 @@ qdpll_delete (QDPLL * qdpll)
   QDPLL_DELETE_STACK (mm, qdpll->qbcp_qbce_relevant_vars_in_new_input_clauses);
   QDPLL_DELETE_STACK (mm, qdpll->qdo_dummy_assigned_vars);
   QDPLL_DELETE_STACK (mm, qdpll->reschedule_qbce_marked_clauses);
+  QDPLL_DELETE_STACK (mm, qdpll->nenofex_option_strings);
   ConstraintPtrStack *csp, *cse;
   /* NOTE: must go until stack.end, not just stack.top, because we did not
      free the stacks after pop. */
@@ -17234,6 +17241,8 @@ qdpll_delete (QDPLL * qdpll)
 
   picosat_reset (qdpll->trivial_falsity_solver);
   picosat_reset (qdpll->trivial_truth_solver);
+
+  nenofex_delete (qdpll->nenofex_oracle);
 
   qdpll_free (mm, qdpll, sizeof (QDPLL));
   qdpll_delete_mem_man (mm);
@@ -17365,57 +17374,57 @@ qdpll_configure (QDPLL * qdpll, char *configure_str)
         result = "Expecting number after '--trivial-falsity-pow2-call-interval='";
     }
   else if (!strncmp
-           (configure_str, "--dyn-bloqqer-pow2-call-interval=", 
-            strlen ("--dyn-bloqqer-pow2-call-interval=")))
+           (configure_str, "--dyn-nenofex-pow2-call-interval=", 
+            strlen ("--dyn-nenofex-pow2-call-interval=")))
     {
-      configure_str += strlen ("--dyn-bloqqer-pow2-call-interval=");
+      configure_str += strlen ("--dyn-nenofex-pow2-call-interval=");
       if (isnumstr (configure_str))
         {
           int res = atoi (configure_str);
           if (res < 0)
-            qdpll->options.dyn_bloqqer_pow2_call_interval = 0;
+            qdpll->options.dyn_nenofex_pow2_call_interval = 0;
           else if (res > 31)
-            qdpll->options.dyn_bloqqer_pow2_call_interval = 31;
+            qdpll->options.dyn_nenofex_pow2_call_interval = 31;
           else
-            qdpll->options.dyn_bloqqer_pow2_call_interval = res;
+            qdpll->options.dyn_nenofex_pow2_call_interval = res;
         }
       else
-        result = "Expecting number after '--dyn-bloqqer-pow2-call-interval='";
+        result = "Expecting number after '--dyn-nenofex-pow2-call-interval='";
     }
   else if (!strncmp
-           (configure_str, "--dyn-bloqqer-disable-calls-threshold=", 
-            strlen ("--dyn-bloqqer-disable-calls-threshold=")))
+           (configure_str, "--dyn-nenofex-disable-calls-threshold=", 
+            strlen ("--dyn-nenofex-disable-calls-threshold=")))
     {
-      configure_str += strlen ("--dyn-bloqqer-disable-calls-threshold=");
+      configure_str += strlen ("--dyn-nenofex-disable-calls-threshold=");
       if (isnumstr (configure_str))
         {
           int res = atoi (configure_str);
-          qdpll->options.dyn_bloqqer_disable_calls_threshold = res;
+          qdpll->options.dyn_nenofex_disable_calls_threshold = res;
         }
       else
-        result = "Expecting number after '--dyn-bloqqer-disable-calls-threshold='";
+        result = "Expecting number after '--dyn-nenofex-disable-calls-threshold='";
     }
-  else if (!strncmp (configure_str, "--dyn-bloqqer-disable-time-threshold=", 
-                  strlen ("--dyn-bloqqer-disable-time-threshold=")))
+  else if (!strncmp (configure_str, "--dyn-nenofex-disable-time-threshold=", 
+                  strlen ("--dyn-nenofex-disable-time-threshold=")))
     {
-      configure_str += strlen ("--dyn-bloqqer-disable-time-threshold=");
+      configure_str += strlen ("--dyn-nenofex-disable-time-threshold=");
       if (isnumstr (configure_str))
-        qdpll->options.dyn_bloqqer_disable_time_threshold = strtod (configure_str, 0);
+        qdpll->options.dyn_nenofex_disable_time_threshold = strtod (configure_str, 0);
       else
-        result = "Expecting real number after '--dyn-bloqqer-disable-time-threshold='";
+        result = "Expecting real number after '--dyn-nenofex-disable-time-threshold='";
     }
   else if (!strncmp
-           (configure_str, "--dyn-bloqqer-disable-cnf-threshold=", 
-            strlen ("--dyn-bloqqer-disable-cnf-threshold=")))
+           (configure_str, "--dyn-nenofex-disable-cnf-threshold=", 
+            strlen ("--dyn-nenofex-disable-cnf-threshold=")))
     {
-      configure_str += strlen ("--dyn-bloqqer-disable-cnf-threshold=");
+      configure_str += strlen ("--dyn-nenofex-disable-cnf-threshold=");
       if (isnumstr (configure_str))
         {
           int res = atoi (configure_str);
-          qdpll->options.dyn_bloqqer_disable_cnf_threshold = res;
+          qdpll->options.dyn_nenofex_disable_cnf_threshold = res;
         }
       else
-        result = "Expecting number after '--dyn-bloqqer-disable-cnf-threshold='";
+        result = "Expecting number after '--dyn-nenofex-disable-cnf-threshold='";
     }
   else if (!strncmp
            (configure_str, "--trivial-falsity-disable-cnf-threshold=", 
@@ -17541,27 +17550,25 @@ qdpll_configure (QDPLL * qdpll, char *configure_str)
       else
         result = "Expecting number after '--trivial-truth-disable-cnf-threshold='";
     }
-  else if (!strcmp (configure_str, "--no-dynamic-bloqqer"))
+  else if (!strcmp (configure_str, "--no-dynamic-nenofex"))
     {
-      qdpll->options.no_dynamic_bloqqer = 1;
+      qdpll->options.no_dynamic_nenofex = 1;
     }
-  else if (!strcmp (configure_str, "--dyn-bloqqer-ignore-sat"))
+  else if (!strcmp (configure_str, "--dyn-nenofex-ignore-sat"))
     {
-      qdpll->options.dyn_bloqqer_ignore_sat = 1;
+      qdpll->options.dyn_nenofex_ignore_sat = 1;
     }
-  else if (!strcmp (configure_str, "--dyn-bloqqer-ignore-unsat"))
+  else if (!strcmp (configure_str, "--dyn-nenofex-ignore-unsat"))
     {
-      qdpll->options.dyn_bloqqer_ignore_unsat = 1;
+      qdpll->options.dyn_nenofex_ignore_unsat = 1;
     }
   else
     if (!strncmp
-        (configure_str, "--bloqqer-option=", strlen ("--bloqqer-option=")))
+        (configure_str, "--nenofex-option=", strlen ("--nenofex-option=")))
     {
-      QDPLL_ABORT_QDPLL (1, "not yet supported: passing options to Bloqqer");
-      configure_str += strlen ("--bloqqer-option=");
-#ifndef NBLOQQER
-      bloqqer_set_option (configure_str);
-#endif
+      /* Collect Nenofex conigure string to be passed to Nenofex later. */
+      configure_str += strlen ("--nenofex-option=");
+      QDPLL_PUSH_STACK (qdpll->mm, qdpll->nenofex_option_strings, configure_str);
     }
   else if (!strcmp (configure_str, "--traditional-qcdcl"))
     {
@@ -17580,10 +17587,10 @@ qdpll_configure (QDPLL * qdpll, char *configure_str)
   else if (!strcmp (configure_str, "--incremental-use"))
     {
       qdpll->options.incremental_use = 1;
-      /* Empty formula watching, dynamic bloqqer tests, trivial falsity, and
+      /* Empty formula watching, dynamic nenofex tests, trivial falsity, and
          trivial truth tests must be disabled in incremental use. */
       qdpll->options.no_empty_formula_watching = 1;
-      qdpll->options.no_dynamic_bloqqer = 1;
+      qdpll->options.no_dynamic_nenofex = 1;
       qdpll->options.no_trivial_falsity = 1;
       qdpll->options.no_trivial_truth = 1;
     }
@@ -18769,6 +18776,8 @@ qdpll_sat (QDPLL * qdpll)
                      "Number of calls of 'qdpll_sat()' has reached UINT_MAX.");
   qdpll->state.num_sat_calls++;
 
+  qdpll->state.solving_start_time = time_stamp();
+
   QDPLL_ABORT_QDPLL (qdpll->state.num_sat_calls > 1 && qdpll->state.pending_cubes_check && 
                      !qdpll->options.incremental_use, 
                      "Must configure by '--incremental-use' to enable incremental use!");
@@ -18811,7 +18820,7 @@ qdpll_sat (QDPLL * qdpll)
        qdpll->options.qbce_inprocessing || 
        !qdpll->options.no_trivial_falsity || 
        !qdpll->options.no_trivial_truth || 
-       !qdpll->options.no_dynamic_bloqqer))
+       !qdpll->options.no_dynamic_nenofex))
     fprintf (stderr, "WARNING: tracing is not yet fully compatible with generalized axioms.\n");
 
   /* In incremental mode: when using QBCE then stored cover sets may not cover
@@ -18845,8 +18854,8 @@ qdpll_sat (QDPLL * qdpll)
 	       qdpll->options.qbcp_qbce_find_witness_max_occs);
     }
 
-  QDPLL_ABORT_QDPLL (!qdpll->options.no_dynamic_bloqqer && qdpll->options.incremental_use, 
-                     "temporarily disabled: dynamic Bloqqer and incremental use");
+  QDPLL_ABORT_QDPLL (!qdpll->options.no_dynamic_nenofex && qdpll->options.incremental_use, 
+                     "temporarily disabled: dynamic Nenofex and incremental use");
 
   QDPLL_ABORT_QDPLL((!qdpll->options.no_lazy_qpup && !qdpll->options.traditional_qcdcl) && 
                     qdpll->options.trace, 
@@ -18890,6 +18899,15 @@ qdpll_get_value (QDPLL * qdpll, VarID id)
   QDPLL_ABORT_QDPLL (!qdpll, "pointer to solver object is null!");
   QDPLL_ABORT_QDPLL (!qdpll_is_var_declared (qdpll, id), 
                      "Variable with given ID is not declared!");
+
+  /* In general, use of Nenofex must be disabled in order to extract partial
+     certificates. However, if the formula is satisfiable (unsatisfiable),
+     then it should be sufficient to ignore satisfiable (unsatisfiable)
+     branches found by Nenofex by arguments '--dyn-nenofex-ignore-sat' and
+     '--dyn-nenofex-ignore-unsat', respectively. */
+  QDPLL_ABORT_QDPLL (!qdpll->options.no_dynamic_nenofex, 
+                     "Must configure solver with '--no-dynamic-nenofex' to extract values!");
+
   /* Fix: we do NOT call 'import_user_scopes' here because this will copy
      scopes and hence destroy the QDAG. see 'qdpll_print_qdimacs_output' for
      comment. */
@@ -18975,11 +18993,23 @@ qdpll_get_value (QDPLL * qdpll, VarID id)
                           (!qdpll->qdo_assignment_table || 
                            qdpll->qdo_assignment_table[var->id] == QDPLL_ASSIGNMENT_UNDEF))
                         {
-                          if (qdpll->options.verbosity >= 2)
-                            fprintf (stderr, "Partial model reconstruction: outer unassigned var. %d set to false\n", var->id);
-                          var->assignment = QDPLL_ASSIGNMENT_FALSE;
+                          if (qdpll->state.qdo_trivial_truth_success)
+                            {
+                              /* Get value from trivial truth solver, if any,
+                                 otherwise set variable to false like in default
+                                 case. */
+                              assert (picosat_res (qdpll->trivial_truth_solver) == PICOSAT_SATISFIABLE);
+                              var->assignment = picosat_deref (qdpll->trivial_truth_solver, var->id);
+                              if (var->assignment == QDPLL_ASSIGNMENT_UNDEF)
+                                var->assignment = QDPLL_ASSIGNMENT_FALSE;
+                            }
+                          else
+                            var->assignment = QDPLL_ASSIGNMENT_FALSE;
                           var->decision_level = qdpll->state.decision_level;
                           var->mode = QDPLL_VARMODE_PURE;
+                          if (qdpll->options.verbosity >= 2)
+                            fprintf (stderr, "Partial model reconstruction: outer unassigned var. %d set to %d\n", 
+                                     var->id, var->assignment);
                           QDPLL_PUSH_STACK (qdpll->mm, qdpll->qdo_dummy_assigned_vars, var->id);
                         }
                     }
@@ -20006,39 +20036,39 @@ qdpll_print_stats (QDPLL * qdpll)
            qdpll->stats.trivial_truth_deleted_cubes, qdpll->stats.trivial_truth_detected ? 
            (qdpll->stats.trivial_truth_deleted_cubes / (float) qdpll->stats.trivial_truth_detected) : 0);
 
-  fprintf (stderr, "Total dynamic Bloqqer calls disabled: %s\n", qdpll->state.dyn_bloqqer_disabled ? "yes" : "no");
-  fprintf (stderr, "Total dynamic Bloqqer calls: %u\n", qdpll->state.dyn_bloqqer_calls);
-  fprintf (stderr, "Total dynamic Bloqqer result sat: %u\n", qdpll->stats.dyn_bloqqer_result_sat);
-  fprintf (stderr, "Total dynamic Bloqqer result unsat: %u\n", qdpll->stats.dyn_bloqqer_result_unsat);
-  fprintf (stderr, "Total dynamic Bloqqer max. result unknown streak: %u\n", qdpll->stats.dyn_bloqqer_max_result_unknown_streak);
+  fprintf (stderr, "Total dynamic Nenofex calls disabled: %s\n", qdpll->state.dyn_nenofex_disabled ? "yes" : "no");
+  fprintf (stderr, "Total dynamic Nenofex calls: %u\n", qdpll->state.dyn_nenofex_calls);
+  fprintf (stderr, "Total dynamic Nenofex result sat: %u\n", qdpll->stats.dyn_nenofex_result_sat);
+  fprintf (stderr, "Total dynamic Nenofex result unsat: %u\n", qdpll->stats.dyn_nenofex_result_unsat);
+  fprintf (stderr, "Total dynamic Nenofex max. result unknown streak: %u\n", qdpll->stats.dyn_nenofex_max_result_unknown_streak);
 
-  unsigned int bloqqer_success = 
-    qdpll->stats.dyn_bloqqer_result_sat + qdpll->stats.dyn_bloqqer_result_unsat;
-  fprintf (stderr, "Total dynamic Bloqqer success dlevels: %llu ( %f per success)\n", 
-           qdpll->stats.dyn_bloqqer_success_dlevels, bloqqer_success ? 
-           qdpll->stats.dyn_bloqqer_success_dlevels / (float)bloqqer_success : 0);
+  unsigned int nenofex_success = 
+    qdpll->stats.dyn_nenofex_result_sat + qdpll->stats.dyn_nenofex_result_unsat;
+  fprintf (stderr, "Total dynamic Nenofex success dlevels: %llu ( %f per success)\n", 
+           qdpll->stats.dyn_nenofex_success_dlevels, nenofex_success ? 
+           qdpll->stats.dyn_nenofex_success_dlevels / (float)nenofex_success : 0);
 
-  fprintf (stderr, "Total dynamic Bloqqer time: %f ( %f per call)\n", qdpll->state.dyn_bloqqer_time, 
-           qdpll->state.dyn_bloqqer_calls ? qdpll->state.dyn_bloqqer_time / qdpll->state.dyn_bloqqer_calls : 0);
-  fprintf (stderr, "Total dynamic Bloqqer unit cubes: %llu (avg per detected: %f )\n", 
-           qdpll->stats.dyn_bloqqer_unit_cubes, qdpll->stats.dyn_bloqqer_result_sat ? 
-           (qdpll->stats.dyn_bloqqer_unit_cubes / (float) qdpll->stats.dyn_bloqqer_result_sat) : 0);
-  fprintf (stderr, "Total dynamic Bloqqer empty cubes: %llu (avg per detected: %f )\n", 
-           qdpll->stats.dyn_bloqqer_satisfied_cubes, qdpll->stats.dyn_bloqqer_result_sat ? 
-           (qdpll->stats.dyn_bloqqer_satisfied_cubes / (float) qdpll->stats.dyn_bloqqer_result_sat) : 0);
-  fprintf (stderr, "Total dynamic Bloqqer deleted cubes: %llu (avg per detected: %f )\n", 
-           qdpll->stats.dyn_bloqqer_deleted_cubes, qdpll->stats.dyn_bloqqer_result_sat ? 
-           (qdpll->stats.dyn_bloqqer_deleted_cubes / (float) qdpll->stats.dyn_bloqqer_result_sat) : 0);
+  fprintf (stderr, "Total dynamic Nenofex time: %f ( %f per call)\n", qdpll->state.dyn_nenofex_time, 
+           qdpll->state.dyn_nenofex_calls ? qdpll->state.dyn_nenofex_time / qdpll->state.dyn_nenofex_calls : 0);
+  fprintf (stderr, "Total dynamic Nenofex unit cubes: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_nenofex_unit_cubes, qdpll->stats.dyn_nenofex_result_sat ? 
+           (qdpll->stats.dyn_nenofex_unit_cubes / (float) qdpll->stats.dyn_nenofex_result_sat) : 0);
+  fprintf (stderr, "Total dynamic Nenofex empty cubes: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_nenofex_satisfied_cubes, qdpll->stats.dyn_nenofex_result_sat ? 
+           (qdpll->stats.dyn_nenofex_satisfied_cubes / (float) qdpll->stats.dyn_nenofex_result_sat) : 0);
+  fprintf (stderr, "Total dynamic Nenofex deleted cubes: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_nenofex_deleted_cubes, qdpll->stats.dyn_nenofex_result_sat ? 
+           (qdpll->stats.dyn_nenofex_deleted_cubes / (float) qdpll->stats.dyn_nenofex_result_sat) : 0);
 
-  fprintf (stderr, "Total dynamic Bloqqer unit clauses: %llu (avg per detected: %f )\n", 
-           qdpll->stats.dyn_bloqqer_unit_clauses, qdpll->stats.dyn_bloqqer_result_unsat ? 
-           (qdpll->stats.dyn_bloqqer_unit_clauses / (float) qdpll->stats.dyn_bloqqer_result_unsat) : 0);
-  fprintf (stderr, "Total dynamic Bloqqer empty clauses: %llu (avg per detected: %f )\n", 
-           qdpll->stats.dyn_bloqqer_conflicting_clauses, qdpll->stats.dyn_bloqqer_result_unsat ? 
-           (qdpll->stats.dyn_bloqqer_conflicting_clauses / (float) qdpll->stats.dyn_bloqqer_result_unsat) : 0);
-  fprintf (stderr, "Total dynamic Bloqqer deleted clauses: %llu (avg per detected: %f )\n\n", 
-           qdpll->stats.dyn_bloqqer_deleted_clauses, qdpll->stats.dyn_bloqqer_result_unsat ? 
-           (qdpll->stats.dyn_bloqqer_deleted_clauses / (float) qdpll->stats.dyn_bloqqer_result_unsat) : 0);
+  fprintf (stderr, "Total dynamic Nenofex unit clauses: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_nenofex_unit_clauses, qdpll->stats.dyn_nenofex_result_unsat ? 
+           (qdpll->stats.dyn_nenofex_unit_clauses / (float) qdpll->stats.dyn_nenofex_result_unsat) : 0);
+  fprintf (stderr, "Total dynamic Nenofex empty clauses: %llu (avg per detected: %f )\n", 
+           qdpll->stats.dyn_nenofex_conflicting_clauses, qdpll->stats.dyn_nenofex_result_unsat ? 
+           (qdpll->stats.dyn_nenofex_conflicting_clauses / (float) qdpll->stats.dyn_nenofex_result_unsat) : 0);
+  fprintf (stderr, "Total dynamic Nenofex deleted clauses: %llu (avg per detected: %f )\n\n", 
+           qdpll->stats.dyn_nenofex_deleted_clauses, qdpll->stats.dyn_nenofex_result_unsat ? 
+           (qdpll->stats.dyn_nenofex_deleted_clauses / (float) qdpll->stats.dyn_nenofex_result_unsat) : 0);
 
   fprintf (stderr, "---------------------------------------\n\n");
 #endif
@@ -20186,7 +20216,7 @@ qdpll_reset (QDPLL * qdpll)
   /* Enable checks for generalized axioms again. */
   qdpll->state.trivial_falsity_disabled = 0;
   qdpll->state.trivial_truth_disabled = 0;
-  qdpll->state.dyn_bloqqer_disabled = 0;
+  qdpll->state.dyn_nenofex_disabled = 0;
 }
 
 

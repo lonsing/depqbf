@@ -38,7 +38,7 @@
 #include "qdpll_internals.h"
 
 #define VERSION                                                         \
-  "DepQBF 6.0\n"                                                        \
+  "DepQBF 6.02\n"                                                        \
   "Copyright 2013, 2014, 2015, 2016, 2017 Florian Lonsing,\n"           \
   "  Vienna University of Technology, Vienna, Austria.\n"               \
   "Copyright 2010, 2011, 2012 Florian Lonsing,\n"                       \
@@ -71,6 +71,7 @@
 "                                    block (and dual for unsatisfiable QBFs and\n"\
 "                                    universal variables from the outermost block,\n"\
 "                                    if that block is universally quantified).\n"\
+"                                    IMPORTANT: must be combined with '--no-dynamic-nenofex'"\
 "  --traditional-qcdcl             apply a traditional variant of clause and cube learning (QCDCL),\n"\
 "                                    which was applied in previous versions of DepQBF.\n"\
 "                                    In this version, by default lazy QPUP-based QCDCL is applied.\n"\
@@ -123,9 +124,9 @@
 "  --qbce-witness-max-occs=<val>   maximum number <val> of occurrences considered in QBCE (default: 50)\n"\
 "  --qbce-max-clause-size=<val>    maximum length <val> of clauses considered in QBCE (default: 50)\n"\
 "  --no-empty-formula-watching     disable empty formula watching (default: enabled)\n"\
-"  --no-dynamic-bloqqer            disable dynamic bloqqer tests (default: enabled)\n"\
-"  --dyn-bloqqer-ignore-unsat      ignore unsatisfiable branch detected by bloqqer\n"\
-"  --dyn-bloqqer-ignore-sat        ignore satisfiable branch detected by bloqqer\n"\
+"  --no-dynamic-nenofex            disable dynamic nenofex tests (default: enabled)\n"\
+"  --dyn-nenofex-ignore-unsat      ignore unsatisfiable branch detected by nenofex\n"\
+"  --dyn-nenofex-ignore-sat        ignore satisfiable branch detected by nenofex\n"\
 "  --no-trivial-falsity            disable trivial falsity tests (default: enabled)\n"\
 "  --no-trivial-truth              disable trivial truth tests (default: enabled)\n"\
 "\n"

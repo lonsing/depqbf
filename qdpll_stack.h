@@ -89,5 +89,6 @@
 #define QDPLL_POP_STACK(stack) (*--(stack).top)
 
 QDPLL_DECLARE_STACK (VoidPtr, void *);
+QDPLL_DECLARE_STACK (CharPtr, char *);
 
 #endif

@@ -31,7 +31,8 @@
 #include "qdpll_pcnf.h"
 #include "qdpll_config.h"
 #include "qdpll.h"
-#include "./picosat-960/picosat.h"
+#include "./picosat/picosat.h"
+#include "./nenofex/nenofex.h"
 
 /* Support both ascii QRP and binary QRP format when tracing. */
 #define TRACE_QRP 1
@@ -75,6 +76,16 @@ struct QDPLL
      previously unassigned but were then assigned for QBCE assignment
      reconstruction. */
   VarIDStack qdo_dummy_assigned_vars;
+
+  /* Pointer to Nenofex solver used as QBF oracle. 
+     NOTE: we used Bloqqer before, but this imposes limitations on
+     using more than one instance of DepQBF, as Bloqqer is not
+     reentrant. */
+  Nenofex *nenofex_oracle;
+  /* Options (strings) to configure Nenofex. These options must be set again
+     after Nenofex object has been destroyed. We need to pass options to Nenofex
+     to allow for bounded solving. */
+  CharPtrStack nenofex_option_strings;
 
   PicoSAT *trivial_falsity_solver;
   PicoSAT *trivial_truth_solver;
@@ -284,7 +295,7 @@ struct QDPLL
     unsigned int qbcp_qbce_currently_preprocessing:1;
     /* For QDIMACS partial output: schedule model reconstruction. */
     unsigned int qdo_no_schedule_model_reconstruction:1;
-    /* Flag to indicate positive trivial truth test or that Bloqqer
+    /* Flag to indicate positive trivial truth test or that Nenofex
        returned SAT: the current branch in the search tree is
        satisfiable -> learn the current QBF solver assignment as a
        cube (or use that cube as starting point of a cube derivation). */
@@ -297,20 +308,20 @@ struct QDPLL
        branch in the search tree: Clause obtained by collecting
        negated failed assumption literals from the SAT solver (if
        trivial falsity is used) or by collecting negation of all
-       literals currently assigned (if bloqqer is used). */
+       literals currently assigned (if nenofex is used). */
     Constraint *unsat_branch_clause;
 
     /* Number of times the state of the formula after QBCP is undetermined. */
     unsigned int cnt_state_undetermined_after_qbcp;
 
-    /* Disable calls of Bloqqer if average calling time exceeds certain
+    /* Disable calls of Nenofex if average calling time exceeds certain
        value. Using time is nondeterministic but there is currently no other,
-       clean way to get information about how expensive a call of Bloqqer
+       clean way to get information about how expensive a call of Nenofex
        was. Alternatively, we could collect statistics but this requires to let
-       Bloqqer print statistics to a log file which we then must parse again. */
-    unsigned int dyn_bloqqer_disabled:1;
-    double dyn_bloqqer_time;
-    unsigned int dyn_bloqqer_calls;
+       Nenofex print statistics to a log file which we then must parse again. */
+    unsigned int dyn_nenofex_disabled:1;
+    double dyn_nenofex_time;
+    unsigned int dyn_nenofex_calls;
 
     /* Flag to dynamically disable calls of trivial falsity. */
     unsigned int trivial_falsity_disabled:1;
@@ -321,6 +332,11 @@ struct QDPLL
     double trivial_falsity_time;
     /* Flag to dynamically disable calls of trivial truth. */
     unsigned int trivial_truth_disabled:1;
+    /* Special case to handle QDIMACS output (values of outer existentials) if
+       formula is solved by a trivial truth call but no variables are assigned
+       in the QBF solver. If flag is true, then we can extract values of outer
+       existentials from SAT solver. */
+    unsigned int qdo_trivial_truth_success:1;
     /* Number of calls of trivial truth. */
     unsigned int trivial_truth_tried;
     /* Time spent in trivial truth tests. */
@@ -444,8 +460,9 @@ struct QDPLL
        innermost universals by forall reductions. Abort if an existential
        cannot be removed. */
     unsigned int trivial_falsity_partial_mus_assumptions:1;
-    /* Test trivial falsity dynamically every '2^{dyn_bloqqer_call_interval}' times the
-       formula state under the current assignment after QBCP is undetermined. */
+    /* Test trivial falsity dynamically every
+       '2^{trivial_falsity_pow2_call_interval}' times the formula state under
+       the current assignment after QBCP is undetermined. */
     unsigned int trivial_falsity_pow2_call_interval;
     /* Limit on number of decisions per SAT solver call in trivial falsity. */
     unsigned int trivial_falsity_decision_limit;
@@ -484,29 +501,29 @@ struct QDPLL
        'trivial_truth_disable_cnf_threshold'. */
     unsigned int trivial_truth_disable_cnf_threshold;
 
-    /* Flag to enable dynamic Bloqqer tests to check if current branch in
+    /* Flag to enable dynamic Nenofex tests to check if current branch in
        search tree is (un)satisfiable. */
-    unsigned int no_dynamic_bloqqer:1;
-    /* Ignore if Bloqqer finds out that current branch is
-       (un)satisfiable. */
-    unsigned int dyn_bloqqer_ignore_sat:1;
-    /* Ignore if Bloqqer finds out that current branch is
+    unsigned int no_dynamic_nenofex:1;
+    /* Ignore if Nenofex finds out that current branch is
+       satisfiable. */
+    unsigned int dyn_nenofex_ignore_sat:1;
+    /* Ignore if Nenofex finds out that current branch is
        unsatisfiable. */
-    unsigned int dyn_bloqqer_ignore_unsat:1;
-    /* Disable Bloqqer calls if average calling time exceeds
-       'dyn_bloqqer_disable_time_threshold'. */
-    float dyn_bloqqer_disable_time_threshold;
-    /* Disable Bloqqer calls if number of calls is equal to or greater than
-       'dyn_bloqqer_disable_calls_threshold' AND the average calling time
-       exceeds 'dyn_bloqqer_disable_time_threshold'. */
-    unsigned int dyn_bloqqer_disable_calls_threshold;
-    /* Call Bloqqer dynamically every '2^{dyn_bloqqer_call_interval}' times the
+    unsigned int dyn_nenofex_ignore_unsat:1;
+    /* Disable Nenofex calls if average calling time exceeds
+       'dyn_nenofex_disable_time_threshold'. */
+    float dyn_nenofex_disable_time_threshold;
+    /* Disable Nenofex calls if number of calls is equal to or greater than
+       'dyn_nenofex_disable_calls_threshold' AND the average calling time
+       exceeds 'dyn_nenofex_disable_time_threshold'. */
+    unsigned int dyn_nenofex_disable_calls_threshold;
+    /* Call Nenofex dynamically every '2^{dyn_nenofex_call_interval}' times the
        formula state under the current assignment after QBCP is undetermined. */
-    unsigned int dyn_bloqqer_pow2_call_interval;
-    /* Do not call Bloqqer at all (i.e. disable it permanently) if the
+    unsigned int dyn_nenofex_pow2_call_interval;
+    /* Do not call Nenofex at all (i.e. disable it permanently) if the
        number of clauses in the CNF is equal to or greater than
-       'dyn_bloqqer_disable_cnf_threshold'. */
-    unsigned int dyn_bloqqer_disable_cnf_threshold;
+       'dyn_nenofex_disable_cnf_threshold'. */
+    unsigned int dyn_nenofex_disable_cnf_threshold;
   } options;
 
 #if COMPUTE_STATS
@@ -700,17 +717,17 @@ struct QDPLL
     unsigned long long int trivial_truth_unit_cubes;
     unsigned long long int trivial_truth_satisfied_cubes;
 
-    unsigned int dyn_bloqqer_result_sat;
-    unsigned int dyn_bloqqer_result_unsat;
-    unsigned int dyn_bloqqer_cur_result_unknown_streak;
-    unsigned int dyn_bloqqer_max_result_unknown_streak;
-    unsigned long long int dyn_bloqqer_success_dlevels;
-    unsigned long long int dyn_bloqqer_unit_cubes;
-    unsigned long long int dyn_bloqqer_unit_clauses;
-    unsigned long long int dyn_bloqqer_deleted_cubes;
-    unsigned long long int dyn_bloqqer_deleted_clauses;
-    unsigned long long int dyn_bloqqer_satisfied_cubes;
-    unsigned long long int dyn_bloqqer_conflicting_clauses;
+    unsigned int dyn_nenofex_result_sat;
+    unsigned int dyn_nenofex_result_unsat;
+    unsigned int dyn_nenofex_cur_result_unknown_streak;
+    unsigned int dyn_nenofex_max_result_unknown_streak;
+    unsigned long long int dyn_nenofex_success_dlevels;
+    unsigned long long int dyn_nenofex_unit_cubes;
+    unsigned long long int dyn_nenofex_unit_clauses;
+    unsigned long long int dyn_nenofex_deleted_cubes;
+    unsigned long long int dyn_nenofex_deleted_clauses;
+    unsigned long long int dyn_nenofex_satisfied_cubes;
+    unsigned long long int dyn_nenofex_conflicting_clauses;
   } stats;
 #endif
 
