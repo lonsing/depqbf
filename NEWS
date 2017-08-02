@@ -3,6 +3,13 @@
 NEWS
 ----
 
+August 2 2017:
+
+release of version 6.03:
+  - minor maintenance release
+  - removed obsolete hard assertion
+  - fixed command line help
+
 March 27 2017:
 
 release of version 6.02:

@@ -15559,11 +15559,7 @@ solve (QDPLL * qdpll)
       state = bcp (qdpll);
 
       if (state == QDPLL_SOLVER_STATE_UNDEF)
-        {
-          QDPLL_ABORT_QDPLL (qdpll->state.cnt_state_undetermined_after_qbcp == UINT_MAX, 
-                             "reached UINT_MAX");
-          qdpll->state.cnt_state_undetermined_after_qbcp++;
-        }
+        qdpll->state.cnt_state_undetermined_after_qbcp++;
 
 #if COMPUTE_STATS
       unsigned int dynamic_nenofex_test_success = 0;
