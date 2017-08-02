@@ -1,5 +1,5 @@
 
-March 2017
+August 2017
 
 -------------------
 GENERAL INFORMATION
@@ -16,17 +16,20 @@ Nenofex source code: https://github.com/lonsing/nenofex
 IMPORTANT NOTE: please see the guidelines on preprocessing, incremental
 solving and API usage below.
 
-This is version 6.02 of the search-based QBF solver DepQBF. This recent
+This is version 6.03 of the search-based QBF solver DepQBF. This recent
 version implements conflict-driven clause and solution-driven cube learning
 (QCDCL) with generalized axioms. To this end, DepQBF applies the SAT solver
 PicoSAT and the expansion-based QBF solver Nenofex as oracles to check the
 satisfiability of formulas that arise in the context of axiom
-applications. The approach is described in the following paper:
+applications. The approach is described in the following papers:
+
+Florian Lonsing, Uwe Egly: DepQBF 6.0: A Search-Based QBF Solver Beyond
+Traditional QCDCL. In Proceedings of CADE 2017, LNCS, Springer, 2017.
 
 Florian Lonsing, Uwe Egly, Martina Seidl: "Q-Resolution with Generalized
 Axioms". In Proceedings of SAT 2016, LNCS, Springer, 2016.
 
-In version 6.02, the solver Nenofex replaces the QBF preprocessor Bloqqer
+In version 6.03, the solver Nenofex replaces the QBF preprocessor Bloqqer
 which was used in the previous versions 6.0 and 6.01. The replacement was
 necessary since Bloqqer (version 37) is not reentrant, which may cause
 problems when running multiple instances of DepQBF. 
