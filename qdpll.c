@@ -6805,7 +6805,7 @@ cover_by_assignment_collect_univ_vars (QDPLL *qdpll,
           assert (c->qbcp_qbce_blocked);
           if (qdpll->options.verbosity >= 2)
             {
-              fprintf (stderr, "seen blocked clause at level %d:\n", 
+              fprintf (stderr, "seen blocked clause at level %ld:\n",
                        sp - qdpll->qbcp_qbce_blocked_clauses.start);
               print_constraint (qdpll, c);
             }
@@ -11411,7 +11411,7 @@ qbcp_qbce_delete_list_entry (QDPLL *qdpll, QBCENonBlockedWitnessStack *list,
   QBCENonBlockedWitness last = QDPLL_POP_STACK (*list);
   if (qdpll->options.verbosity >= 3)
     {
-      fprintf (stderr, "WATCHING: deleting list entry, new list size %u\n", QDPLL_COUNT_STACK (*list));
+      fprintf (stderr, "WATCHING: deleting list entry, new list size %lu\n", QDPLL_COUNT_STACK (*list));
       fprintf (stderr, "WATCHING: deleting %s entry -- last item:\n", is_witness_entry ? "witness" : "maybe-blocked-clause");
       fprintf (stderr, "WATCHING:   clause: ");
       print_constraint (qdpll, last.blit_occ.constraint);
@@ -12604,7 +12604,7 @@ qbcp_qbce_find_blocked_clauses (QDPLL *qdpll)
                               qdpll->stats.qbcp_qbce_ignored_maybe_blocking_literals_by_occ_limit++;
 #endif
                               if (qdpll->options.verbosity >= 3)
-                                fprintf (stderr, "QBCE: skipping maybe blocking literal %d -- %soccs-cnt %u > limit %u\n", 
+                                fprintf (stderr, "QBCE: skipping maybe blocking literal %d -- %soccs-cnt %lu > limit %u\n",
                                          lit, QDPLL_LIT_NEG (lit) ? "pos-" : "neg-", 
                                          QDPLL_COUNT_STACK (*occs), qdpll->options.qbcp_qbce_find_witness_max_occs);
                               continue;
